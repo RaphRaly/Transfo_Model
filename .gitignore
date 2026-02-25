@@ -19,7 +19,8 @@ _deps/
 # ─── Test output ──────────────────────────────────────────────────────────────
 Tests/build/
 Tests/*.csv
-Tests/*.txt
+Tests/adaa_out.txt
+Tests/passivity_out.txt
 Tests/*.png
 test6_adaa_vs_direct.csv
 
