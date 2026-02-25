@@ -1,0 +1,18 @@
+{
+    "material": "Permalloy 1J85 (80% NiFe)",
+    "source": "Sun et al. 2023 (PMC)",
+    "usage": "Cross-validation for mu-metal identification",
+    "temperature_C": 20,
+    "B_sat_T": 0.74,
+    "coercivity_Am": 3.5,
+    "BH_points": [
+        {"H_Am": 0.3, "B_T": 0.05},
+        {"H_Am": 0.8, "B_T": 0.25},
+        {"H_Am": 1.5, "B_T": 0.48},
+        {"H_Am": 3.0, "B_T": 0.61},
+        {"H_Am": 5.0, "B_T": 0.67},
+        {"H_Am": 10.0, "B_T": 0.71},
+        {"H_Am": 25.0, "B_T": 0.73},
+        {"H_Am": 50.0, "B_T": 0.74}
+    ]
+}

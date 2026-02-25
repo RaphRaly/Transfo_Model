@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # ─── Core + Tests (Linux, no JUCE) ──────────────────────────────────────────
+  core-tests:
+    name: Core Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-13]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Tests (standalone, no JUCE)
+        run: cmake -B build-tests -S Tests
+
+      - name: Build Tests
+        run: cmake --build build-tests --config Release
+
+      - name: Run CPWL ADAA tests
+        run: ctest --test-dir build-tests -C Release -R cpwl_adaa --output-on-failure
+
+      - name: Run CPWL Passivity tests
+        run: ctest --test-dir build-tests -C Release -R cpwl_passivity --output-on-failure
+
+  # ─── Full Plugin Build (Windows only — MSVC + JUCE) ─────────────────────────
+  plugin-build:
+    name: Plugin Build (Windows)
+    runs-on: windows-latest
+    needs: core-tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Plugin (fetches JUCE automatically)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build VST3 + Standalone
+        run: cmake --build build --config Release --target TransformerModel
+
+      - name: Upload VST3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TransformerModel-VST3-${{ github.sha }}
+          path: build/**/*.vst3
+          if-no-files-found: warn

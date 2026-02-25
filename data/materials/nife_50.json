@@ -1,0 +1,27 @@
+{
+    "material": "50% NiFe (ASTM A753 Alloy 2)",
+    "source": "Magnetic Shields Ltd",
+    "usage": "Identification J-A for Neve Marinair transformers",
+    "temperature_C": 20,
+    "B_sat_T": 1.05,
+    "coercivity_Am": 12.0,
+    "initial_permeability": 5000,
+    "max_permeability": 25000,
+    "ja_bounds": {
+        "Ms_min": 6.0e5, "Ms_max": 9.0e5,
+        "a_min": 20, "a_max": 200,
+        "k_min": 50, "k_max": 500,
+        "alpha_min": 5e-6, "alpha_max": 1e-3,
+        "c_min": 0.50, "c_max": 0.90
+    },
+    "BH_points": [
+        {"H_Am": 2.0, "B_T": 0.15},
+        {"H_Am": 5.0, "B_T": 0.45},
+        {"H_Am": 10.0, "B_T": 0.72},
+        {"H_Am": 20.0, "B_T": 0.88},
+        {"H_Am": 50.0, "B_T": 0.98},
+        {"H_Am": 100.0, "B_T": 1.02},
+        {"H_Am": 200.0, "B_T": 1.04},
+        {"H_Am": 500.0, "B_T": 1.05}
+    ]
+}

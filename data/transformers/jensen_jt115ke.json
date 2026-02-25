@@ -1,0 +1,31 @@
+{
+    "name": "Jensen JT-115K-E",
+    "type": "Line Input Transformer",
+    "manufacturer": "Jensen Transformers",
+    "electrical": {
+        "turns_ratio": "1:10",
+        "turns_N1": 1,
+        "turns_N2": 10,
+        "Rdc_primary_ohm": 19.7,
+        "Rdc_secondary_ohm": 2465,
+        "C_sec_shield_F": 205e-12,
+        "source_impedance_ohm": 150,
+        "load_impedance_ohm": 150000,
+        "Lp_estimated_H": 10.0,
+        "L_leakage_H": 1e-3,
+        "C_interwinding_F": 10e-12
+    },
+    "frequency_response": {
+        "FR_minus_05dB_Hz": 20,
+        "FR_minus_02dB_Hz": 20000,
+        "BW_minus3dB_Hz": 140000,
+        "CMRR_60Hz_dB": 110
+    },
+    "thd_validation": [
+        {"freq_Hz": 20, "level_dBu": -20, "THD_percent": 0.065, "source": "Modern datasheet"},
+        {"freq_Hz": 20, "level_dBu": -2.5, "THD_percent": 1.0, "source": "Modern datasheet"},
+        {"freq_Hz": 20, "level_dBu": 1.2, "THD_percent": 4.0, "source": "Ancien doc JE-115K-E"}
+    ],
+    "core_material": "Mu-Metal 80% NiFe",
+    "notes": "Overshoot ~6.6% en step response. BW derived from ancien document."
+}

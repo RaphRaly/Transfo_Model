@@ -1,0 +1,29 @@
+{
+    "material": "Mu-Metal 80% NiFe (ASTM A753 Alloy 4)",
+    "source": "Magnetic Shields Ltd",
+    "url": "magshields.com/b-h-curves",
+    "usage": "Identification J-A for Jensen/Lundahl transformers",
+    "temperature_C": 20,
+    "B_sat_T": 0.75,
+    "coercivity_Am": 4.0,
+    "initial_permeability": 30000,
+    "max_permeability": 100000,
+    "ja_bounds": {
+        "Ms_min": 4.5e5, "Ms_max": 7.0e5,
+        "a_min": 5, "a_max": 60,
+        "k_min": 10, "k_max": 200,
+        "alpha_min": 1e-6, "alpha_max": 5e-4,
+        "c_min": 0.70, "c_max": 0.98
+    },
+    "BH_points": [
+        {"H_Am": 0.5, "B_T": 0.10},
+        {"H_Am": 1.0, "B_T": 0.30},
+        {"H_Am": 2.0, "B_T": 0.52},
+        {"H_Am": 3.0, "B_T": 0.60},
+        {"H_Am": 5.0, "B_T": 0.67},
+        {"H_Am": 10.0, "B_T": 0.72},
+        {"H_Am": 20.0, "B_T": 0.74},
+        {"H_Am": 50.0, "B_T": 0.75},
+        {"H_Am": 100.0, "B_T": 0.75}
+    ]
+}

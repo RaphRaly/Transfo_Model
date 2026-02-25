@@ -1,0 +1,55 @@
+# ─── Build ────────────────────────────────────────────────────────────────────
+build/
+out/
+cmake-build-*/
+*.user
+
+# ─── JUCE / FetchContent cache ────────────────────────────────────────────────
+_deps/
+.cmake/
+
+# ─── VST3 / plugin artefacts ──────────────────────────────────────────────────
+*.vst3
+*.component
+*.app
+*.dll
+*.so
+*.dylib
+
+# ─── Test output ──────────────────────────────────────────────────────────────
+Tests/build/
+Tests/*.csv
+Tests/*.txt
+Tests/*.png
+test6_adaa_vs_direct.csv
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.vs/
+.vscode/
+.idea/
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.xcodeproj/
+*.xcworkspace/
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+*.log
+*.bak
+cmake_out.txt
+adaa_out.txt
+passivity_out.txt

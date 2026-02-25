@@ -1,0 +1,72 @@
+#pragma once
+
+// =============================================================================
+// TransformerConfig — Complete transformer configuration combining core,
+// windings, material, and load parameters.
+//
+// Provides factory methods for known transformer models:
+//   - Jensen JT-115K-E (1:10, mu-metal, line input)
+//   - Neve Marinair LO1166 (output transformer, NiFe 50%)
+//   - API AP2503 (line output, SiFe)
+//
+// Serializable to/from JSON for preset management.
+// =============================================================================
+
+#include "CoreGeometry.h"
+#include "WindingConfig.h"
+#include "../magnetics/JAParameterSet.h"
+#include <string>
+
+namespace transfo {
+
+struct TransformerConfig
+{
+    std::string    name = "Default";
+    CoreGeometry   core;
+    WindingConfig  windings;
+    JAParameterSet material;
+    float          loadImpedance = 150000.0f;  // Secondary load [Ohm]
+
+    // ── Factory: Jensen JT-115K-E ───────────────────────────────────────────
+    // Line input transformer. Ratio 1:10. Mu-metal core.
+    // Rdc_pri=19.7Ω, Rdc_sec=2465Ω, C_sec_shield=205pF
+    // FR: -0.5dB@20Hz, -0.2dB@20kHz, BW~140kHz, CMRR~110dB@60Hz
+    static TransformerConfig Jensen_JT115KE()
+    {
+        TransformerConfig cfg;
+        cfg.name          = "Jensen JT-115K-E";
+        cfg.core          = CoreGeometry::jensenJT115KE();
+        cfg.windings      = WindingConfig::jensenJT115KE();
+        cfg.material      = JAParameterSet::defaultMuMetal();
+        cfg.loadImpedance = 150000.0f;
+        return cfg;
+    }
+
+    // ── Factory: Neve Marinair LO1166 ───────────────────────────────────────
+    // Output transformer. NiFe 50% (Marinair alloy).
+    static TransformerConfig Neve_Marinair_LO1166()
+    {
+        TransformerConfig cfg;
+        cfg.name          = "Neve Marinair LO1166";
+        cfg.core          = CoreGeometry::neveMarinair();
+        cfg.windings      = WindingConfig::neveLO1166();
+        cfg.material      = JAParameterSet::defaultNiFe50();
+        cfg.loadImpedance = 10000.0f;
+        return cfg;
+    }
+
+    // ── Factory: API AP2503 ─────────────────────────────────────────────────
+    // Line output transformer. Grain-oriented SiFe.
+    static TransformerConfig API_AP2503()
+    {
+        TransformerConfig cfg;
+        cfg.name          = "API AP2503";
+        cfg.core          = CoreGeometry::neveMarinair(); // approximate
+        cfg.windings      = WindingConfig::apiAP2503();
+        cfg.material      = JAParameterSet::defaultSiFe();
+        cfg.loadImpedance = 10000.0f;
+        return cfg;
+    }
+};
+
+} // namespace transfo
