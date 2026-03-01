@@ -264,9 +264,13 @@ private:
     hScale_ = config_.material.a * 5.0f;
 
     // Normalize output: unity gain in linear region
-    // At small H: susceptibility χ₀ ≈ Ms·c/a
-    float chi0 = config_.material.Ms * config_.material.c / config_.material.a;
-    float linearGainBperH = kMu0f * (1.0f + chi0);
+    // Langevin L(x) ≈ x/3 for small x, so χ₀_raw = Ms·c/(3·a)
+    // With alpha feedback: χ_eff = χ₀ / (1 - α·χ₀)
+    float chi0 = config_.material.Ms * config_.material.c / (3.0f * config_.material.a);
+    float denomFeedback = 1.0f - config_.material.alpha * chi0;
+    if (denomFeedback < 0.1f) denomFeedback = 0.1f;  // Clamp near instability
+    float chiEff = chi0 / denomFeedback;
+    float linearGainBperH = kMu0f * (1.0f + chiEff);
     bNorm_ = 1.0f / (linearGainBperH * hScale_ + kEpsilonF);
   }
 };

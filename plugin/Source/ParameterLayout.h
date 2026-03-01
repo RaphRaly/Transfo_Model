@@ -19,14 +19,7 @@ namespace ParamID
     static const juce::String Mix           = "mix";
     static const juce::String Preset        = "preset";
     static const juce::String Mode          = "mode";        // Physical / Realtime
-    static const juce::String TMTAmount     = "tmtAmount";   // Tolerance stereo spread
-
-    // J-A parameters (exposed for lab use)
-    static const juce::String Ms            = "ms";
-    static const juce::String A             = "a";
-    static const juce::String K             = "k";
-    static const juce::String C             = "c";
-    static const juce::String Alpha         = "alpha";
+    static const juce::String SVU            = "svu";         // Stereo Variation Units
 }
 
 // ─── Create parameter layout ────────────────────────────────────────────────
@@ -63,35 +56,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::StringArray{"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)"},
         0));
 
-    // TMT Stereo Amount
+    // SVU — Stereo Variation Units
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID(ParamID::TMTAmount, 1), "TMT Stereo",
+        juce::ParameterID(ParamID::SVU, 1), "SVU",
         juce::NormalisableRange<float>(0.0f, 5.0f, 0.1f), 2.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
-
-    // J-A Parameters (lab/advanced)
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID(ParamID::Ms, 1), "Saturation (Ms)",
-        juce::NormalisableRange<float>(1e4f, 2e6f, 100.0f, 0.3f), 5.5e5f,
-        juce::AudioParameterFloatAttributes().withLabel("A/m")));
-
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID(ParamID::A, 1), "Shape (a)",
-        juce::NormalisableRange<float>(1.0f, 500.0f, 0.1f, 0.4f), 30.0f,
-        juce::AudioParameterFloatAttributes().withLabel("A/m")));
-
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID(ParamID::K, 1), "Coercivity (k)",
-        juce::NormalisableRange<float>(1.0f, 2000.0f, 0.1f, 0.4f), 50.0f,
-        juce::AudioParameterFloatAttributes().withLabel("A/m")));
-
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID(ParamID::C, 1), "Reversibility (c)",
-        juce::NormalisableRange<float>(0.01f, 0.99f, 0.001f), 0.85f));
-
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID(ParamID::Alpha, 1), "Coupling (alpha)",
-        juce::NormalisableRange<float>(1e-7f, 1e-1f, 1e-7f, 0.2f), 1e-4f));
 
     return { params.begin(), params.end() };
 }

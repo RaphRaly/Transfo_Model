@@ -111,7 +111,7 @@ struct JAParameterSet {
       return {6.0e5f, 9.0e5f, // Ms
               20.0f,  200.0f, // a
               50.0f,  500.0f, // k
-              5e-6f,  1e-3f,  // alpha
+              5e-6f,  5e-4f,  // alpha (capped to avoid origin instability)
               0.50f,  0.90f}; // c
 
     case MaterialFamily::GO_SiFe:
@@ -158,8 +158,12 @@ struct JAParameterSet {
   }
 
   static JAParameterSet defaultNiFe50() {
-    // Ms=7.5e5, alpha=5e-4 → alpha*Ms=375. k must be > 375 → use k=500
-    return {7.5e5f, 80.0f, 5e-4f, 500.0f, 0.70f, 0.0f, 0.0f};
+    // Ms=7.5e5, alpha=1e-4 → alpha*Ms=75. k=500 >> 75 (stable).
+    // chi0_raw = c*Ms/(3*a) = 0.7*7.5e5/240 = 2187.5
+    // alpha*chi0_raw = 1e-4*2187.5 = 0.22 < 1 (stable origin).
+    // NiFe 50% has wider hysteresis than mu-metal (higher k),
+    // but alpha was too high (5e-4), causing origin instability.
+    return {7.5e5f, 80.0f, 1e-4f, 500.0f, 0.70f, 0.0f, 0.0f};
   }
 
   static JAParameterSet defaultSiFe() {

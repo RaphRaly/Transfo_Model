@@ -39,16 +39,13 @@ private:
   };
 
   // Main controls
-  RotarySlider inputGain_, outputGain_, mix_, tmtAmount_;
+  RotarySlider inputGain_, outputGain_, mix_, svuAmount_;
 
   // Preset and mode
   juce::ComboBox presetCombo_, modeCombo_;
   juce::Label presetLabel_, modeLabel_;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
       presetAttach_, modeAttach_;
-
-  // J-A parameters (advanced)
-  RotarySlider msSlider_, aSlider_, kSlider_, cSlider_, alphaSlider_;
 
   // Monitor display
   juce::Label monitorLabel_;

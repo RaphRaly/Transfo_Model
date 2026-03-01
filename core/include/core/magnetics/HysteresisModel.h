@@ -175,12 +175,14 @@ public:
     // ─── State management for HSIM ──────────────────────────────────────────
     void commitState()
     {
+        const double H_old = H_prev_;   // Save before overwriting
+
         M_prev_committed_ = M_committed_;
         M_committed_ = M_tentative_;
         H_prev_ = H_tentative_;
 
         // Update dMdt for next trapezoidal step
-        const double dH = H_tentative_ - H_prev_;
+        const double dH = H_tentative_ - H_old;
         const double dHdt = dH / Ts_;
         dMdt_prev_ = computeRHS(M_committed_, H_tentative_, delta_) * dHdt;
     }

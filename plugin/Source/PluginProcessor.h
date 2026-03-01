@@ -85,12 +85,7 @@ private:
   std::atomic<float> *mixParam_ = nullptr;
   std::atomic<float> *presetParam_ = nullptr;
   std::atomic<float> *modeParam_ = nullptr;
-  std::atomic<float> *tmtParam_ = nullptr;
-  std::atomic<float> *msParam_ = nullptr;
-  std::atomic<float> *aParam_ = nullptr;
-  std::atomic<float> *kParam_ = nullptr;
-  std::atomic<float> *cParam_ = nullptr;
-  std::atomic<float> *alphaParam_ = nullptr;
+  std::atomic<float> *svuParam_ = nullptr;
 
   int lastPresetIndex_ = -1;
 

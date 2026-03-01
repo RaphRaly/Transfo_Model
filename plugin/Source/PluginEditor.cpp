@@ -16,7 +16,7 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   setupRotary(inputGain_, ParamID::InputGain, "Input");
   setupRotary(outputGain_, ParamID::OutputGain, "Output");
   setupRotary(mix_, ParamID::Mix, "Mix");
-  setupRotary(tmtAmount_, ParamID::TMTAmount, "TMT");
+  setupRotary(svuAmount_, ParamID::SVU, "SVU");
 
   addAndMakeVisible(bhScope_);
 
@@ -45,20 +45,13 @@ PluginEditor::PluginEditor(PluginProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Mode, modeCombo_);
 
-  // ── J-A knobs (advanced) ──
-  setupRotary(msSlider_, ParamID::Ms, "Ms");
-  setupRotary(aSlider_, ParamID::A, "Shape");
-  setupRotary(kSlider_, ParamID::K, "Coercivity");
-  setupRotary(cSlider_, ParamID::C, "Revers.");
-  setupRotary(alphaSlider_, ParamID::Alpha, "Coupling");
-
   // ── Monitor label ──
   monitorLabel_.setFont(juce::Font(12.0f));
   monitorLabel_.setColour(juce::Label::textColourId, juce::Colours::lightgreen);
   addAndMakeVisible(monitorLabel_);
 
   // Window size
-  setSize(680, 340);
+  setSize(680, 200);
 
   // Start monitoring timer (10 Hz)
   startTimerHz(10);
@@ -95,32 +88,23 @@ void PluginEditor::paint(juce::Graphics &g) {
   g.drawText("Transformer Model v3", 0, 0, getWidth(), kHeaderH,
              juce::Justification::centred);
 
-  // Section separators
-  g.setColour(juce::Colour(0xFF2A2A4E));
-  int y1 = kHeaderH + kLabelH + kKnobH + kMargin * 2 + 30;
-  g.drawHorizontalLine(y1, kMargin, getWidth() - kMargin);
-
-  // Section labels
+  // B-H scope label
   g.setColour(juce::Colour(0xFF8888AA));
   g.setFont(juce::Font(11.0f));
-  g.drawText("MAIN", kMargin, kHeaderH + 2, 100, kLabelH,
+  int scopeX = kMargin + 4 * (kKnobW + kMargin) + kSectionGap + 170 + kSectionGap;
+  g.drawText("B-H SCOPE", scopeX, kHeaderH + 2, 100, kLabelH,
              juce::Justification::left);
-  g.drawText("J-A PARAMETERS", kMargin, y1 + 2, 200, kLabelH,
-             juce::Justification::left);
-  g.drawText("B-H SCOPE", kMargin + 5 * (kKnobW + kMargin) + kMargin, y1 + 2,
-             200, kLabelH, juce::Justification::left);
 }
 
 void PluginEditor::resized() {
   auto area = getLocalBounds();
   area.removeFromTop(kHeaderH + kMargin);
 
-  // ── Row 1: Main controls ──
   int x = kMargin;
   int y = area.getY();
 
-  // Knobs: Input, Output, Mix, TMT
-  RotarySlider *mainKnobs[] = {&inputGain_, &outputGain_, &mix_, &tmtAmount_};
+  // Knobs: Input, Output, Mix, SVU
+  RotarySlider *mainKnobs[] = {&inputGain_, &outputGain_, &mix_, &svuAmount_};
   for (auto *rs : mainKnobs) {
     rs->label.setBounds(x, y, kKnobW, kLabelH);
     rs->slider.setBounds(x, y + kLabelH, kKnobW, kKnobH);
@@ -133,23 +117,13 @@ void PluginEditor::resized() {
   presetCombo_.setBounds(x, y + kLabelH + 2, 170, 24);
   modeLabel_.setBounds(x, y + kLabelH + 30, 170, kLabelH);
   modeCombo_.setBounds(x, y + kLabelH + 48, 170, 24);
+  x += 170;
 
-  // ── Row 2: J-A Parameters ──
-  y += kLabelH + kKnobH + kMargin + 20;
-  x = kMargin;
-
-  RotarySlider *jaKnobs[] = {&msSlider_, &aSlider_, &kSlider_, &cSlider_,
-                             &alphaSlider_};
-  for (auto *rs : jaKnobs) {
-    rs->label.setBounds(x, y, kKnobW, kLabelH);
-    rs->slider.setBounds(x, y + kLabelH, kKnobW, kKnobH);
-    x += kKnobW + kMargin;
-  }
-
-  // B-H Scope
-  int scopeX = x + kMargin;
-  bhScope_.setBounds(scopeX, y, getWidth() - scopeX - kMargin,
-                     kLabelH + kKnobH);
+  // B-H Scope (right of combos)
+  int scopeX = x + kSectionGap;
+  int scopeW = getWidth() - scopeX - kMargin;
+  if (scopeW > 40)
+    bhScope_.setBounds(scopeX, y, scopeW, kLabelH + kKnobH);
 
   // Monitor label at bottom
   monitorLabel_.setBounds(kMargin, getHeight() - 22, getWidth() - 2 * kMargin,

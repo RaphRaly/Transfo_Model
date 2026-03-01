@@ -17,12 +17,7 @@ PluginProcessor::PluginProcessor()
     mixParam_        = apvts_.getRawParameterValue(ParamID::Mix);
     presetParam_     = apvts_.getRawParameterValue(ParamID::Preset);
     modeParam_       = apvts_.getRawParameterValue(ParamID::Mode);
-    tmtParam_        = apvts_.getRawParameterValue(ParamID::TMTAmount);
-    msParam_         = apvts_.getRawParameterValue(ParamID::Ms);
-    aParam_          = apvts_.getRawParameterValue(ParamID::A);
-    kParam_          = apvts_.getRawParameterValue(ParamID::K);
-    cParam_          = apvts_.getRawParameterValue(ParamID::C);
-    alphaParam_      = apvts_.getRawParameterValue(ParamID::Alpha);
+    svuParam_        = apvts_.getRawParameterValue(ParamID::SVU);
 }
 
 PluginProcessor::~PluginProcessor() = default;
@@ -36,7 +31,7 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     const int numCh = getTotalNumOutputChannels();
 
     // Generate TMT offsets
-    const float tmtAmount = tmtParam_->load();
+    const float tmtAmount = svuParam_->load();
     toleranceModel_.generateRandomOffsets(tmtAmount);
 
     // Load default preset
@@ -84,9 +79,9 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
-    // Read parameters
-    const float inputGainDb  = inputGainParam_->load();
-    const float outputGainDb = outputGainParam_->load();
+    // Read parameters (offsets: input -10 dB, output +15 dB internal calibration)
+    const float inputGainDb  = inputGainParam_->load() - 10.0f;
+    const float outputGainDb = outputGainParam_->load() + 15.0f;
     const float mix          = mixParam_->load();
     const int   presetIndex  = static_cast<int>(presetParam_->load());
     const int   modeIndex    = static_cast<int>(modeParam_->load());
