@@ -26,23 +26,54 @@ struct CoreGeometry
     float Lambda_outer  = 1.5e-4f;  // Outer leg cross-section [m^2]
     float Lambda_yoke   = 1.5e-4f;  // Yoke cross-section [m^2]
 
+    // ── Air gap (meters) — 0 = ungapped ─────────────────────────────────────
+    // Gapped cores (e.g. Neve LI1166) add a linear reluctance in series:
+    //   R_gap = l_gap / (mu0 * A_core)
+    // This linearizes the B-H curve, reduces saturation, increases headroom.
+    float airGapLength = 0.0f;      // Air gap length [m] (0 = no gap)
+
     // ── Derived quantities ──────────────────────────────────────────────────
     float effectiveArea() const { return Lambda_center; }
-    float effectiveLength() const { return Gamma_center + Gamma_yoke; }
+    float effectiveLength() const { return Gamma_center + Gamma_yoke + airGapLength; }
+    bool  isGapped() const { return airGapLength > 0.0f; }
 
     // ── Presets ─────────────────────────────────────────────────────────────
     static CoreGeometry jensenJT115KE()
     {
-        // Jensen JT-115K-E: small mu-metal EI core
-        return { 0.048f, 0.076f, 0.058f,
-                 1.2e-4f, 1.2e-4f, 1.2e-4f };
+        // Jensen JT-115K-E: small mu-metal EI core, ungapped
+        CoreGeometry g;
+        g.Gamma_center = 0.048f; g.Gamma_outer = 0.076f; g.Gamma_yoke = 0.058f;
+        g.Lambda_center = 1.2e-4f; g.Lambda_outer = 1.2e-4f; g.Lambda_yoke = 1.2e-4f;
+        g.airGapLength = 0.0f;
+        return g;
+    }
+
+    static CoreGeometry neve10468Input()
+    {
+        // Neve 10468 / Marinair T1444: mic input, EI NiFe 50%, ungapped
+        // Larger core than Jensen (higher saturation current)
+        CoreGeometry g;
+        g.Gamma_center = 0.060f; g.Gamma_outer = 0.090f; g.Gamma_yoke = 0.070f;
+        g.Lambda_center = 2.2e-4f; g.Lambda_outer = 2.2e-4f; g.Lambda_yoke = 2.2e-4f;
+        g.airGapLength = 0.0f;
+        return g;
+    }
+
+    static CoreGeometry neveLI1166Output()
+    {
+        // Neve LI1166: line output, EI NiFe 50%, GAPPED
+        // Gap linearizes B-H → less saturation, more headroom
+        CoreGeometry g;
+        g.Gamma_center = 0.065f; g.Gamma_outer = 0.095f; g.Gamma_yoke = 0.075f;
+        g.Lambda_center = 2.5e-4f; g.Lambda_outer = 2.5e-4f; g.Lambda_yoke = 2.5e-4f;
+        g.airGapLength = 0.0001f; // 0.1 mm air gap
+        return g;
     }
 
     static CoreGeometry neveMarinair()
     {
-        // Neve Marinair LO1166: larger NiFe core
-        return { 0.065f, 0.095f, 0.075f,
-                 2.5e-4f, 2.5e-4f, 2.5e-4f };
+        // Legacy alias — now points to LI1166 output geometry
+        return neveLI1166Output();
     }
 };
 

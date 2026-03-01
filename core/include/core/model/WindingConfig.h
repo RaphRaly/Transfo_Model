@@ -49,10 +49,38 @@ struct WindingConfig
                  10.0f, 1e-3f,  150.0f, 150000.0f };
     }
 
+    // Neve 10468 / Marinair T1444 mic input (1073)
+    // Drawing EDO 71/13: 300 ohm parallel -> 1200 ohm, gain +6 dB
+    // Ratio 1:2, FR ±0.3 dB 20Hz-20kHz
+    static WindingConfig neve10468Input()
+    {
+        WindingConfig w;
+        w.turnsRatio_N1 = 1;  w.turnsRatio_N2 = 2;
+        w.Rdc_primary = 8.0f; w.Rdc_secondary = 32.0f;
+        w.C_sec_shield = 120e-12f; w.C_interwinding = 8e-12f;
+        w.Lp_primary = 5.0f;  w.L_leakage = 0.5e-3f;
+        w.sourceImpedance = 300.0f; w.loadImpedance = 1200.0f;
+        return w;
+    }
+
+    // Neve LI1166 line output (1073, gapped)
+    // Drawing EDO 71/13: 200 ohm series -> 600 ohm, gain -4 dB
+    // Step-down ~1:0.63, gapped core for linearity
+    static WindingConfig neveLI1166Output()
+    {
+        WindingConfig w;
+        w.turnsRatio_N1 = 5;  w.turnsRatio_N2 = 3;
+        w.Rdc_primary = 12.0f; w.Rdc_secondary = 18.0f;
+        w.C_sec_shield = 100e-12f; w.C_interwinding = 6e-12f;
+        w.Lp_primary = 8.0f;  w.L_leakage = 1e-3f;
+        w.sourceImpedance = 200.0f; w.loadImpedance = 600.0f;
+        return w;
+    }
+
     static WindingConfig neveLO1166()
     {
-        return { 1, 10,  50.0f, 5000.0f,  150e-12f, 8e-12f,
-                 20.0f, 2e-3f,  300.0f, 10000.0f };
+        // Legacy alias — now points to LI1166 output
+        return neveLI1166Output();
     }
 
     static WindingConfig apiAP2503()

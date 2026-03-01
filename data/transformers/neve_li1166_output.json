@@ -1,0 +1,55 @@
+{
+    "name": "Neve LI1166 (1073 Line Output, Gapped)",
+    "source": "Neve Drawing EDO 71/13 (22/3/72)",
+    "cross_references": ["LI1166", "LO2567 (ungapped)", "LI1366 (unity)"],
+    "type": "line_output",
+    "usage": "Neve 1073 console line output transformer",
+
+    "material_family": "nife_50",
+    "material_data_source": "data/materials/nife_50.json",
+    "core_type": "EI",
+    "gapped": true,
+
+    "electrical": {
+        "turns_ratio_description": "step-down ~1:0.63",
+        "turns_N1": 5,
+        "turns_N2": 3,
+        "impedance_primary_ohm": 200,
+        "impedance_secondary_ohm": 600,
+        "gain_db": -4.0,
+        "Rdc_primary_ohm": 12.0,
+        "Rdc_secondary_ohm": 18.0,
+        "Lp_estimated_H": 8.0,
+        "L_leakage_H": 1e-3,
+        "C_interwinding_F": 6e-12,
+        "source_impedance_ohm": 200,
+        "load_impedance_ohm": 600
+    },
+
+    "alternative_configs": [
+        {"primary": "200 (series)",   "secondary": "600",  "gain_db": -4},
+        {"primary": "200 (series)",   "secondary": "150",  "gain_db": -2},
+        {"primary": "50 (parallel)",  "secondary": "600",  "gain_db": 10},
+        {"primary": "50 (parallel)",  "secondary": "150",  "gain_db": -4}
+    ],
+
+    "air_gap": {
+        "description": "L'entrefer linearise la courbe B-H, reduit la saturation, augmente le headroom.",
+        "gap_length_m": 0.0001,
+        "effect": "Ajoute une reluctance lineaire en serie: R_gap = l_gap / (mu0 * A_core)"
+    },
+
+    "variants": {
+        "LO2567": {
+            "description": "Ungapped, no DC. Plus de saturation, plus de couleur harmonique.",
+            "gapped": false,
+            "notes": "Memes impedances mais sans entrefer. Sature plus tot. Preset alternatif Neve Hot."
+        },
+        "LI1366": {
+            "description": "600 -> 600 unity, isolation transformer.",
+            "gain_db": 0
+        }
+    },
+
+    "notes": "Le gap est important pour la modelisation: il ajoute une reluctance lineaire en serie avec le noyau magnetique. Dans le WDF: AirGap avec reluctance R_gap = l_gap / (mu0 * A_core). Variante ungapped LO2567 pour preset Neve Hot."
+}

@@ -42,17 +42,43 @@ struct TransformerConfig
         return cfg;
     }
 
-    // ── Factory: Neve Marinair LO1166 ───────────────────────────────────────
-    // Output transformer. NiFe 50% (Marinair alloy).
-    static TransformerConfig Neve_Marinair_LO1166()
+    // ── Factory: Neve 1073 Input (Marinair 10468 / Carnhill VTB9045) ────────
+    // Mic input transformer. NiFe 50% (Radiometal / Alloy 2). Ungapped.
+    // Ratio 1:2, 300 ohm -> 1200 ohm, gain +6 dB.
+    // Source: Neve Drawing EDO 71/13 (22/3/72) + Marinair T1444 catalogue.
+    // THD: < 0.1% @ 40 Hz, < 0.01% @ 1 kHz+. FR: ±0.3 dB 20-20k.
+    static TransformerConfig Neve_1073_Input()
     {
         TransformerConfig cfg;
-        cfg.name          = "Neve Marinair LO1166";
-        cfg.core          = CoreGeometry::neveMarinair();
-        cfg.windings      = WindingConfig::neveLO1166();
+        cfg.name          = "Neve 1073 Input (10468)";
+        cfg.core          = CoreGeometry::neve10468Input();
+        cfg.windings      = WindingConfig::neve10468Input();
         cfg.material      = JAParameterSet::defaultNiFe50();
-        cfg.loadImpedance = 10000.0f;
+        cfg.loadImpedance = 1200.0f;
         return cfg;
+    }
+
+    // ── Factory: Neve 1073 Output (LI1166 gapped) ───────────────────────────
+    // Line output transformer. NiFe 50%. GAPPED — linearized B-H.
+    // Step-down ~1:0.63, 200 ohm -> 600 ohm, gain -4 dB.
+    // Source: Neve Drawing EDO 71/13 (22/3/72).
+    // Gap adds linear reluctance R_gap = l_gap / (mu0 * A_core).
+    // Ungapped variant LO2567 exists for "Neve Hot" preset.
+    static TransformerConfig Neve_1073_Output()
+    {
+        TransformerConfig cfg;
+        cfg.name          = "Neve 1073 Output (LI1166)";
+        cfg.core          = CoreGeometry::neveLI1166Output();
+        cfg.windings      = WindingConfig::neveLI1166Output();
+        cfg.material      = JAParameterSet::defaultNiFe50();
+        cfg.loadImpedance = 600.0f;
+        return cfg;
+    }
+
+    // Legacy alias for backward compatibility
+    static TransformerConfig Neve_Marinair_LO1166()
+    {
+        return Neve_1073_Output();
     }
 
     // ── Factory: API AP2503 ─────────────────────────────────────────────────
@@ -61,7 +87,7 @@ struct TransformerConfig
     {
         TransformerConfig cfg;
         cfg.name          = "API AP2503";
-        cfg.core          = CoreGeometry::neveMarinair(); // approximate
+        cfg.core          = CoreGeometry::neveMarinair();
         cfg.windings      = WindingConfig::apiAP2503();
         cfg.material      = JAParameterSet::defaultSiFe();
         cfg.loadImpedance = 10000.0f;

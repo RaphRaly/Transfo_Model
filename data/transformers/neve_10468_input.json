@@ -1,0 +1,64 @@
+{
+    "name": "Neve 10468 / Marinair T1444 (1073 Mic Input)",
+    "source": "Neve Drawing EDO 71/13 (22/3/72) + Marinair Type 1400-1500 Catalogue",
+    "cross_references": ["10468", "VT22670", "T1454", "T1444", "Carnhill VTB9045"],
+    "type": "microphone_input",
+    "usage": "Neve 1073 console mic input transformer",
+
+    "material_family": "nife_50",
+    "material_data_source": "data/materials/nife_50.json",
+    "core_type": "EI",
+    "gapped": false,
+
+    "electrical": {
+        "turns_ratio": "1:2",
+        "turns_N1": 1,
+        "turns_N2": 2,
+        "impedance_primary_ohm": 300,
+        "impedance_secondary_ohm": 1200,
+        "gain_db": 6.0,
+        "Rdc_primary_ohm": 8.0,
+        "Rdc_secondary_ohm": 32.0,
+        "Lp_estimated_H": 5.0,
+        "L_leakage_H": 0.5e-3,
+        "C_interwinding_F": 8e-12,
+        "source_impedance_ohm": 300,
+        "load_impedance_ohm": 1200
+    },
+
+    "alternative_configs": [
+        {"primary": "1K2 (series)",   "secondary": "4K8", "gain_db": 6},
+        {"primary": "1K2 (series)",   "secondary": "1K2", "gain_db": 0},
+        {"primary": "300 (parallel)", "secondary": "4K8", "gain_db": 12},
+        {"primary": "300 (parallel)", "secondary": "1K2", "gain_db": 6}
+    ],
+
+    "frequency_response": {
+        "tolerance_db": 0.3,
+        "range_hz": [20, 20000],
+        "source": "Marinair T1444 catalogue"
+    },
+
+    "max_input": {
+        "level_db": 10.0,
+        "freq_hz": 40,
+        "source": "Marinair T1444 catalogue"
+    },
+
+    "thd_validation": [
+        {"freq_hz": 40,    "thd_percent": 0.1,  "condition": "max_input",  "source": "Marinair T1444 catalogue"},
+        {"freq_hz": 500,   "thd_percent": 0.01, "condition": "nominal",    "source": "Marinair T1444 catalogue"},
+        {"freq_hz": 1000,  "thd_percent": 0.01, "condition": "nominal",    "source": "Marinair T1444 catalogue"},
+        {"freq_hz": 10000, "thd_percent": 0.01, "condition": "nominal",    "source": "Marinair T1444 catalogue"}
+    ],
+
+    "marinair_t1444_specs": {
+        "impedances": "1,200/300 : 5,000/1,250",
+        "ratio": "1+1 : 2+2",
+        "input_impedance_ohm": [1050, 1250, 1600],
+        "secondary_load_ohm": [6300, 5000, 8800],
+        "effective_ratio_db": [6.6, 5.7, 5.8]
+    },
+
+    "notes": "Equivalent Carnhill VTB9045. Config parallele primaire (300 ohm) pour micro standard. Le NiFe 50% (Radiometal/Alloy 2) sature plus dur que le mu-metal 80% du Jensen — caractere punchy du Neve."
+}

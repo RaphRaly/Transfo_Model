@@ -25,6 +25,7 @@
 #include "../magnetics/CPWLLeaf.h"
 #include "../magnetics/JilesAthertonLeaf.h"
 #include "../util/Constants.h"
+#include "../util/SPSCQueue.h"
 #include "../util/SmoothedValue.h"
 #include "../wdf/HSIMSolver.h"
 #include "ToleranceModel.h"
@@ -37,6 +38,11 @@ namespace transfo {
 enum class ProcessingMode {
   Physical, // J-A complete, OS 4x — for bounce/render offline
   Realtime  // CPWL directional + ADAA, NO OS — monitoring [v3]
+};
+
+struct BHSample {
+  float h = 0.0f;
+  float b = 0.0f;
 };
 
 template <typename NonlinearLeaf> class TransformerModel {
@@ -71,6 +77,9 @@ public:
     outputGain_.reset(sampleRate, 0.02);
     mix_.reset(sampleRate, 0.02);
     mix_.setCurrentAndTargetValue(1.0f);
+
+    bhQueue_.reset();
+    bhDownsampleCounter_ = 0;
 
     configureCircuit();
   }
@@ -110,6 +119,14 @@ public:
     return data;
   }
 
+  size_t readBHSamples(BHSample *dest, size_t maxSamples) {
+    size_t count = 0;
+    while (count < maxSamples && bhQueue_.pop(dest[count])) {
+      count++;
+    }
+    return count;
+  }
+
   // ─── Access ─────────────────────────────────────────────────────────────
   HSIMSolver<NonlinearLeaf> &getHSIM() { return hsim_; }
   const TransformerConfig &getConfig() const { return config_; }
@@ -118,6 +135,7 @@ public:
   void reset() {
     hsim_.reset();
     oversampler_.reset();
+    bhQueue_.reset();
   }
 
 private:
@@ -133,6 +151,9 @@ private:
   float sampleRate_ = kDefaultSampleRate;
   int maxBlockSize_ = 512;
 
+  SPSCQueue<BHSample, 2048> bhQueue_;
+  int bhDownsampleCounter_ = 0;
+
   // ─── Realtime processing (CPWL + ADAA, no OS) ───────────────────────────
   void processBlockRealtime(const float *input, float *output, int numSamples) {
     for (int k = 0; k < numSamples; ++k) {
@@ -142,6 +163,12 @@ private:
 
       const float dry = input[k];
       const float wet = hsim_.processSample(input[k] * gain_in);
+
+      if (++bhDownsampleCounter_ >= 32) {
+        bhDownsampleCounter_ = 0;
+        const auto &leaf = hsim_.getNonlinearLeaf(0);
+        bhQueue_.push(BHSample{leaf.getH(), leaf.getB()});
+      }
 
       output[k] = (dry * (1.0f - mixVal) + wet * mixVal) * gain_out;
     }
@@ -159,6 +186,12 @@ private:
     for (int k = 0; k < osSize; ++k) {
       osBuffer[k] =
           hsim_.processSample(osBuffer[k] * inputGain_.getCurrentValue());
+
+      if (++bhDownsampleCounter_ >= 128) {
+        bhDownsampleCounter_ = 0;
+        const auto &leaf = hsim_.getNonlinearLeaf(0);
+        bhQueue_.push(BHSample{leaf.getH(), leaf.getB()});
+      }
     }
 
     // Downsample
