@@ -136,6 +136,7 @@ public:
     hsim_.reset();
     oversampler_.reset();
     bhQueue_.reset();
+    directHyst_.reset();
   }
 
 private:
@@ -154,7 +155,12 @@ private:
   SPSCQueue<BHSample, 2048> bhQueue_;
   int bhDownsampleCounter_ = 0;
 
-  // ─── Realtime processing (CPWL + ADAA, no OS) ───────────────────────────
+  // ─── Direct J-A processing (bypasses broken HSIM topology) ──────────────
+  HysteresisModel<LangevinPade> directHyst_;
+  float hScale_ = 100.0f;  // Input → H field scaling
+  float bNorm_ = 1.0f;     // B → output normalization (unity gain in linear region)
+
+  // ─── Realtime processing — direct J-A bypass (no OS) ─────────────────────
   void processBlockRealtime(const float *input, float *output, int numSamples) {
     for (int k = 0; k < numSamples; ++k) {
       const float gain_in = inputGain_.getNextValue();
@@ -162,19 +168,27 @@ private:
       const float mixVal = mix_.getNextValue();
 
       const float dry = input[k];
-      const float wet = hsim_.processSample(input[k] * gain_in);
+      const float x = input[k] * gain_in;
 
+      // Direct J-A: scale to H field, solve hysteresis, compute B
+      const float H = x * hScale_;
+      const double M = directHyst_.solveImplicitStep(static_cast<double>(H));
+      directHyst_.commitState();
+
+      const float B = kMu0f * (H + static_cast<float>(M));
+      const float wet = B * bNorm_;
+
+      // BH scope data
       if (++bhDownsampleCounter_ >= 32) {
         bhDownsampleCounter_ = 0;
-        const auto &leaf = hsim_.getNonlinearLeaf(0);
-        bhQueue_.push(BHSample{leaf.getH(), leaf.getB()});
+        bhQueue_.push(BHSample{H, B});
       }
 
       output[k] = (dry * (1.0f - mixVal) + wet * mixVal) * gain_out;
     }
   }
 
-  // ─── Physical processing (J-A + OS 4x) ─────────────────────────────────
+  // ─── Physical processing — direct J-A bypass + OS 4x ─────────────────────
   void processBlockPhysical(const float *input, float *output, int numSamples) {
     float *osBuffer = oversampler_.getOversampledBuffer();
     const int osSize = oversampler_.getOversampledSize(numSamples);
@@ -182,15 +196,22 @@ private:
     // Upsample
     oversampler_.upsample(input, numSamples, osBuffer);
 
-    // Process at oversampled rate
+    // Process at oversampled rate with direct J-A
     for (int k = 0; k < osSize; ++k) {
-      osBuffer[k] =
-          hsim_.processSample(osBuffer[k] * inputGain_.getCurrentValue());
+      const float x = osBuffer[k] * inputGain_.getCurrentValue();
 
+      // Direct J-A: scale to H field, solve hysteresis, compute B
+      const float H = x * hScale_;
+      const double M = directHyst_.solveImplicitStep(static_cast<double>(H));
+      directHyst_.commitState();
+
+      const float B = kMu0f * (H + static_cast<float>(M));
+      osBuffer[k] = B * bNorm_;
+
+      // BH scope data (less frequent for oversampled)
       if (++bhDownsampleCounter_ >= 128) {
         bhDownsampleCounter_ = 0;
-        const auto &leaf = hsim_.getNonlinearLeaf(0);
-        bhQueue_.push(BHSample{leaf.getH(), leaf.getB()});
+        bhQueue_.push(BHSample{H, B});
       }
     }
 
@@ -207,7 +228,7 @@ private:
 
   // ─── Configure the WDF circuit from TransformerConfig ───────────────────
   void configureCircuit() {
-    // Configure nonlinear leaves
+    // Configure nonlinear leaves (kept for future HSIM topology fix)
     for (int i = 0; i < hsim_.getNumNonlinearLeaves(); ++i) {
       auto &leaf = hsim_.getNonlinearLeaf(i);
 
@@ -215,25 +236,38 @@ private:
                                    JilesAthertonLeaf<LangevinPade>> ||
                     std::is_same_v<NonlinearLeaf,
                                    JilesAthertonLeaf<CPWLAnhysteretic>>) {
-        // Full J-A model expects Gamma, Lambda, and JAParameterSet
         leaf.configure(config_.core.effectiveLength(),
                        config_.core.effectiveArea(), config_.material,
                        sampleRate_);
-      } else if constexpr (std::is_same_v<NonlinearLeaf, CPWLLeaf>) {
-        // CPWL leaf only needs geometry and parameters for fitting
-        // Breakpoints are handled remotely via CPWLFitter, but we set geometry
-        // here Note: CPWLLeaf.h doesn't have an explicit 'configure' method
-        // yet, so we rely on its specific setters when CPWLFitter runs in
-        // Realtime mode. However, we ensure the leaf exists and is accessible.
       }
     }
 
-    // Configure ME junctions with turns ratio
+    // Configure ME junctions with turns ratio (kept for future HSIM topology fix)
     for (int i = 0; i < hsim_.getNumMEJunctions(); ++i) {
       int turns = (i == 0) ? config_.windings.turnsRatio_N1
                            : config_.windings.turnsRatio_N2;
       hsim_.getMEJunction(i).configure(turns, sampleRate_);
     }
+
+    // ─── Direct J-A model (bypasses HSIM) ──────────────────────────────────
+    float procRate = (processingMode_ == ProcessingMode::Physical)
+                         ? sampleRate_ * kOversamplingPhysical
+                         : sampleRate_;
+    if (procRate <= 0.0f) procRate = kDefaultSampleRate;
+
+    directHyst_.setParameters(config_.material);
+    directHyst_.setSampleRate(static_cast<double>(procRate));
+    directHyst_.reset();
+
+    // Scaling: map ±1.0 digital audio to H field around saturation knee
+    // 'a' parameter controls the B-H curve knee location
+    hScale_ = config_.material.a * 5.0f;
+
+    // Normalize output: unity gain in linear region
+    // At small H: susceptibility χ₀ ≈ Ms·c/a
+    float chi0 = config_.material.Ms * config_.material.c / config_.material.a;
+    float linearGainBperH = kMu0f * (1.0f + chi0);
+    bNorm_ = 1.0f / (linearGainBperH * hScale_ + kEpsilonF);
   }
 };
 
