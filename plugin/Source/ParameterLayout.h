@@ -54,7 +54,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     // Transformer Preset
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Preset, 1), "Transformer",
-        juce::StringArray{"Jensen JT-115K-E", "Neve Marinair LO1166", "API AP2503"},
+        juce::StringArray{"Jensen JT-115K-E", "Neve 1073 Input (10468)", "Neve 1073 Output (LI1166)", "API AP2503"},
         0));
 
     // Processing Mode
