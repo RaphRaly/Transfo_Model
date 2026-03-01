@@ -25,7 +25,13 @@ add_executable(test_cpwl_passivity
 )
 target_include_directories(test_cpwl_passivity PRIVATE ${CORE_INCLUDE})
 
+add_executable(test_hsim_diagnostics
+    test_hsim_diagnostics.cpp
+)
+target_include_directories(test_hsim_diagnostics PRIVATE ${CORE_INCLUDE})
+
 # ── CTest registration ───────────────────────────────────────────────────────
 enable_testing()
-add_test(NAME cpwl_adaa      COMMAND test_cpwl_adaa)
-add_test(NAME cpwl_passivity COMMAND test_cpwl_passivity)
+add_test(NAME cpwl_adaa          COMMAND test_cpwl_adaa)
+add_test(NAME cpwl_passivity     COMMAND test_cpwl_passivity)
+add_test(NAME hsim_diagnostics   COMMAND test_hsim_diagnostics)

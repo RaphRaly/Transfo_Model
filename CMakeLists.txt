@@ -44,8 +44,11 @@ juce_add_plugin(TransformerModel
     NEEDS_MIDI_OUTPUT       FALSE
     PLUGIN_MANUFACTURER_CODE Tmfr
     PLUGIN_CODE             Tm01
-    FORMATS                 VST3 Standalone
+    FORMATS                 VST3 AU Standalone
     PRODUCT_NAME            "Transformer Model v3"
+    # AU-specific metadata (required by Logic Pro / auval)
+    AU_MAIN_TYPE            kAudioUnitType_Effect
+    DESCRIPTION             "Physical transformer saturation model"
 )
 
 # ─── Source Files ────────────────────────────────────────────────────────────
@@ -77,7 +80,7 @@ target_sources(TransformerModel
         core/include/core/wdf/HSIMDiagnostics.h
         core/include/core/wdf/HSIMSolver.h
 
-        # dsp/
+        # dsp/ (SIMDMath.h and SmoothedValue.h live in util/ only)
         core/include/core/dsp/ADAAEngine.h
         core/include/core/dsp/OversamplingEngine.h
 
@@ -106,6 +109,8 @@ target_sources(TransformerModel
         plugin/Source/PluginProcessor.cpp
         plugin/Source/PluginEditor.h
         plugin/Source/PluginEditor.cpp
+        plugin/Source/BHScopeComponent.h
+        plugin/Source/BHScopeComponent.cpp
 
         # ── Legacy source (Phase 1 — kept for reference) ──
         Source/Core/HysteresisProcessor.h
@@ -153,3 +158,8 @@ target_link_libraries(TransformerModel
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+# ─── CLI Tool: simulate ─────────────────────────────────────────────────────
+add_executable(simulate tools/simulate.cpp)
+target_link_libraries(simulate PRIVATE TransformerCore)
+target_include_directories(simulate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/core/include)
