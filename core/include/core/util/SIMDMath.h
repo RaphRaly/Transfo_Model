@@ -3,12 +3,14 @@
 // =============================================================================
 // SIMDMath — SIMD-accelerated math primitives for the WDF hot path.
 //
-// Provides float4 wrapper for SSE2 (x86) or scalar fallback.
+// Provides float4 wrapper for SSE2 (x86), NEON (ARM64), or scalar fallback.
 // Used for parallel evaluation of 3 nonlinear reluctances + 1 spare slot
 // in a single SIMD operation (4-wide).
 //
-// Design decision: SSE2 baseline (available on all x64 CPUs since 2003).
-// AVX optional for future 8-wide operations.
+// Platform support:
+//   x86/x64  : SSE2 intrinsics (Intel/AMD, all x64 CPUs since 2003)
+//   ARM64    : NEON intrinsics (Apple Silicon M1+, always available)
+//   Other    : Scalar fallback (correct but slower)
 //
 // Reference: chowdsp_wdf uses XSIMD for portability. We keep it minimal
 // here with direct intrinsics + scalar fallback.
@@ -20,10 +22,16 @@
 // Detect SIMD availability
 #if defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64)
     #define TRANSFO_HAS_SSE2 1
+    #define TRANSFO_HAS_NEON 0
     #include <emmintrin.h>
     #include <xmmintrin.h>
+#elif defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__aarch64__) || defined(_M_ARM64)
+    #define TRANSFO_HAS_SSE2 0
+    #define TRANSFO_HAS_NEON 1
+    #include <arm_neon.h>
 #else
     #define TRANSFO_HAS_SSE2 0
+    #define TRANSFO_HAS_NEON 0
 #endif
 
 namespace transfo {
@@ -113,6 +121,102 @@ inline float4 clamp(float4 x, float4 lo, float4 hi)
 
 // Reciprocal approximation (fast, ~12-bit precision)
 inline float4 rcp_approx(float4 a) { return _mm_rcp_ps(a.v); }
+
+#elif TRANSFO_HAS_NEON
+// ─── ARM NEON implementation (Apple Silicon M1+) ────────────────────────────
+
+struct float4
+{
+    float32x4_t v;
+
+    float4() : v(vdupq_n_f32(0.0f)) {}
+    explicit float4(float s) : v(vdupq_n_f32(s)) {}
+    float4(float32x4_t val) : v(val) {}
+    float4(float a, float b, float c, float d)
+    {
+        float tmp[4] = {a, b, c, d};
+        v = vld1q_f32(tmp);
+    }
+
+    // Load/Store
+    static float4 load(const float* ptr)  { return vld1q_f32(ptr); }
+    static float4 loadu(const float* ptr) { return vld1q_f32(ptr); }
+    void store(float* ptr) const          { vst1q_f32(ptr, v); }
+    void storeu(float* ptr) const         { vst1q_f32(ptr, v); }
+
+    // Extract single element
+    float operator[](int i) const
+    {
+        float tmp[4];
+        vst1q_f32(tmp, v);
+        return tmp[i];
+    }
+
+    // Arithmetic
+    float4 operator+(float4 b) const { return vaddq_f32(v, b.v); }
+    float4 operator-(float4 b) const { return vsubq_f32(v, b.v); }
+    float4 operator*(float4 b) const { return vmulq_f32(v, b.v); }
+    float4 operator/(float4 b) const
+    {
+        // NEON has vdivq_f32 on AArch64
+        return vdivq_f32(v, b.v);
+    }
+
+    float4& operator+=(float4 b) { v = vaddq_f32(v, b.v); return *this; }
+    float4& operator-=(float4 b) { v = vsubq_f32(v, b.v); return *this; }
+    float4& operator*=(float4 b) { v = vmulq_f32(v, b.v); return *this; }
+
+    // Comparison (returns mask)
+    float4 operator<(float4 b)  const { return vreinterpretq_f32_u32(vcltq_f32(v, b.v)); }
+    float4 operator>(float4 b)  const { return vreinterpretq_f32_u32(vcgtq_f32(v, b.v)); }
+
+    // Bitwise (for masks)
+    float4 operator&(float4 b) const
+    {
+        return vreinterpretq_f32_u32(vandq_u32(
+            vreinterpretq_u32_f32(v), vreinterpretq_u32_f32(b.v)));
+    }
+    float4 operator|(float4 b) const
+    {
+        return vreinterpretq_f32_u32(vorrq_u32(
+            vreinterpretq_u32_f32(v), vreinterpretq_u32_f32(b.v)));
+    }
+
+    // Select: mask ? a : b
+    static float4 select(float4 mask, float4 a, float4 b)
+    {
+        uint32x4_t m = vreinterpretq_u32_f32(mask.v);
+        return vbslq_f32(m, a.v, b.v);
+    }
+
+    // Horizontal sum
+    float hsum() const
+    {
+        float32x2_t low  = vget_low_f32(v);
+        float32x2_t high = vget_high_f32(v);
+        float32x2_t sum  = vadd_f32(low, high);
+        return vget_lane_f32(vpadd_f32(sum, sum), 0);
+    }
+};
+
+// Abs
+inline float4 abs(float4 a)
+{
+    return vabsq_f32(a.v);
+}
+
+// Min/Max
+inline float4 min(float4 a, float4 b) { return vminq_f32(a.v, b.v); }
+inline float4 max(float4 a, float4 b) { return vmaxq_f32(a.v, b.v); }
+
+// Clamp
+inline float4 clamp(float4 x, float4 lo, float4 hi)
+{
+    return min(max(x, lo), hi);
+}
+
+// Reciprocal approximation (fast, ~12-bit precision)
+inline float4 rcp_approx(float4 a) { return vrecpeq_f32(a.v); }
 
 #else
 // ─── Scalar fallback ────────────────────────────────────────────────────────
