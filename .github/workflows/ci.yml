@@ -3,53 +3,200 @@ name: CI
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ main, master ]
 
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_DIR: build
+  TESTS_BUILD_DIR: build-tests
+
 jobs:
-  # ─── Core + Tests (Linux, no JUCE) ──────────────────────────────────────────
+  # ─── Core Tests (all OS, no JUCE dependency) ────────────────────────────────
   core-tests:
-    name: Core Tests (${{ matrix.os }})
+    name: Core Tests (${{ matrix.os }}, ${{ matrix.build_type }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-latest, macos-13]
+        build_type: [Release, Debug]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configure Tests (standalone, no JUCE)
-        run: cmake -B build-tests -S Tests
+        run: cmake -B ${{ env.TESTS_BUILD_DIR }} -S Tests -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
       - name: Build Tests
-        run: cmake --build build-tests --config Release
+        run: cmake --build ${{ env.TESTS_BUILD_DIR }} --config ${{ matrix.build_type }}
 
-      - name: Run CPWL ADAA tests
-        run: ctest --test-dir build-tests -C Release -R cpwl_adaa --output-on-failure
+      - name: Run all tests
+        run: ctest --test-dir ${{ env.TESTS_BUILD_DIR }} -C ${{ matrix.build_type }} --output-on-failure --no-tests=error
 
-      - name: Run CPWL Passivity tests
-        run: ctest --test-dir build-tests -C Release -R cpwl_passivity --output-on-failure
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            ${{ env.TESTS_BUILD_DIR }}/Testing/
+            ${{ env.TESTS_BUILD_DIR }}/**/LastTest.log
+          if-no-files-found: ignore
 
-  # ─── Full Plugin Build (Windows only — MSVC + JUCE) ─────────────────────────
+  # ─── Plugin Build + Pluginval (all OS) ──────────────────────────────────────
   plugin-build:
-    name: Plugin Build (Windows)
-    runs-on: windows-latest
+    name: Plugin Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     needs: core-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-13]
+        include:
+          - os: ubuntu-22.04
+            pluginval_url: https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Linux.zip
+            vst3_path: build/TransformerModel_artefacts/Release/VST3/Transformer Model v3.vst3
+            artifact_name: TransformerModel-linux
+          - os: windows-latest
+            pluginval_url: https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip
+            vst3_path: build/TransformerModel_artefacts/Release/VST3/Transformer Model v3.vst3
+            artifact_name: TransformerModel-windows
+          - os: macos-13
+            pluginval_url: https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+            vst3_path: build/TransformerModel_artefacts/Release/VST3/Transformer Model v3.vst3
+            artifact_name: TransformerModel-macos
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure Plugin (fetches JUCE automatically)
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      # ── Linux: install JUCE system dependencies ──
+      - name: Install JUCE dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libjack-jackd2-dev \
+            libcurl4-openssl-dev \
+            libfreetype6-dev \
+            libx11-dev \
+            libxcomposite-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            libwebkit2gtk-4.0-dev \
+            libglu1-mesa-dev \
+            mesa-common-dev
+
+      # ── Cache JUCE FetchContent ──
+      - name: Cache JUCE (FetchContent)
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps/juce-src
+            build/_deps/juce-build
+            build/_deps/juce-subbuild
+          key: juce-8.0.4-${{ matrix.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            juce-8.0.4-${{ matrix.os }}-
+
+      # ── Cache CMake build (compiler outputs) ──
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/CMakeCache.txt
+            build/CMakeFiles
+          key: cmake-${{ matrix.os }}-${{ hashFiles('CMakeLists.txt', 'plugin/Source/**', 'core/include/**') }}
+          restore-keys: |
+            cmake-${{ matrix.os }}-
+
+      - name: Configure Plugin
+        run: cmake -B ${{ env.BUILD_DIR }} -DCMAKE_BUILD_TYPE=Release
 
       - name: Build VST3 + Standalone
-        run: cmake --build build --config Release --target TransformerModel
+        run: cmake --build ${{ env.BUILD_DIR }} --config Release --target TransformerModel_VST3
 
+      # ── Pluginval validation ──
+      - name: Download pluginval
+        shell: bash
+        run: |
+          curl -L "${{ matrix.pluginval_url }}" -o pluginval.zip
+          unzip pluginval.zip -d pluginval
+
+      - name: Run pluginval (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x pluginval/pluginval
+          # pluginval needs a display on Linux
+          export DISPLAY=:99
+          sudo Xvfb :99 -screen 0 1280x720x24 &
+          sleep 2
+          pluginval/pluginval --validate "${{ matrix.vst3_path }}" --strictness-level 5 --timeout-ms 120000
+
+      - name: Run pluginval (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x pluginval/pluginval.app/Contents/MacOS/pluginval
+          pluginval/pluginval.app/Contents/MacOS/pluginval --validate "${{ matrix.vst3_path }}" --strictness-level 5 --timeout-ms 120000
+
+      - name: Run pluginval (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pluginval/pluginval.exe --validate "${{ matrix.vst3_path }}" --strictness-level 5 --timeout-ms 120000
+
+      # ── Upload VST3 artifact ──
       - name: Upload VST3 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransformerModel-VST3-${{ github.sha }}
-          path: build/**/*.vst3
-          if-no-files-found: warn
+          name: ${{ matrix.artifact_name }}-${{ github.ref_name }}
+          path: ${{ matrix.vst3_path }}
+          if-no-files-found: error
+
+  # ─── Release (triggered on v*.*.* tags) ─────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: plugin-build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all VST3 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          cd artifacts
+
+          # Zip each platform artifact
+          for dir in TransformerModel-*/; do
+            platform=$(echo "$dir" | sed 's|/||')
+            zip -r "../${platform}.zip" "$dir"
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Transformer Model ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            TransformerModel-*.zip
