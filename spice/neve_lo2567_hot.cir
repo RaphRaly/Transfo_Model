@@ -1,0 +1,71 @@
+* =============================================================================
+* Neve LO2567 — Output Transformer UNGAPPED ("Neve Hot")
+* =============================================================================
+*
+* Source: Neve Drawing EDO 71/13 (22/3/72)
+* This is the UNGAPPED variant of LI1166 — same windings, no air gap.
+* Saturates earlier, more harmonic coloration, no DC tolerance.
+*
+* Config: 200 ohm series primary -> 600 ohm secondary
+* Ratio: 5:3 (step-down), Gain: -4 dB
+* Material: NiFe 50% (Radiometal / Alloy 2), EI core, UNGAPPED
+*
+* vs LI1166 (gapped):
+*   - Higher Lp (no gap reluctance reducing inductance)
+*   - Lower saturation threshold (no gap to linearize B-H)
+*   - More 2nd/3rd harmonic content at moderate drive levels
+*   - Cannot tolerate DC offset (no gap to prevent core saturation)
+*
+* =============================================================================
+
+.param N=0.6         ; Turns ratio N2/N1 = 3/5
+.param Rsource=200   ; Source impedance [ohm]
+.param Rload=600     ; Load impedance [ohm]
+
+* --- Source ---
+Vsrc  in   0   SINE(0 1.0 1000)
+Rsrc  in   n1  {Rsource}
+
+* --- Primary winding ---
+Rdc1  n1   n2  12        ; Primary DC resistance [ohm] (same as LI1166)
+Lleak n2   n3  1m        ; Leakage inductance [H] (same as LI1166)
+
+* --- Magnetizing branch ---
+* Lp HIGHER than LI1166 (no air gap reducing permeability)
+* Ungapped NiFe 50%: mu_r ~ 50,000 vs gapped mu_eff ~ 5,000
+* Estimated Lp_ungapped ~ 80H (vs 8H gapped — 10x higher)
+Lp    n3   0   80        ; Primary magnetizing inductance [H] (ungapped!)
+Ciw   n3   n4  6p        ; Interwinding capacitance [F]
+Css1  n3   0   100p      ; Primary-referred parasitic capacitance [F]
+
+* --- Ideal transformer (coupled inductors) ---
+* Ls = Lp * N^2 = 80 * 0.36 = 28.8 H
+Ls    n4   n5  28.8      ; Secondary inductance [H]
+K1    Lp   Ls  0.9999    ; Coupling coefficient
+
+* --- Secondary winding ---
+Rdc2  n5   out 18        ; Secondary DC resistance [ohm]
+Css2  out  0   100p      ; Secondary parasitic capacitance [F]
+
+* --- Load ---
+Rld   out  0   {Rload}
+
+* --- Nonlinear core model (Jiles-Atherton, optional) ---
+* For nonlinear simulation, replace Lp with a Chan/J-A core model:
+* .model NIFE50_CORE CORE (Ms=480000 a=80 k=60 alpha=0.0008 c=0.4)
+* To activate: comment out Lp, add:
+*   Lp_nl  n3  0  100u  IC=0
+*   .model Lp_nl CORE (...)
+
+* --- Analysis ---
+.tran 0 50m 10m 1u
+.ac dec 1000 1 1Meg
+
+.meas TRAN Vout_rms RMS V(out) FROM 10m TO 50m
+.meas TRAN gain_dB  PARAM 20*log10(Vout_rms/Vin_rms)
+
+* --- THD measurement (sweep input level) ---
+.step param Vampl 0.1 3.0 0.1
+* Replace SINE source amplitude with {Vampl} to sweep drive levels
+
+.end

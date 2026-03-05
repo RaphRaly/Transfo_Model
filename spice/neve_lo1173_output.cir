@@ -1,0 +1,57 @@
+* =============================================================================
+* Neve LO1173 — 1073 Line Output Transformer
+* =============================================================================
+*
+* Source: Neve Drawing EDO 71/13 (6/11/73)
+* Cross-references: LO1173 = VT22737 = VT22761 = T1684 = T1686
+*   T1684 = PCB mounting, T1686 = chassis mounting
+*   VT22737 = PCB mounting, VT22761 = chassis mounting
+*
+* Config: 70 ohm series primary -> 600 ohm secondary
+* Ratio: 3:1 (step-down), Gain: -8 dB
+* Material: NiFe 50%, EI core, ungapped
+*
+* Low primary impedance (70 ohm) — designed to be driven by a low-Z
+* amplifier output stage. The step-down ratio attenuates the signal
+* while providing balanced 600 ohm line output.
+*
+* =============================================================================
+
+.param N=0.333       ; Turns ratio N2/N1 = 1/3
+.param Rsource=70    ; Source impedance [ohm]
+.param Rload=600     ; Load impedance [ohm]
+
+* --- Source ---
+Vsrc  in   0   SINE(0 1.0 1000)
+Rsrc  in   n1  {Rsource}
+
+* --- Primary winding ---
+Rdc1  n1   n2  5         ; Primary DC resistance [ohm] (low Z winding)
+Lleak n2   n3  0.3m      ; Leakage inductance [H]
+
+* --- Magnetizing branch ---
+Lp    n3   0   3         ; Primary magnetizing inductance [H]
+Ciw   n3   n4  5p        ; Interwinding capacitance [F]
+Css1  n3   0   80p       ; Primary-referred parasitic capacitance [F]
+
+* --- Ideal transformer (coupled inductors) ---
+* Ls = Lp * N^2 = 3 * (1/3)^2 = 3 * 0.111 = 0.333 H
+Ls    n4   n5  0.333     ; Secondary inductance [H]
+K1    Lp   Ls  0.9999    ; Coupling coefficient
+
+* --- Secondary winding ---
+Rdc2  n5   out 15        ; Secondary DC resistance [ohm]
+Css2  out  0   80p       ; Secondary parasitic capacitance [F]
+
+* --- Load ---
+Rld   out  0   {Rload}
+
+* --- Analysis ---
+.tran 0 50m 10m 1u
+.ac dec 1000 1 1Meg
+
+.meas TRAN Vout_rms RMS V(out) FROM 10m TO 50m
+.meas TRAN Vin_rms  RMS V(in)  FROM 10m TO 50m
+.meas TRAN gain_dB  PARAM 20*log10(Vout_rms/Vin_rms)
+
+.end

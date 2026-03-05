@@ -1,0 +1,63 @@
+* =============================================================================
+* Neve 10468 / Marinair T1444 — 1073 Mic Input Transformer
+* =============================================================================
+*
+* Source: Neve Drawing EDO 71/13 (22/3/72) + Marinair Type 1400-1500 Catalogue
+* Cross-references: 10468 = VT22670 = T1454 = T1444 = Carnhill VTB9045
+*
+* Config: 300 ohm parallel primary -> 1200 ohm secondary
+* Ratio: 1:2, Gain: +6 dB
+* Material: NiFe 50% (Radiometal / Alloy 2), EI core, ungapped
+* FR: +/-0.3 dB (20Hz - 20kHz)
+* THD: < 0.1% @ 40Hz (max input), < 0.01% @ 1kHz+ (nominal)
+* Max input: +10 dB @ 40 Hz
+*
+* Equivalent Circuit (Steinmetz model):
+*
+*   Vsrc -- Rs -- Rdc_pri -- L_leak --+-- Lp --+--[1:N]--+-- Rdc_sec -- Rload
+*                                      |        |          |
+*                                     Ciw     Css        Css2
+*                                      |        |          |
+*                                     GND      GND        GND
+*
+* =============================================================================
+
+.param N=2           ; Turns ratio N2/N1
+.param Rsource=300   ; Source impedance [ohm]
+.param Rload=1200    ; Load impedance [ohm]
+
+* --- Source ---
+Vsrc  in   0   SINE(0 0.5 1000)
+Rsrc  in   n1  {Rsource}
+
+* --- Primary winding ---
+Rdc1  n1   n2  8         ; Primary DC resistance [ohm]
+Lleak n2   n3  0.5m      ; Leakage inductance [H] (primary-referred)
+
+* --- Magnetizing branch ---
+Lp    n3   0   5         ; Primary magnetizing inductance [H]
+Ciw   n3   n4  8p        ; Interwinding capacitance [F]
+Css1  n3   0   120p      ; Secondary-to-shield capacitance (primary-referred) [F]
+
+* --- Ideal transformer (coupled inductors) ---
+* Ls = Lp * N^2 = 5 * 4 = 20 H
+Ls    n4   n5  20        ; Secondary inductance [H]
+K1    Lp   Ls  0.9999    ; Coupling coefficient (near-ideal)
+
+* --- Secondary winding ---
+Rdc2  n5   out 32        ; Secondary DC resistance [ohm]
+Css2  out  0   120p      ; Secondary parasitic capacitance [F]
+
+* --- Load ---
+Rld   out  0   {Rload}
+
+* --- Analysis ---
+.tran 0 50m 10m 1u       ; Transient: 50ms total, start saving at 10ms, 1us step
+.ac dec 1000 1 1Meg      ; AC sweep: 1 Hz to 1 MHz, 1000 points/decade
+
+* --- Measurements ---
+.meas TRAN Vout_rms RMS V(out) FROM 10m TO 50m
+.meas TRAN Vin_rms  RMS V(in)  FROM 10m TO 50m
+.meas TRAN gain_dB  PARAM 20*log10(Vout_rms/Vin_rms)
+
+.end

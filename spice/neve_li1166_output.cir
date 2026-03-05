@@ -1,0 +1,69 @@
+* =============================================================================
+* Neve LI1166 — 1073 Line Output Transformer (GAPPED)
+* =============================================================================
+*
+* Source: Neve Drawing EDO 71/13 (22/3/72)
+* Cross-references: LI1166, variant of LO2567 (ungapped) and LI1366 (unity)
+*
+* Config: 200 ohm series primary -> 600 ohm secondary
+* Ratio: 5:3 (step-down), Gain: -4 dB
+* Material: NiFe 50% (Radiometal / Alloy 2), EI core, GAPPED (0.1mm)
+* The air gap linearizes the B-H curve, reduces saturation, increases headroom.
+*
+* Equivalent Circuit:
+*
+*   Vsrc -- Rs -- Rdc_pri -- L_leak --+-- Lp --+--[5:3]--+-- Rdc_sec -- Rload
+*                                      |        |          |
+*                                     Ciw     Css        Css2
+*                                      |        |          |
+*                                     GND      GND        GND
+*
+* Air gap modeled by reduced Lp (gap increases reluctance, lowers inductance).
+* R_gap = l_gap / (mu0 * A_core) = 0.0001 / (4pi*1e-7 * 2.5e-4) = 318 kA/Wb
+*
+* =============================================================================
+
+.param N=0.6         ; Turns ratio N2/N1 = 3/5
+.param Rsource=200   ; Source impedance [ohm] (amplifier output)
+.param Rload=600     ; Load impedance [ohm] (600 ohm line)
+
+* --- Source ---
+Vsrc  in   0   SINE(0 1.0 1000)
+Rsrc  in   n1  {Rsource}
+
+* --- Primary winding ---
+Rdc1  n1   n2  12        ; Primary DC resistance [ohm]
+Lleak n2   n3  1m        ; Leakage inductance [H]
+
+* --- Magnetizing branch ---
+* Lp = 8H (gapped core — lower than ungapped due to air gap reluctance)
+Lp    n3   0   8         ; Primary magnetizing inductance [H]
+Ciw   n3   n4  6p        ; Interwinding capacitance [F]
+Css1  n3   0   100p      ; Primary-referred parasitic capacitance [F]
+
+* --- Ideal transformer (coupled inductors) ---
+* Ls = Lp * N^2 = 8 * (3/5)^2 = 8 * 0.36 = 2.88 H
+Ls    n4   n5  2.88      ; Secondary inductance [H]
+K1    Lp   Ls  0.9999    ; Coupling coefficient
+
+* --- Secondary winding ---
+Rdc2  n5   out 18        ; Secondary DC resistance [ohm]
+Css2  out  0   100p      ; Secondary parasitic capacitance [F]
+
+* --- Load ---
+Rld   out  0   {Rload}
+
+* --- Air gap equivalent reluctance (for reference) ---
+* R_gap = l_gap / (mu0 * A_core)
+* R_gap = 0.0001 / (1.2566e-6 * 2.5e-4) = 318,310 A/Wb
+* This reduces effective permeability by factor ~10 vs ungapped
+
+* --- Analysis ---
+.tran 0 50m 10m 1u
+.ac dec 1000 1 1Meg
+
+.meas TRAN Vout_rms RMS V(out) FROM 10m TO 50m
+.meas TRAN Vin_rms  RMS V(in)  FROM 10m TO 50m
+.meas TRAN gain_dB  PARAM 20*log10(Vout_rms/Vin_rms)
+
+.end

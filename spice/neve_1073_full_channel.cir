@@ -1,0 +1,72 @@
+* =============================================================================
+* Neve 1073 — Full Channel Transformer Chain
+* =============================================================================
+*
+* Complete signal path: Mic -> 10468 Input Xfmr -> [Gain Stage] -> LI1166 Output Xfmr -> Line
+*
+* This netlist chains the input and output transformers of a Neve 1073
+* console channel strip, with a simplified gain stage in between.
+*
+* Signal flow:
+*   Mic (150 ohm) -> 10468 (1:2, +6dB) -> Preamp (Av) -> LI1166 (5:3, -4dB) -> Line (600 ohm)
+*
+* Source: Neve Drawings EDO 71/13 (1972-1973)
+*
+* =============================================================================
+
+.param Av=10         ; Preamp voltage gain (adjustable)
+
+* ===================== MIC SOURCE =====================
+Vmic  mic  0   SINE(0 0.01 1000)   ; -40 dBu mic signal
+Rmic  mic  m1  150                   ; Mic output impedance [ohm]
+
+* ===================== INPUT TRANSFORMER: 10468 =====================
+* Neve 10468 / Marinair T1444, ratio 1:2, 300->1200 ohm, +6 dB
+
+Rdc1a m1   m2  8          ; Primary DC resistance [ohm]
+Llk1  m2   m3  0.5m       ; Leakage inductance [H]
+Lp1   m3   0   5          ; Primary magnetizing inductance [H]
+Ciw1  m3   m4  8p         ; Interwinding capacitance [F]
+Css1a m3   0   120p       ; Primary parasitic capacitance [F]
+Ls1   m4   m5  20         ; Secondary inductance [H] (Lp * N^2 = 5 * 4)
+K1    Lp1  Ls1 0.9999     ; Coupling
+Rdc1b m5   pre_in  32     ; Secondary DC resistance [ohm]
+Css1b pre_in 0   120p     ; Secondary parasitic capacitance [F]
+
+* ===================== SIMPLIFIED PREAMP GAIN STAGE =====================
+* Models the Neve 1073 amplifier as a voltage-controlled source
+* Real circuit: discrete Class-A transistor amp with feedback
+
+Rpre_in  pre_in  0   1200    ; Input impedance (secondary load)
+Epre     pre_out 0   pre_in 0   {Av}  ; Voltage gain
+Rpre_out pre_out out_drv 50   ; Output impedance of preamp stage
+
+* ===================== OUTPUT TRANSFORMER: LI1166 =====================
+* Neve LI1166 (gapped), ratio 5:3, 200->600 ohm, -4 dB
+
+Rdc2a out_drv ox1  12     ; Primary DC resistance [ohm]
+Llk2  ox1  ox2  1m        ; Leakage inductance [H]
+Lp2   ox2  0    8         ; Primary magnetizing inductance [H] (gapped)
+Ciw2  ox2  ox3  6p        ; Interwinding capacitance [F]
+Css2a ox2  0    100p      ; Primary parasitic capacitance [F]
+Ls2   ox3  ox4  2.88      ; Secondary inductance [H] (8 * (3/5)^2)
+K2    Lp2  Ls2  0.9999    ; Coupling
+Rdc2b ox4  line_out  18   ; Secondary DC resistance [ohm]
+Css2b line_out 0    100p  ; Secondary parasitic capacitance [F]
+
+* ===================== LINE LOAD =====================
+Rline line_out 0   600    ; 600 ohm balanced line
+
+* ===================== ANALYSIS =====================
+.tran 0 100m 20m 1u
+.ac dec 1000 1 1Meg
+
+* --- Measurements ---
+.meas TRAN Vmic_rms    RMS V(mic)      FROM 20m TO 100m
+.meas TRAN Vpre_in_rms RMS V(pre_in)   FROM 20m TO 100m
+.meas TRAN Vline_rms   RMS V(line_out) FROM 20m TO 100m
+.meas TRAN gain_input_dB  PARAM 20*log10(Vpre_in_rms/Vmic_rms)
+.meas TRAN gain_output_dB PARAM 20*log10(Vline_rms/Vpre_in_rms)
+.meas TRAN gain_total_dB  PARAM 20*log10(Vline_rms/Vmic_rms)
+
+.end
