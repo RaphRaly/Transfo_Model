@@ -367,7 +367,9 @@ void test4_parameter_ranges()
     const float sr = 44100.0f;
     auto cfg = transfo::Presets::Jensen_JT115KE();
 
-    // Helper lambda: create a Realtime model, set params, process sine, return output
+    // Helper lambda: create a Realtime model, set params, process sine, return output.
+    // Processes 3 warm-up blocks first so SmoothedValue ramps fully settle
+    // (20ms ramp = 882 samples at 44.1 kHz; 3 × 512 = 1536 > 882).
     auto processWithParams = [&](float inputGainDb, float outputGainDb, float mix) -> std::vector<float>
     {
         RealtimeModel model;
@@ -379,8 +381,17 @@ void test4_parameter_ranges()
         model.setMix(mix);
 
         std::vector<float> buf(N);
-        generateSine(buf.data(), N, 1000.0f, sr, 0.5f);
         std::vector<float> output(N);
+
+        // Warm-up: let SmoothedValue ramps settle
+        for (int warmup = 0; warmup < 3; ++warmup)
+        {
+            generateSine(buf.data(), N, 1000.0f, sr, 0.5f);
+            model.processBlock(buf.data(), output.data(), N);
+        }
+
+        // Final block with settled parameters
+        generateSine(buf.data(), N, 1000.0f, sr, 0.5f);
         model.processBlock(buf.data(), output.data(), N);
         return output;
     };
