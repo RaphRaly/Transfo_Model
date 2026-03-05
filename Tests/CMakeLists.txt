@@ -35,9 +35,15 @@ add_executable(test_plugin_integration
 )
 target_include_directories(test_plugin_integration PRIVATE ${CORE_INCLUDE})
 
+add_executable(test_neve_validation
+    test_neve_validation.cpp
+)
+target_include_directories(test_neve_validation PRIVATE ${CORE_INCLUDE})
+
 # ── CTest registration ───────────────────────────────────────────────────────
 enable_testing()
 add_test(NAME cpwl_adaa              COMMAND test_cpwl_adaa)
 add_test(NAME cpwl_passivity         COMMAND test_cpwl_passivity)
 add_test(NAME hsim_diagnostics       COMMAND test_hsim_diagnostics)
 add_test(NAME plugin_integration     COMMAND test_plugin_integration)
+add_test(NAME neve_validation        COMMAND test_neve_validation)
