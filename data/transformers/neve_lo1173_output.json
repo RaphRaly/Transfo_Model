@@ -1,0 +1,26 @@
+{
+    "name": "Neve LO1173 (Line Output)",
+    "source": "Neve Drawing EDO 71/13 (6/11/73)",
+    "cross_references": ["LO1173", "VT22737", "VT22761", "T1684", "T1686"],
+    "type": "line_output",
+    "usage": "Neve console line output transformer",
+
+    "material_family": "nife_50",
+    "material_data_source": "data/materials/nife_50.json",
+    "core_type": "EI",
+    "gapped": false,
+
+    "electrical": {
+        "turns_ratio_description": "step-down ~3:1 (estimated for -8dB)",
+        "turns_N1": 3,
+        "turns_N2": 1,
+        "impedance_primary_ohm": 70,
+        "impedance_secondary_ohm": 600,
+        "gain_db": -8.0,
+        "Rdc_primary_ohm": 5.0,
+        "Rdc_secondary_ohm": 15.0,
+        "Rdc_estimated": true
+    },
+
+    "notes": "T1684 = PCB mounting, T1686 = chassis mounting, VT22737 = PCB, VT22761 = chassis. Rdc values are estimated (low primary impedance). Le rapport 3:1 est estime pour correspondre au gain de -8dB."
+}

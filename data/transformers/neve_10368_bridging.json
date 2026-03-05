@@ -1,0 +1,27 @@
+{
+    "name": "Neve 10368 / T1453 (Line Bridging)",
+    "source": "Neve Drawing EDO 71/13 (22/3/72)",
+    "cross_references": ["10368", "T1453"],
+    "type": "line_bridging",
+    "usage": "Neve console line bridging transformer",
+
+    "material_family": "nife_50",
+    "material_data_source": "data/materials/nife_50.json",
+    "core_type": "EI",
+    "gapped": false,
+
+    "electrical": {
+        "impedance_primary_ohm": 5000,
+        "impedance_secondary_ohm": 2400,
+        "gain_db": -3.0
+    },
+
+    "alternative_configs": [
+        {"primary": "5K series",    "secondary": "2K4",  "gain_db": -3},
+        {"primary": "5K series",    "secondary": "600",  "gain_db": -9},
+        {"primary": "1K2 parallel", "secondary": "2K4",  "gain_db": 3},
+        {"primary": "300",          "secondary": "1K2",  "gain_db": 6}
+    ],
+
+    "notes": "Line bridging transformer. Config par defaut: 5K series vers 2K4 (-3 dB). Offre une grande flexibilite de configurations, du step-down (-9 dB) au step-up (+6 dB)."
+}

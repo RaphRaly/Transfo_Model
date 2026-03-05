@@ -1,0 +1,40 @@
+{
+    "name": "Marinair T1447 (Line Bridging Reversed)",
+    "source": "Marinair Type 1400-1500 Catalogue",
+    "cross_references": ["T1447"],
+    "type": "line_bridging",
+    "usage": "Marinair line bridging transformer (reversed configuration)",
+
+    "material_family": "nife_50",
+    "material_data_source": "data/materials/nife_50.json",
+    "core_type": "EI",
+    "gapped": false,
+
+    "electrical": {
+        "turns_ratio": "1+1 : 3+3",
+        "impedances": "1,000/250 : 8,000/2,000",
+        "impedance_primary_ohm": 1000,
+        "impedance_secondary_ohm": 8000,
+        "input_impedance_tolerance": "1000 ohm +/-10% over band",
+        "secondary_load_ohm": 8000
+    },
+
+    "frequency_response": {
+        "tolerance_db": 0.2,
+        "range_hz": [20, 20000],
+        "source": "Marinair T1447 catalogue"
+    },
+
+    "max_input": {
+        "level_db": 8.7,
+        "freq_hz": 40,
+        "source": "Marinair T1447 catalogue"
+    },
+
+    "thd_validation": [
+        {"freq_hz": 40,   "thd_percent": 0.1,  "condition": "max_input", "source": "Marinair T1447 catalogue"},
+        {"freq_hz": 1000, "thd_percent": 0.01, "condition": "nominal",   "source": "Marinair T1447 catalogue"}
+    ],
+
+    "notes": "Line bridging reversed. Ratio 1+1:3+3, step-up configuration. Impedance d'entree 1000 ohm +/-10% sur toute la bande."
+}

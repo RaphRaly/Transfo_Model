@@ -1,0 +1,26 @@
+{
+    "name": "Neve 31267 / T1452 (Line Bridging)",
+    "source": "Neve Drawing EDO 71/13 (22/3/72)",
+    "cross_references": ["31267", "VT22671", "T1452"],
+    "type": "line_bridging",
+    "usage": "Neve console line bridging transformer",
+
+    "material_family": "nife_50",
+    "material_data_source": "data/materials/nife_50.json",
+    "core_type": "EI",
+    "gapped": false,
+
+    "electrical": {
+        "impedance_primary_ohm": 10000,
+        "impedance_secondary_ohm": 2400,
+        "gain_db": -6.0
+    },
+
+    "alternative_configs": [
+        {"primary": "10K series",   "secondary": "2K4", "gain_db": -6},
+        {"primary": "10K series",   "secondary": "600", "gain_db": -12},
+        {"primary": "2K4 parallel", "secondary": "2K4", "gain_db": 0}
+    ],
+
+    "notes": "Line bridging transformer. Config par defaut: 10K series vers 2K4. La config parallele 2K4 vers 2K4 donne un gain unitaire (0 dB)."
+}

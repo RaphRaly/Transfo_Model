@@ -1,0 +1,39 @@
+{
+    "name": "Marinair T1449 (Line Bridging High-Z)",
+    "source": "Marinair Type 1400-1500 Catalogue",
+    "cross_references": ["T1449"],
+    "type": "line_bridging",
+    "usage": "Marinair line bridging transformer (high impedance)",
+
+    "material_family": "nife_50",
+    "material_data_source": "data/materials/nife_50.json",
+    "core_type": "EI",
+    "gapped": false,
+
+    "electrical": {
+        "turns_ratio": "3+3 : 1+1",
+        "impedances": "20,000/5,000 : 2,100/525",
+        "impedance_primary_ohm": 20000,
+        "impedance_secondary_ohm": 2100
+    },
+
+    "frequency_response": {
+        "tolerance_db": 0.3,
+        "range_hz": [20, 20000],
+        "source": "Marinair T1449 catalogue"
+    },
+
+    "max_input": {
+        "level_db": 21.7,
+        "peak_level_db": 24.7,
+        "freq_hz": 40,
+        "source": "Marinair T1449 catalogue"
+    },
+
+    "thd_validation": [
+        {"freq_hz": 40,   "thd_percent": 0.1,  "condition": "max_input", "source": "Marinair T1449 catalogue"},
+        {"freq_hz": 1000, "thd_percent": 0.01, "condition": "nominal",   "source": "Marinair T1449 catalogue"}
+    ],
+
+    "notes": "Line bridging haute impedance. Ratio 3+3:1+1, step-down. Max input +21.7 dB continu, +24.7 dB crete a 40 Hz. Impedance primaire tres elevee (20K) pour application bridging."
+}

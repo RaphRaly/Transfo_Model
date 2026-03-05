@@ -1,0 +1,49 @@
+{
+    "name": "Marinair T1444 (Mic Input Transformer)",
+    "source": "Marinair Type 1400-1500 Catalogue",
+    "cross_references": ["T1444", "T1454", "10468", "VT22670", "Carnhill VTB9045"],
+    "type": "microphone_input",
+    "usage": "Equivalent commercial du Neve 10468 (catalogue Marinair)",
+
+    "material_family": "nife_50",
+    "material_data_source": "data/materials/nife_50.json",
+    "core_type": "EI",
+    "gapped": false,
+
+    "electrical": {
+        "turns_ratio": "1+1 : 2+2",
+        "impedances": "1,200/300 : 5,000/1,250",
+        "impedance_primary_ohm": 300,
+        "impedance_secondary_ohm": 1200,
+        "gain_db": 6.0,
+        "Rdc_primary_ohm": 8.0,
+        "Rdc_secondary_ohm": 32.0
+    },
+
+    "frequency_response": {
+        "tolerance_db": 0.3,
+        "range_hz": [20, 20000],
+        "source": "Marinair T1444 catalogue"
+    },
+
+    "max_input": {
+        "level_db": 10.0,
+        "freq_hz": 40,
+        "source": "Marinair T1444 catalogue"
+    },
+
+    "thd_validation": [
+        {"freq_hz": 40,    "thd_percent": 0.1,  "condition": "max_input",  "source": "Marinair T1444 catalogue"},
+        {"freq_hz": 500,   "thd_percent": 0.01, "condition": "nominal",    "source": "Marinair T1444 catalogue"},
+        {"freq_hz": 1000,  "thd_percent": 0.01, "condition": "nominal",    "source": "Marinair T1444 catalogue"},
+        {"freq_hz": 10000, "thd_percent": 0.01, "condition": "nominal",    "source": "Marinair T1444 catalogue"}
+    ],
+
+    "marinair_specs": {
+        "input_impedance_ohm": [1050, 1250, 1600],
+        "secondary_load_ohm": [6300, 5000, 8800],
+        "effective_ratio_db": [6.6, 5.7, 5.8]
+    },
+
+    "notes": "Equivalent commercial Marinair du Neve 10468. Meme noyau NiFe 50%, memes specs electriques. Le T1454 est une variante du meme catalogue."
+}
