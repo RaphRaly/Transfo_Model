@@ -3,16 +3,16 @@
 // =============================================================================
 // Presets — Factory presets + dynamic user presets for audio transformers.
 //
-// The 5 factory presets (indices 0-4) are always available and immutable.
+// The 7 factory presets (indices 0-6) are always available and immutable.
 // User presets loaded from JSON files are appended after the factory presets.
 //
 // Usage:
 //   PresetManager mgr;
 //   mgr.loadFromDirectory("data/transformers/");
-//   int total = mgr.getPresetCount();       // 5 + loaded
-//   auto cfg  = mgr.getByIndex(6);          // user preset
+//   int total = mgr.getPresetCount();       // 7 + loaded
+//   auto cfg  = mgr.getByIndex(8);          // user preset
 //   mgr.addPreset(myConfig);                // add at runtime
-//   mgr.removePreset(6);                    // remove user preset (not factory)
+//   mgr.removePreset(8);                    // remove user preset (not factory)
 // =============================================================================
 
 #include "TransformerConfig.h"
@@ -33,11 +33,13 @@ namespace Presets
     inline TransformerConfig Neve_1073_Input()           { return TransformerConfig::Neve_1073_Input(); }
     inline TransformerConfig Neve_1073_Output()          { return TransformerConfig::Neve_1073_Output(); }
     inline TransformerConfig API_AP2503()                { return TransformerConfig::API_AP2503(); }
+    inline TransformerConfig Neve_LO2567_Hot()           { return TransformerConfig::Neve_LO2567_Hot(); }
+    inline TransformerConfig Neve_LO1173_Output()        { return TransformerConfig::Neve_LO1173_Output(); }
 
     // Legacy alias
     inline TransformerConfig Neve_Marinair_LO1166()  { return Neve_1073_Output(); }
 
-    constexpr int kFactoryCount = 5;
+    constexpr int kFactoryCount = 7;
 
     inline int count() { return kFactoryCount; }
 
@@ -50,6 +52,8 @@ namespace Presets
             case 2: return Neve_1073_Input();
             case 3: return Neve_1073_Output();
             case 4: return API_AP2503();
+            case 5: return Neve_LO2567_Hot();
+            case 6: return Neve_LO1173_Output();
             default: return Jensen_JT115KE();
         }
     }
@@ -63,6 +67,8 @@ namespace Presets
             case 2: return "Neve 1073 Input (10468)";
             case 3: return "Neve 1073 Output (LI1166)";
             case 4: return "API AP2503";
+            case 5: return "Neve LO2567 Hot (Ungapped)";
+            case 6: return "Neve LO1173 Line Output";
             default: return "Unknown";
         }
     }
@@ -93,7 +99,7 @@ public:
     }
 
     // ── Get preset by global index (0..N-1) ──────────────────────────────────
-    // Indices 0..4 are factory presets, 5+ are user presets.
+    // Indices 0..6 are factory presets, 7+ are user presets.
     TransformerConfig getByIndex(int index) const
     {
         if (index < Presets::kFactoryCount)

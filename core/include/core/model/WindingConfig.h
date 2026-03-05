@@ -89,6 +89,28 @@ struct WindingConfig
         return w;
     }
 
+    // Neve LO2567 "Hot" (ungapped output variant of LI1166)
+    // Same windings as LI1166: 200→600 ohm, step-down 5:3, gain -4dB
+    // The difference is in the core (ungapped) — more saturation, more color
+    static WindingConfig neveLO2567Hot()
+    {
+        return neveLI1166Output(); // Same electrical parameters
+    }
+
+    // Neve LO1173 line output (1073)
+    // Drawing EDO 71/13 (6/11/73), cross-refs: VT22737/VT22761/T1684/T1686
+    // 70 ohm series → 600 ohm, gain -8 dB, step-down 3:1
+    static WindingConfig neveLO1173Output()
+    {
+        WindingConfig w;
+        w.turnsRatio_N1 = 3;  w.turnsRatio_N2 = 1;
+        w.Rdc_primary = 5.0f; w.Rdc_secondary = 15.0f;
+        w.C_sec_shield = 80e-12f; w.C_interwinding = 5e-12f;
+        w.Lp_primary = 3.0f;  w.L_leakage = 0.3e-3f;
+        w.sourceImpedance = 70.0f; w.loadImpedance = 600.0f;
+        return w;
+    }
+
     static WindingConfig neveLO1166()
     {
         // Legacy alias — now points to LI1166 output
