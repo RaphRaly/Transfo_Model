@@ -27,7 +27,7 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   addAndMakeVisible(presetLabel_);
 
   presetCombo_.addItemList(
-      {"Jensen JT-115K-E", "Neve 1073 Input (10468)", "Neve 1073 Output (LI1166)", "API AP2503"}, 1);
+      {"Jensen JT-115K-E", "Jensen Harrison Preamp", "Neve 1073 Input (10468)", "Neve 1073 Output (LI1166)", "API AP2503"}, 1);
   addAndMakeVisible(presetCombo_);
   presetAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
@@ -123,7 +123,7 @@ void PluginEditor::resized() {
   int scopeX = x + kSectionGap;
   int scopeW = getWidth() - scopeX - kMargin;
   if (scopeW > 40)
-    bhScope_.setBounds(scopeX, y, scopeW, kLabelH + kKnobH);
+    bhScope_.setBounds(scopeX, y + kLabelH + 2, scopeW, kKnobH);
 
   // Monitor label at bottom
   monitorLabel_.setBounds(kMargin, getHeight() - 22, getWidth() - 2 * kMargin,
