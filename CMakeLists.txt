@@ -27,6 +27,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(JUCE)
 
+# ─── AAX SDK Path (required for Pro Tools AAX builds) ────────────────────────
+# Set this to your local AAX SDK path, or pass via cmake -DAAX_SDK_PATH=...
+set(AAX_SDK_PATH "" CACHE PATH "Path to the AAX SDK from Avid")
+if(AAX_SDK_PATH)
+    juce_set_aax_sdk_path(${AAX_SDK_PATH})
+endif()
+
 # ─── Core Library (header-only) ──────────────────────────────────────────────
 # Zero external dependencies. Standard library + SIMD intrinsics only.
 add_library(TransformerCore INTERFACE)
@@ -44,11 +51,13 @@ juce_add_plugin(TransformerModel
     NEEDS_MIDI_OUTPUT       FALSE
     PLUGIN_MANUFACTURER_CODE Tmfr
     PLUGIN_CODE             Tm01
-    FORMATS                 VST3 AU Standalone
+    FORMATS                 VST3 AU AAX Standalone
     PRODUCT_NAME            "Transformer Model v3"
     # AU-specific metadata (required by Logic Pro / auval)
     AU_MAIN_TYPE            kAudioUnitType_Effect
     DESCRIPTION             "Physical transformer saturation model"
+    # AAX-specific metadata (required by Pro Tools)
+    AAX_CATEGORY            AAX_ePlugInCategory_Harmonic
 )
 
 # ─── Source Files ────────────────────────────────────────────────────────────
@@ -91,6 +100,8 @@ target_sources(TransformerModel
         core/include/core/model/TransformerModel.h
         core/include/core/model/ToleranceModel.h
         core/include/core/model/Presets.h
+        core/include/core/model/PresetLoader.h
+        core/include/core/model/PresetSerializer.h
 
         # ── Identification headers ──
         identification/include/identification/MeasurementData.h

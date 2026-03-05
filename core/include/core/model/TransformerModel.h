@@ -137,6 +137,9 @@ public:
     oversampler_.reset();
     bhQueue_.reset();
     directHyst_.reset();
+    hpState_ = 0.0f;
+    hpPrev_ = 0.0f;
+    lpState_ = 0.0f;
   }
 
 private:
@@ -160,6 +163,17 @@ private:
   float hScale_ = 100.0f;  // Input → H field scaling
   float bNorm_ = 1.0f;     // B → output normalization (unity gain in linear region)
 
+  // ─── Circuit impedance filters ─────────────────────────────────────────
+  // HP models source impedance / primary inductance interaction:
+  //   fc_hp = R_source / (2π × Lp) — bass rolloff from high source Z
+  // LP models secondary load damping / leakage inductance:
+  //   fc_lp = R_load / (2π × L_leakage) — HF rolloff from heavy loading
+  float hpAlpha_ = 1.0f;   // HP coefficient (1.0 = near-bypass)
+  float hpState_ = 0.0f;
+  float hpPrev_ = 0.0f;
+  float lpAlpha_ = 0.0f;   // LP coefficient (0.0 = bypass)
+  float lpState_ = 0.0f;
+
   // ─── Realtime processing — direct J-A bypass (no OS) ─────────────────────
   void processBlockRealtime(const float *input, float *output, int numSamples) {
     for (int k = 0; k < numSamples; ++k) {
@@ -168,7 +182,13 @@ private:
       const float mixVal = mix_.getNextValue();
 
       const float dry = input[k];
-      const float x = input[k] * gain_in;
+      float x = input[k] * gain_in;
+
+      // Circuit HP: source impedance / Lp bass rolloff
+      const float hpOut = hpAlpha_ * (hpState_ + x - hpPrev_);
+      hpPrev_ = x;
+      hpState_ = hpOut;
+      x = hpOut;
 
       // Direct J-A: scale to H field, solve hysteresis, compute B
       const float H = x * hScale_;
@@ -176,7 +196,11 @@ private:
       directHyst_.commitState();
 
       const float B = kMu0f * (H + static_cast<float>(M));
-      const float wet = B * bNorm_;
+      float wet = B * bNorm_;
+
+      // Circuit LP: secondary load damping HF rolloff
+      lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
+      wet = lpState_;
 
       // BH scope data
       if (++bhDownsampleCounter_ >= 32) {
@@ -198,7 +222,13 @@ private:
 
     // Process at oversampled rate with direct J-A
     for (int k = 0; k < osSize; ++k) {
-      const float x = osBuffer[k] * inputGain_.getCurrentValue();
+      float x = osBuffer[k] * inputGain_.getCurrentValue();
+
+      // Circuit HP: source impedance / Lp bass rolloff
+      const float hpOut = hpAlpha_ * (hpState_ + x - hpPrev_);
+      hpPrev_ = x;
+      hpState_ = hpOut;
+      x = hpOut;
 
       // Direct J-A: scale to H field, solve hysteresis, compute B
       const float H = x * hScale_;
@@ -206,7 +236,11 @@ private:
       directHyst_.commitState();
 
       const float B = kMu0f * (H + static_cast<float>(M));
-      osBuffer[k] = B * bNorm_;
+      float wet = B * bNorm_;
+
+      // Circuit LP: secondary load damping HF rolloff
+      lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
+      osBuffer[k] = lpState_;
 
       // BH scope data (less frequent for oversampled)
       if (++bhDownsampleCounter_ >= 128) {
@@ -272,6 +306,43 @@ private:
     float chiEff = chi0 / denomFeedback;
     float linearGainBperH = kMu0f * (1.0f + chiEff);
     bNorm_ = 1.0f / (linearGainBperH * hScale_ + kEpsilonF);
+
+    // ─── Circuit impedance filters ────────────────────────────────────────
+    float Ts = 1.0f / procRate;
+
+    // Highpass: source impedance / primary inductance
+    // fc_hp = R_source / (2π × Lp)
+    // RC = Lp / R_source → alpha = RC / (RC + Ts)
+    float Rsource = config_.windings.sourceImpedance;
+    float Lp = config_.windings.Lp_primary;
+    if (Rsource > 0.0f && Lp > 0.0f) {
+      float RC_hp = Lp / Rsource;
+      hpAlpha_ = RC_hp / (RC_hp + Ts);
+    } else {
+      hpAlpha_ = 1.0f; // Bypass
+    }
+
+    // Lowpass: load impedance / leakage inductance
+    // fc_lp = R_load / (2π × L_leakage)
+    // RC = L_leakage / R_load → alpha = exp(-Ts / RC)
+    float Rload = config_.loadImpedance;
+    float Lleak = config_.windings.L_leakage;
+    if (Rload > 0.0f && Lleak > 0.0f) {
+      float RC_lp = Lleak / Rload;
+      float fc_lp = 1.0f / (kTwoPif * RC_lp);
+      if (fc_lp < procRate * 0.45f) {
+        lpAlpha_ = std::exp(-kTwoPif * fc_lp * Ts);
+      } else {
+        lpAlpha_ = 0.0f; // fc above Nyquist, bypass
+      }
+    } else {
+      lpAlpha_ = 0.0f; // Bypass
+    }
+
+    // Reset filter states
+    hpState_ = 0.0f;
+    hpPrev_ = 0.0f;
+    lpState_ = 0.0f;
   }
 };
 

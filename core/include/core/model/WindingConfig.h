@@ -77,6 +77,18 @@ struct WindingConfig
         return w;
     }
 
+    // Jensen JT-115K-E in Harrison Preamp circuit
+    // Primary: 2x 6.8kΩ series (R100/R101) → Z_source = 13.6kΩ differential
+    // Secondary: R102/R103 (680Ω damping) + R104 (160Ω to GND) + C107 (470pF)
+    // Effective secondary load ≈ 160Ω (R104 dominates)
+    static WindingConfig jensenJT115KE_Harrison()
+    {
+        WindingConfig w = jensenJT115KE(); // Same transformer
+        w.sourceImpedance = 13600.0f;      // 2 × 6.8kΩ (R100 + R101)
+        w.loadImpedance   = 160.0f;        // R104 (dominant secondary load)
+        return w;
+    }
+
     static WindingConfig neveLO1166()
     {
         // Legacy alias — now points to LI1166 output

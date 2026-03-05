@@ -42,6 +42,24 @@ struct TransformerConfig
         return cfg;
     }
 
+    // ── Factory: Jensen JT-115K-E in Harrison Preamp ────────────────────────
+    // Same transformer, but embedded in Harrison preamp circuit:
+    // Source: 14kΩ differential (R100/R101 = 2×6.8kΩ)
+    // Load: ~160Ω (R104 damping to GND, R102/R103 = 680Ω amortissement)
+    // C107 = 470pF HF damping on secondary
+    // More coloration: high source Z → magnetizing current dominates
+    // Damped HF: heavy secondary loading rounds off the top end
+    static TransformerConfig Jensen_JT115KE_Harrison()
+    {
+        TransformerConfig cfg;
+        cfg.name          = "Jensen Harrison Preamp";
+        cfg.core          = CoreGeometry::jensenJT115KE();
+        cfg.windings      = WindingConfig::jensenJT115KE_Harrison();
+        cfg.material      = JAParameterSet::defaultMuMetal();
+        cfg.loadImpedance = 160.0f;
+        return cfg;
+    }
+
     // ── Factory: Neve 1073 Input (Marinair 10468 / Carnhill VTB9045) ────────
     // Mic input transformer. NiFe 50% (Radiometal / Alloy 2). Ungapped.
     // Ratio 1:2, 300 ohm -> 1200 ohm, gain +6 dB.
