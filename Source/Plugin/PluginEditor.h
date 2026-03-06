@@ -4,10 +4,31 @@
 #include "Plugin/PluginProcessor.h"
 
 // =============================================================================
-// PluginEditor — Basic GUI for Phase 1 "Hysteresis Lab".
-//
-// Exposes all J-A parameters as sliders with labels showing physical units.
-// This is a lab/development interface — a polished GUI can come later.
+// Custom LookAndFeel for modern rotary knobs with colored arcs
+// =============================================================================
+
+class ModernLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    ModernLookAndFeel();
+
+    void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
+                          float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
+                          juce::Slider& slider) override;
+
+    void drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown,
+                      int buttonX, int buttonY, int buttonW, int buttonH,
+                      juce::ComboBox& box) override;
+
+    void drawPopupMenuBackground(juce::Graphics& g, int width, int height) override;
+
+    void drawLabel(juce::Graphics& g, juce::Label& label) override;
+
+    juce::Colour arcColour { 0xFFF0A500 };  // default amber
+};
+
+// =============================================================================
+// PluginEditor -- Polished resizable GUI
 // =============================================================================
 
 class PluginEditor : public juce::AudioProcessorEditor
@@ -21,8 +42,9 @@ public:
 
 private:
     PluginProcessor& processorRef;
+    ModernLookAndFeel modernLnf;
 
-    // ─── Slider + Label helper ────────────────────────────────────────────────
+    // Slider + Label helper
     struct ParamSlider
     {
         juce::Slider slider;
@@ -44,7 +66,14 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> osAttachment;
 
     void setupSlider(ParamSlider& ps, const juce::String& paramId,
-                     const juce::String& labelText);
+                     const juce::String& labelText, juce::Colour arcCol);
+
+    // Section painting helper
+    void drawSection(juce::Graphics& g, juce::Rectangle<int> bounds,
+                     const juce::String& title);
+
+    // Resizable constrainer
+    juce::ComponentBoundsConstrainer constrainer;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginEditor)
 };

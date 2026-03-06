@@ -1,22 +1,37 @@
 #pragma once
 
 // =============================================================================
-// PluginEditor — v3 GUI for the Transformer Model plugin.
-//
-// Features:
-//   - Transformer preset selector (Jensen/Neve/API)
-//   - Processing mode switch (Realtime/Physical)
-//   - Input/Output gain + Mix knobs
-//   - TMT stereo spread control
-//   - J-A parameters (advanced section)
-//   - B-H scope visualization (future: BHScopeComponent)
-//   - Convergence monitoring display
+// PluginEditor -- v3 polished, resizable GUI for the Transformer Model plugin.
 // =============================================================================
 
 #include "BHScopeComponent.h"
 #include "PluginProcessor.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+
+// =============================================================================
+// Custom LookAndFeel for modern rotary knobs with colored arcs
+// =============================================================================
+
+class ModernLookAndFeel : public juce::LookAndFeel_V4 {
+public:
+  ModernLookAndFeel();
+
+  void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height,
+                        float sliderPos, float rotaryStartAngle,
+                        float rotaryEndAngle, juce::Slider &slider) override;
+
+  void drawComboBox(juce::Graphics &g, int width, int height, bool isButtonDown,
+                    int buttonX, int buttonY, int buttonW, int buttonH,
+                    juce::ComboBox &box) override;
+
+  void drawPopupMenuBackground(juce::Graphics &g, int width,
+                                int height) override;
+};
+
+// =============================================================================
+// PluginEditor
+// =============================================================================
 
 class PluginEditor : public juce::AudioProcessorEditor, public juce::Timer {
 public:
@@ -29,6 +44,7 @@ public:
 
 private:
   PluginProcessor &processorRef_;
+  ModernLookAndFeel modernLnf_;
 
   // ─── UI Components ──────────────────────────────────────────────────────
   struct RotarySlider {
@@ -52,7 +68,14 @@ private:
   BHScopeComponent bhScope_;
 
   void setupRotary(RotarySlider &rs, const juce::String &paramId,
-                   const juce::String &text);
+                   const juce::String &text, juce::Colour arcCol);
+
+  // Section painting helper
+  void drawSection(juce::Graphics &g, juce::Rectangle<int> bounds,
+                   const juce::String &title);
+
+  // Resizable constrainer
+  juce::ComponentBoundsConstrainer constrainer_;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginEditor)
 };
