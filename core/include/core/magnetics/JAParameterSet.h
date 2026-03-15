@@ -44,6 +44,8 @@ struct JABounds {
   float k_min, k_max;
   float alpha_min, alpha_max;
   float c_min, c_max;
+  float K1_min = 0.0f, K1_max = 0.05f;
+  float K2_min = 0.0f, K2_max = 0.20f;
 };
 
 // ─── JAParameterSet ─────────────────────────────────────────────────────────
@@ -105,38 +107,47 @@ struct JAParameterSet {
               5.0f,   60.0f,  // a
               10.0f,  200.0f, // k
               1e-6f,  5e-4f,  // alpha
-              0.70f,  0.98f}; // c
+              0.70f,  0.98f,  // c
+              3e-4f,  5e-3f,  // K1 (d=0.08–0.12mm, ρ=58μΩ·cm)
+              0.01f,  0.05f}; // K2
 
     case MaterialFamily::NiFe_50:
       return {6.0e5f, 9.0e5f, // Ms
               20.0f,  200.0f, // a
               50.0f,  500.0f, // k
               5e-6f,  5e-4f,  // alpha (capped to avoid origin instability)
-              0.50f,  0.90f}; // c
+              0.50f,  0.90f,  // c
+              1e-3f,  1e-2f,  // K1 (d=0.10–0.18mm, ρ=46μΩ·cm)
+              0.02f,  0.10f}; // K2
 
     case MaterialFamily::GO_SiFe:
       return {1.2e6f, 1.8e6f,  // Ms
               50.0f,  500.0f,  // a
               200.0f, 2000.0f, // k
               1e-5f,  5e-3f,   // alpha
-              0.20f,  0.80f};  // c
+              0.20f,  0.80f,   // c
+              5e-3f,  5e-2f,   // K1 (d=0.27–0.35mm, ρ=47μΩ·cm)
+              0.05f,  0.20f};  // K2
 
     case MaterialFamily::Custom:
     default:
       return {1e4f,    2e6f,  1.0f,  1000.0f, 1.0f,
-              5000.0f, 1e-7f, 1e-1f, 0.01f,   0.99f};
+              5000.0f, 1e-7f, 1e-1f, 0.01f,   0.99f,
+              0.0f,    0.05f, 0.0f,  0.20f};
     }
   }
 
   // ── Log-space conversion for CMA-ES [v3] ───────────────────────────────
   // Optimizes on log(Ms), log(a), log(k) to guarantee positivity.
   // c is mapped via sigmoid: c_tilde = log(c / (1-c))
-  static constexpr int kNumOptParams = 5;
+  static constexpr int kNumOptParams = 7;
 
   std::array<float, kNumOptParams> toLogSpace() const {
     return {
         std::log(Ms), std::log(a), std::log(k), std::log(alpha + 1e-10f),
-        std::log(c / (1.0f - std::clamp(c, 0.01f, 0.99f))) // sigmoid^-1
+        std::log(c / (1.0f - std::clamp(c, 0.01f, 0.99f))), // sigmoid^-1
+        std::log(K1 + 1e-10f),
+        std::log(K2 + 1e-10f)
     };
   }
 
@@ -148,27 +159,45 @@ struct JAParameterSet {
     p.k = std::exp(logParams[2]);
     p.alpha = std::exp(logParams[3]);
     p.c = 1.0f / (1.0f + std::exp(-logParams[4])); // sigmoid
+    p.K1 = std::max(0.0f, std::exp(logParams[5]) - 1e-10f);
+    p.K2 = std::max(0.0f, std::exp(logParams[6]) - 1e-10f);
     return p;
   }
 
   // ── Default presets ─────────────────────────────────────────────────────
   static JAParameterSet defaultMuMetal() {
     // Ms=5.5e5, alpha=1e-4 → alpha*Ms=55. k must be > 55 → use k=100
-    return {5.5e5f, 30.0f, 1e-4f, 100.0f, 0.85f, 0.0f, 0.0f};
+    // K1 = d²/(12ρ) = (0.1mm)²/(12×58μΩ·cm) = 1.44e-3  [d=0.1mm, ρ=58μΩ·cm]
+    return {5.5e5f, 30.0f, 1e-4f, 100.0f, 0.85f, 1.44e-3f, 0.02f};
   }
 
   static JAParameterSet defaultNiFe50() {
     // Ms=7.5e5, alpha=1e-4 → alpha*Ms=75. k=500 >> 75 (stable).
     // chi0_raw = c*Ms/(3*a) = 0.7*7.5e5/240 = 2187.5
     // alpha*chi0_raw = 1e-4*2187.5 = 0.22 < 1 (stable origin).
-    // NiFe 50% has wider hysteresis than mu-metal (higher k),
-    // but alpha was too high (5e-4), causing origin instability.
-    return {7.5e5f, 80.0f, 1e-4f, 500.0f, 0.70f, 0.0f, 0.0f};
+    // K1 = d²/(12ρ) = (0.15mm)²/(12×46μΩ·cm) = 4.08e-3  [d=0.15mm, ρ=46μΩ·cm]
+    return {7.5e5f, 80.0f, 1e-4f, 500.0f, 0.70f, 4.08e-3f, 0.06f};
   }
 
   static JAParameterSet defaultSiFe() {
-    // Si-Fe placeholder (from original HysteresisProcessor)
-    return {1.2e6f, 80.0f, 1e-4f, 200.0f, 0.10f, 0.0f, 0.0f};
+    // GO Si-Fe (API-style, thinner laminations for studio quality)
+    // K1 = d²/(12ρ) = (0.30mm)²/(12×48μΩ·cm) = 1.56e-2  [d=0.30mm, ρ=48μΩ·cm]
+    return {1.2e6f, 80.0f, 1e-4f, 200.0f, 0.10f, 1.56e-2f, 0.12f};
+  }
+
+  static JAParameterSet defaultFenderSiFe() {
+    // Fender output transformer — thick M6 silicon steel
+    // Low alpha (1e-5) + low k (50) → easy saturation, wide B-H, "dirty" tone
+    // alpha*Ms = 1e-5 × 1.2e6 = 12 < k=50 (stable)
+    // K1 = d²/(12ρ) = (0.35mm)²/(12×47μΩ·cm) = 2.17e-2  [d=0.35mm, ρ=47μΩ·cm]
+    return {1.2e6f, 80.0f, 1e-5f, 50.0f, 0.20f, 2.17e-2f, 0.15f};
+  }
+
+  static JAParameterSet defaultLundahlMuMetal() {
+    // Lundahl LL1538 — high-grade mu-metal, similar to Jensen
+    // Slightly different shape (a=25) and lower coercivity (k=80)
+    // K1/K2 same as MuMetal (same alloy family, similar lamination)
+    return {5.5e5f, 25.0f, 1e-4f, 80.0f, 0.88f, 1.44e-3f, 0.02f};
   }
 };
 

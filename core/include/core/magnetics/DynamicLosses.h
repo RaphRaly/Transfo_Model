@@ -1,7 +1,8 @@
 #pragma once
 
 // =============================================================================
-// DynamicLosses — Classical eddy current and excess (anomalous) losses.
+// DynamicLosses — Classical eddy current and excess (anomalous) losses
+//                 (Bertotti field separation).
 //
 // The J-A static model captures hysteresis loss only. Real transformer cores
 // also exhibit:
@@ -14,10 +15,19 @@
 // In the time domain, these appear as additional H contributions:
 //   H_dyn = K1 * dB/dt + K2 * |dB/dt|^0.5 * sign(dB/dt)
 //
+// where:
+//   K1 = K_eddy = d^2 / (12 * rho)   [s/m]
+//   K2 = K_exc                         [A·m^-1·(T/s)^-0.5]
+//
+// HSIM-compatible: supports commit/rollback for iterative WDF solvers.
+//
 // K1 and K2 are identified in Phase 2 of the identification pipeline.
+//
+// Reference: Bertotti 1998; Baghel & Kulkarni IEEE Trans. Magn. 2014
 // =============================================================================
 
 #include <cmath>
+#include <algorithm>
 
 namespace transfo {
 
@@ -28,50 +38,156 @@ public:
 
     void setCoefficients(float K1, float K2)
     {
-        K1_ = K1;
-        K2_ = K2;
+        K1_ = std::max(0.0, static_cast<double>(K1));
+        K2_ = std::max(0.0, static_cast<double>(K2));
+        enabled_ = (K1_ > 0.0) || (K2_ > 0.0);
     }
 
     void setSampleRate(double sampleRate)
     {
-        Ts_ = 1.0 / sampleRate;
+        // Reset state when sample rate changes — stale dBdt at the old rate
+        // would produce a transient spike on the first sample.
+        if (sampleRate != sampleRate_) {
+            B_prev_committed_    = 0.0;
+            B_prev_backup_       = 0.0;
+            dBdt_prev_committed_ = 0.0;
+            dBdt_prev_backup_    = 0.0;
+        }
+        sampleRate_ = sampleRate;
     }
+
+    bool isEnabled() const { return enabled_; }
 
     void reset()
     {
-        B_prev_ = 0.0;
+        B_prev_committed_    = 0.0;
+        B_prev_backup_       = 0.0;
+        dBdt_prev_committed_ = 0.0;
+        dBdt_prev_backup_    = 0.0;
     }
 
-    // Compute dynamic loss contribution to H field
-    // Call after computing B = mu0 * (H + M)
-    double computeHdynamic(double B_current) const
+    // ─── Compute H_dynamic from a pre-computed dB/dt ────────────────────────
+    // This is the preferred entry point when dBdt is already known
+    // (e.g. estimated at the leaf level from wave variables).
+    double computeHfromDBdt(double dBdt) const
     {
-        const double dBdt = (B_current - B_prev_) / Ts_;
-
         // Classical eddy loss: H_eddy = K1 * dB/dt
         const double H_eddy = K1_ * dBdt;
 
         // Excess loss: H_excess = K2 * sqrt(|dB/dt|) * sign(dB/dt)
         const double absdBdt = std::abs(dBdt);
-        const double H_excess = K2_ * std::sqrt(absdBdt) * ((dBdt >= 0.0) ? 1.0 : -1.0);
+        const double sign_dBdt = (dBdt > 0.0) ? 1.0 : (dBdt < 0.0) ? -1.0 : 0.0;
+        const double H_excess = K2_ * sign_dBdt * std::sqrt(absdBdt + kEpsSqrt);
 
         return H_eddy + H_excess;
     }
 
-    // Update state (call after commit)
-    void updateState(double B_current)
+    // ─── Bilinear (trapezoidal) derivative — consistent with J-A solver ────
+    // dBdt[n] = 2·fs·(B[n] − B[n−1]) − dBdt[n−1]
+    //
+    // This is the time-domain form of s = (2/T)·(z−1)/(z+1) from
+    // MIT 6.003 Lecture 15 (bilinear transformation).
+    // Matches the trapezoidal integration in HysteresisModel, preserving
+    // passivity and eliminating the aliasing inherent in backward difference.
+    double computeBilinearDBdt(double B_current) const
     {
-        B_prev_ = B_current;
+        return 2.0 * sampleRate_ * (B_current - B_prev_committed_)
+               - dBdt_prev_committed_;
     }
 
+    // ─── Compute H_dynamic from B_current (bilinear dB/dt) ──────────────────
+    // Computes dBdt internally using the bilinear derivative.
+    double computeHdynamic(double B_current) const
+    {
+        const double dBdt = computeBilinearDBdt(B_current);
+        return computeHfromDBdt(dBdt);
+    }
+
+    // ─── NR Jacobian: dH_dynamic / dB ──────────────────────────────────────
+    // Used to update the Newton-Raphson Jacobian when solving the combined
+    // static + dynamic system. Both terms contribute:
+    //   dH_eddy/dB   = K1 * 2·fs   (bilinear: d(dBdt)/dB = 2·fs)
+    //   dH_excess/dB = K2 * 0.5 * 2·fs / sqrt(|dBdt| + eps)
+    //   Note: d/dx [sign(x)*sqrt(|x|)] = 0.5/sqrt(|x|) for all x != 0
+    //         (always positive — the function has the same slope sign on both sides)
+    double computeJacobian(double dBdt) const
+    {
+        // Bilinear derivative sensitivity: d(dBdt)/dB = 2·sampleRate
+        const double dDBdt_dB = 2.0 * sampleRate_;
+
+        const double dH_eddy_dB = K1_ * dDBdt_dB;
+
+        const double absdBdt = std::abs(dBdt);
+        const double dH_exc_dB = K2_ * 0.5 * dDBdt_dB
+                                 / std::sqrt(absdBdt + kEpsJac);
+
+        return dH_eddy_dB + dH_exc_dB;
+    }
+
+    // ─── HSIM state management ─────────────────────────────────────────────
+    // commitState: lock in the current B as the new B_prev for next sample.
+    // Also updates the bilinear dBdt state for the next derivative computation.
+    void commitState(double B_committed)
+    {
+        // Compute bilinear dBdt before overwriting B_prev
+        dBdt_prev_committed_ = 2.0 * sampleRate_ * (B_committed - B_prev_committed_)
+                                - dBdt_prev_committed_;
+        B_prev_committed_ = B_committed;
+    }
+
+    // savePrevState / restorePrevState: snapshot for HSIM rollback.
+    void savePrevState()
+    {
+        B_prev_backup_    = B_prev_committed_;
+        dBdt_prev_backup_ = dBdt_prev_committed_;
+    }
+
+    void restorePrevState()
+    {
+        B_prev_committed_    = B_prev_backup_;
+        dBdt_prev_committed_ = dBdt_prev_backup_;
+    }
+
+    // ─── Legacy API (backward compatibility with ObjectiveFunction) ─────────
+    // Alias for commitState() — used by identification pipeline.
+    void updateState(double B_current)
+    {
+        commitState(B_current);
+    }
+
+    // ─── Accessors ─────────────────────────────────────────────────────────
     double getK1() const { return K1_; }
     double getK2() const { return K2_; }
+    double getBprevCommitted() const { return B_prev_committed_; }
+    double getSampleRate() const { return sampleRate_; }
+
+    // ─── Helper: compute K_eddy from physical material properties ──────────
+    // d = lamination thickness [m], rho = resistivity [Ohm·m]
+    static float computeKeddy(float d_meters, float rho_ohm_m)
+    {
+        if (rho_ohm_m <= 0.0f) return 0.0f;
+        return (d_meters * d_meters) / (12.0f * rho_ohm_m);
+    }
 
 private:
-    double K1_ = 0.0;      // Classical eddy coefficient
-    double K2_ = 0.0;      // Excess loss coefficient
-    double B_prev_ = 0.0;  // Previous flux density
-    double Ts_ = 1.0 / 44100.0;
+    double K1_ = 0.0;               // Classical eddy coefficient (K_eddy)
+    double K2_ = 0.0;               // Excess loss coefficient   (K_exc)
+    double sampleRate_ = 44100.0;
+    bool   enabled_ = false;
+
+    // HSIM double-buffered state
+    double B_prev_committed_    = 0.0; // B[k-1] confirmed
+    double B_prev_backup_       = 0.0; // Snapshot for rollback
+    double dBdt_prev_committed_ = 0.0; // dB/dt[k-1] for bilinear derivative
+    double dBdt_prev_backup_    = 0.0; // Snapshot for rollback
+
+    // Epsilon for sqrt(0) safety in the function value.
+    // Small enough to not affect the sound at zero crossings.
+    static constexpr double kEpsSqrt = 1e-12;
+
+    // Epsilon for the Jacobian sqrt denominator.
+    // Larger than kEpsSqrt to keep NR Jacobian finite near dBdt=0.
+    static constexpr double kEpsJac = 1e-6;
 };
 
 } // namespace transfo
