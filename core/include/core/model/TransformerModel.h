@@ -28,8 +28,10 @@
 #include "../util/SPSCQueue.h"
 #include "../util/SmoothedValue.h"
 #include "../wdf/HSIMSolver.h"
+#include "../wdf/WDFResonanceFilter.h"
 #include "ToleranceModel.h"
 #include "TransformerConfig.h"
+#include <algorithm>
 #include <cmath>
 #include <type_traits>
 
@@ -141,6 +143,8 @@ public:
     hpState_ = 0.0f;
     hpPrev_ = 0.0f;
     lpState_ = 0.0f;
+    lmSmoothed_ = config_.windings.Lp_primary; // Reset to static Lp
+    lcFilter_.reset();
   }
 
 private:
@@ -166,15 +170,46 @@ private:
   float bNorm_ = 1.0f;     // B → output normalization (unity gain in linear region)
 
   // ─── Circuit impedance filters ─────────────────────────────────────────
-  // HP models source impedance / primary inductance interaction:
-  //   fc_hp = R_source / (2π × Lp) — bass rolloff from high source Z
-  // LP models secondary load damping / leakage inductance:
-  //   fc_lp = R_load / (2π × L_leakage) — HF rolloff from heavy loading
+  // HP models source impedance / magnetizing inductance interaction:
+  //   fc_hp = R_source / (2π × Lm) — bass rolloff, dynamically driven by Lm(t)
   float hpAlpha_ = 1.0f;   // HP coefficient (1.0 = near-bypass)
   float hpState_ = 0.0f;
   float hpPrev_ = 0.0f;
+
+  // ─── LC resonance post-stage (replaces simple LP) — P1-2 ────────────
+  // WDF-based second-order LC parasitic resonance filter.
+  // Models Lleak + Ctotal interaction with optional Zobel damping.
+  // Bypasses when Lleak ≈ 0 or Ctotal ≈ 0 (f_res >> audio band).
+  WDFResonanceFilter lcFilter_;
+  bool lcEnabled_ = false;
+
+  // Legacy LP filter (kept for fallback when LC is disabled)
   float lpAlpha_ = 0.0f;   // LP coefficient (0.0 = bypass)
   float lpState_ = 0.0f;
+
+  // ─── Dynamic Lm (magnetizing inductance) — P1-1 ──────────────────────
+  // Lm(t) = K_geo * mu_inc(t), where mu_inc = mu0 * (1 + dM/dH)
+  // dM/dH is the incremental susceptibility from the J-A model.
+  // Lm dynamically drives the HP filter cutoff: fc = Rsource / (2π × Lm)
+  float Rsource_ = 150.0f;       // Cached source impedance [Ohm]
+  float Ts_hp_ = 1.0f / 44100.0f; // Cached 1/procRate for HP coefficient
+  float lmSmoothed_ = 1.0f;      // One-pole smoothed Lm [H]
+  float lmSmoothCoeff_ = 0.999f; // One-pole coefficient: α = exp(-2π×fc_smooth/fs)
+  bool  dynLmEnabled_ = false;   // True when K_geo > 0 and Rsource > 0
+
+  // Safety clamps for mu_inc (H/m)
+  // mu_inc_min ~ mu0 (air): dM/dH ≈ 0 in deep saturation
+  // mu_inc_max ~ mu0 * 200000: peak permeability of mu-metal
+  static constexpr float kMuIncMin = 1.2566e-6f;          // mu0
+  static constexpr float kMuIncMax = 1.2566e-6f * 200000; // mu0 * 200k
+  static constexpr float kLmSmoothTimeMs = 2.0f;          // Smoothing time constant [ms]
+
+  // ── Compute hpAlpha from dynamic Lm (called per-sample) ──────────────
+  float computeHpAlphaFromLm(float Lm) const {
+    // RC = Lm / Rsource → alpha = RC / (RC + Ts)
+    const float RC = Lm / Rsource_;
+    return RC / (RC + Ts_hp_);
+  }
 
   // ─── Realtime processing — direct J-A bypass (no OS) ─────────────────────
   void processBlockRealtime(const float *input, float *output, int numSamples) {
@@ -210,15 +245,35 @@ private:
       const double M = directHyst_.solveImplicitStep(H_eff);
       directHyst_.commitState();
 
+      // ── Dynamic Lm: update HP filter cutoff from J-A susceptibility ───
+      if (dynLmEnabled_) {
+        const double dMdH = directHyst_.getInstantaneousSusceptibility();
+        // mu_inc = mu0 * (1 + dM/dH), clamped to physical range
+        const float mu_inc = std::clamp(
+            kMu0f * (1.0f + static_cast<float>(dMdH)),
+            kMuIncMin, kMuIncMax);
+        // Lm = K_geo * mu_inc
+        const float Lm_raw = config_.geometry.computeLm(mu_inc);
+        // One-pole smooth to avoid discontinuities / clicks
+        lmSmoothed_ = lmSmoothCoeff_ * lmSmoothed_
+                     + (1.0f - lmSmoothCoeff_) * Lm_raw;
+        // Update HP coefficient from smoothed Lm
+        hpAlpha_ = computeHpAlphaFromLm(lmSmoothed_);
+      }
+
       // B uses total applied H (circuit field, not effective)
       const float B = kMu0f * (H_applied + static_cast<float>(M));
       directDynLosses_.commitState(static_cast<double>(B));
 
       float wet = B * bNorm_;
 
-      // Circuit LP: secondary load damping HF rolloff
-      lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
-      wet = lpState_;
+      // HF shaping: LC resonance post-stage or legacy LP
+      if (lcEnabled_) {
+        wet = lcFilter_.processSample(wet);
+      } else {
+        lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
+        wet = lpState_;
+      }
 
       // BH scope data
       if (++bhDownsampleCounter_ >= 32) {
@@ -266,15 +321,32 @@ private:
       const double M = directHyst_.solveImplicitStep(H_eff);
       directHyst_.commitState();
 
+      // ── Dynamic Lm: update HP filter cutoff from J-A susceptibility ───
+      if (dynLmEnabled_) {
+        const double dMdH = directHyst_.getInstantaneousSusceptibility();
+        const float mu_inc = std::clamp(
+            kMu0f * (1.0f + static_cast<float>(dMdH)),
+            kMuIncMin, kMuIncMax);
+        const float Lm_raw = config_.geometry.computeLm(mu_inc);
+        lmSmoothed_ = lmSmoothCoeff_ * lmSmoothed_
+                     + (1.0f - lmSmoothCoeff_) * Lm_raw;
+        hpAlpha_ = computeHpAlphaFromLm(lmSmoothed_);
+      }
+
       // B uses total applied H (circuit field, not effective)
       const float B = kMu0f * (H_applied + static_cast<float>(M));
       directDynLosses_.commitState(static_cast<double>(B));
 
       float wet = B * bNorm_;
 
-      // Circuit LP: secondary load damping HF rolloff
-      lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
-      osBuffer[k] = lpState_;
+      // HF shaping: LC resonance post-stage or legacy LP
+      if (lcEnabled_) {
+        wet = lcFilter_.processSample(wet);
+      } else {
+        lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
+        wet = lpState_;
+      }
+      osBuffer[k] = wet;
 
       // BH scope data (less frequent for oversampled)
       if (++bhDownsampleCounter_ >= 128) {
@@ -348,34 +420,84 @@ private:
 
     // ─── Circuit impedance filters ────────────────────────────────────────
     float Ts = 1.0f / procRate;
+    Ts_hp_ = Ts;  // Cache for per-sample HP coefficient update
 
-    // Highpass: source impedance / primary inductance
-    // fc_hp = R_source / (2π × Lp)
-    // RC = Lp / R_source → alpha = RC / (RC + Ts)
-    float Rsource = config_.windings.sourceImpedance;
-    float Lp = config_.windings.Lp_primary;
-    if (Rsource > 0.0f && Lp > 0.0f) {
-      float RC_hp = Lp / Rsource;
-      hpAlpha_ = RC_hp / (RC_hp + Ts);
+    // ── Dynamic Lm setup ──────────────────────────────────────────────────
+    // Cache source impedance for per-sample HP update.
+    // For tube output stages, plateImpedance carries the tube plate Z;
+    // sourceImpedance carries only winding/circuit R for the LC filter.
+    // The HP filter needs the total: sourceImpedance + plateImpedance.
+    Rsource_ = config_.windings.sourceImpedance
+             + config_.windings.plateImpedance;
+    float K_geo = config_.geometry.K_geo;
+
+    // Enable dynamic Lm if geometry and source impedance are valid
+    dynLmEnabled_ = (Rsource_ > 0.0f && K_geo > 0.0f);
+
+    // Smoothing coefficient: one-pole LPF with time constant kLmSmoothTimeMs
+    // alpha = exp(-1 / (fs * tau)), tau = kLmSmoothTimeMs / 1000
+    const float tau_smooth = kLmSmoothTimeMs * 0.001f;
+    lmSmoothCoeff_ = std::exp(-Ts / tau_smooth);
+
+    // Highpass: source impedance / magnetizing inductance
+    // Initial Lm from the static small-signal susceptibility (linear region)
+    // chi_eff was already computed above; use it for initial Lm
+    if (dynLmEnabled_) {
+      // Initial mu_inc from linear-region chi_eff
+      float mu_inc_init = kMu0f * (1.0f + chiEff);
+      mu_inc_init = std::clamp(mu_inc_init, kMuIncMin, kMuIncMax);
+      float Lm_init = config_.geometry.computeLm(mu_inc_init);
+      lmSmoothed_ = Lm_init;
+      hpAlpha_ = computeHpAlphaFromLm(Lm_init);
     } else {
-      hpAlpha_ = 1.0f; // Bypass
+      // Fallback to static Lp_primary (legacy behavior)
+      float Lp = config_.windings.Lp_primary;
+      if (Rsource_ > 0.0f && Lp > 0.0f) {
+        float RC_hp = Lp / Rsource_;
+        hpAlpha_ = RC_hp / (RC_hp + Ts);
+      } else {
+        hpAlpha_ = 1.0f; // Bypass
+      }
+      lmSmoothed_ = config_.windings.Lp_primary;
     }
 
-    // Lowpass: load impedance / leakage inductance
-    // fc_lp = R_load / (2π × L_leakage)
-    // RC = L_leakage / R_load → alpha = exp(-Ts / RC)
-    float Rload = config_.loadImpedance;
-    float Lleak = config_.windings.L_leakage;
-    if (Rload > 0.0f && Lleak > 0.0f) {
-      float RC_lp = Lleak / Rload;
-      float fc_lp = 1.0f / (kTwoPif * RC_lp);
-      if (fc_lp < procRate * 0.45f) {
-        lpAlpha_ = std::exp(-kTwoPif * fc_lp * Ts);
+    // ── LC resonance post-stage (P1-2, P2-1) ─────────────────────────
+    // WDF-based second-order LC resonance filter replaces simple LP.
+    // P2-1: Uses corrected Ctotal accounting for Cp_s bridging when
+    // no Faraday shield is present (Duerdoth / Miller effect).
+    // Enabled when LC params produce a meaningful resonance (Lleak > 0,
+    // Ctotal > 0). Otherwise falls back to simple LP.
+    {
+      const auto& lc = config_.lcParams;
+      const float turnsRatio = config_.windings.turnsRatio();
+      const bool hasShield = config_.windings.hasFaradayShield;
+      const float Ct = lc.computeCtotalCorrected(turnsRatio, hasShield);
+      const float Rs_lc = config_.windings.sourceImpedance
+                        + config_.windings.Rdc_primary;
+      const float Rload_lc = config_.loadImpedance;
+
+      if (lc.Lleak > 1e-9f && Ct > 1e-15f) {
+        lcFilter_.prepare(procRate, lc, Rs_lc, Rload_lc,
+                          turnsRatio, hasShield);
+        lcEnabled_ = true;
+        lpAlpha_ = 0.0f; // Disable legacy LP
       } else {
-        lpAlpha_ = 0.0f; // fc above Nyquist, bypass
+        lcEnabled_ = false;
+        // Fallback: simple LP from load / leakage
+        float Rload = config_.loadImpedance;
+        float Lleak = config_.windings.L_leakage;
+        if (Rload > 0.0f && Lleak > 0.0f) {
+          float RC_lp = Lleak / Rload;
+          float fc_lp = 1.0f / (kTwoPif * RC_lp);
+          if (fc_lp < procRate * 0.45f) {
+            lpAlpha_ = std::exp(-kTwoPif * fc_lp * Ts);
+          } else {
+            lpAlpha_ = 0.0f;
+          }
+        } else {
+          lpAlpha_ = 0.0f;
+        }
       }
-    } else {
-      lpAlpha_ = 0.0f; // Bypass
     }
 
     // Reset filter states

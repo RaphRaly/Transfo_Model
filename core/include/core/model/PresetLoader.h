@@ -587,6 +587,12 @@ private:
             cfg.loadImpedance = cfg.windings.loadImpedance;
         }
 
+        // --- Transformer Geometry (K_geo) ---
+        cfg.geometry = buildGeometry(root);
+
+        // --- LC Resonance Parameters ---
+        cfg.lcParams = buildLCResonance(root);
+
         // --- Validation ---
         auto validationResult = validate(cfg);
         if (!validationResult.ok)
@@ -660,24 +666,6 @@ private:
             return true;
         }
 
-        if (lower.find("10468") != std::string::npos ||
-            lower.find("t1444") != std::string::npos ||
-            (lower.find("neve") != std::string::npos && lower.find("input") != std::string::npos))
-        {
-            geo = CoreGeometry::neve10468Input();
-            return true;
-        }
-
-        if (lower.find("li1166") != std::string::npos ||
-            lower.find("lo1166") != std::string::npos ||
-            lower.find("lo2567") != std::string::npos ||
-            (lower.find("neve") != std::string::npos && lower.find("output") != std::string::npos))
-        {
-            geo = CoreGeometry::neveLI1166Output();
-            if (!isGapped) geo.airGapLength = 0.0f; // LO2567 variant is ungapped
-            return true;
-        }
-
         return false;
     }
 
@@ -699,6 +687,7 @@ private:
         w.C_interwinding  = elec->pathFloat("C_interwinding_F",   w.C_interwinding);
         w.sourceImpedance = elec->pathFloat("source_impedance_ohm", w.sourceImpedance);
         w.loadImpedance   = elec->pathFloat("load_impedance_ohm",  w.loadImpedance);
+        w.plateImpedance  = elec->pathFloat("plate_impedance_ohm", w.plateImpedance);
 
         // C_sec_shield may be present (Jensen format)
         w.C_sec_shield    = elec->pathFloat("C_sec_shield_F",     w.C_sec_shield);
@@ -730,6 +719,41 @@ private:
 
         MaterialFamily family = preset_detail::parseMaterialFamily(familyStr);
         return preset_detail::defaultMaterialForFamily(family);
+    }
+
+    // ── Transformer Geometry ─────────────────────────────────────────────────
+    static TransformerGeometry buildGeometry(const json_detail::JsonValue& root)
+    {
+        TransformerGeometry geo;
+
+        const auto* geoSection = root.get("geometry");
+        if (geoSection && geoSection->isObject())
+        {
+            // Support both new "K_geo_m" key and legacy "K_geo_H" for backward compat
+            geo.K_geo = geoSection->pathFloat("K_geo_m",
+                            geoSection->pathFloat("K_geo_H", geo.K_geo));
+        }
+
+        return geo;
+    }
+
+    // ── LC Resonance Parameters ───────────────────────────────────────────────
+    static LCResonanceParams buildLCResonance(const json_detail::JsonValue& root)
+    {
+        LCResonanceParams lc;
+
+        const auto* lcSection = root.get("lc_resonance");
+        if (lcSection && lcSection->isObject())
+        {
+            lc.Lleak = lcSection->pathFloat("Lleak_H", lc.Lleak);
+            lc.Cw    = lcSection->pathFloat("Cw_F",    lc.Cw);
+            lc.Cp_s  = lcSection->pathFloat("Cp_s_F",  lc.Cp_s);
+            lc.CL    = lcSection->pathFloat("CL_F",    lc.CL);
+            lc.Rz    = lcSection->pathFloat("Rz_ohm",  lc.Rz);
+            lc.Cz    = lcSection->pathFloat("Cz_F",    lc.Cz);
+        }
+
+        return lc;
     }
 
     // ── Validation ───────────────────────────────────────────────────────────

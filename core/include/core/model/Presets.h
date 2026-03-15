@@ -3,16 +3,16 @@
 // =============================================================================
 // Presets — Factory presets + dynamic user presets for audio transformers.
 //
-// The 9 factory presets (indices 0-8) are always available and immutable.
-// User presets loaded from JSON files are appended after the factory presets.
+// The 1 factory preset (index 0) is always available and immutable.
+// User presets loaded from JSON files are appended after the factory preset.
 //
 // Usage:
 //   PresetManager mgr;
 //   mgr.loadFromDirectory("data/transformers/");
-//   int total = mgr.getPresetCount();       // 7 + loaded
-//   auto cfg  = mgr.getByIndex(8);          // user preset
+//   int total = mgr.getPresetCount();       // 1 + loaded
+//   auto cfg  = mgr.getByIndex(1);          // user preset
 //   mgr.addPreset(myConfig);                // add at runtime
-//   mgr.removePreset(8);                    // remove user preset (not factory)
+//   mgr.removePreset(1);                    // remove user preset (not factory)
 // =============================================================================
 
 #include "TransformerConfig.h"
@@ -29,19 +29,8 @@ namespace transfo {
 namespace Presets
 {
     inline TransformerConfig Jensen_JT115KE()           { return TransformerConfig::Jensen_JT115KE(); }
-    inline TransformerConfig Jensen_JT115KE_Harrison()  { return TransformerConfig::Jensen_JT115KE_Harrison(); }
-    inline TransformerConfig Neve_1073_Input()           { return TransformerConfig::Neve_1073_Input(); }
-    inline TransformerConfig Neve_1073_Output()          { return TransformerConfig::Neve_1073_Output(); }
-    inline TransformerConfig API_AP2503()                { return TransformerConfig::API_AP2503(); }
-    inline TransformerConfig Neve_LO2567_Hot()           { return TransformerConfig::Neve_LO2567_Hot(); }
-    inline TransformerConfig Neve_LO1173_Output()        { return TransformerConfig::Neve_LO1173_Output(); }
-    inline TransformerConfig Fender_Output()             { return TransformerConfig::Fender_Output(); }
-    inline TransformerConfig Lundahl_LL1538()            { return TransformerConfig::Lundahl_LL1538(); }
 
-    // Legacy alias
-    inline TransformerConfig Neve_Marinair_LO1166()  { return Neve_1073_Output(); }
-
-    constexpr int kFactoryCount = 9;
+    constexpr int kFactoryCount = 1;
 
     inline int count() { return kFactoryCount; }
 
@@ -49,15 +38,7 @@ namespace Presets
     {
         switch (index)
         {
-            case 0: return Jensen_JT115KE();
-            case 1: return Jensen_JT115KE_Harrison();
-            case 2: return Neve_1073_Input();
-            case 3: return Neve_1073_Output();
-            case 4: return API_AP2503();
-            case 5: return Neve_LO2567_Hot();
-            case 6: return Neve_LO1173_Output();
-            case 7: return Fender_Output();
-            case 8: return Lundahl_LL1538();
+            case 0:
             default: return Jensen_JT115KE();
         }
     }
@@ -66,15 +47,7 @@ namespace Presets
     {
         switch (index)
         {
-            case 0: return "Jensen JT-115K-E";
-            case 1: return "Jensen Harrison Preamp";
-            case 2: return "Neve 1073 Input (10468)";
-            case 3: return "Neve 1073 Output (LI1166)";
-            case 4: return "API AP2503";
-            case 5: return "Neve LO2567 Hot (Ungapped)";
-            case 6: return "Neve LO1173 Line Output";
-            case 7: return "Fender Output (M6 SiFe)";
-            case 8: return "Lundahl LL1538";
+            case 0:  return "Jensen JT-115K-E";
             default: return "Unknown";
         }
     }
@@ -105,7 +78,7 @@ public:
     }
 
     // ── Get preset by global index (0..N-1) ──────────────────────────────────
-    // Indices 0..8 are factory presets, 9+ are user presets.
+    // Index 0 is the factory preset, 1+ are user presets.
     TransformerConfig getByIndex(int index) const
     {
         if (index < Presets::kFactoryCount)

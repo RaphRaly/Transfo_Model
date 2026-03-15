@@ -65,7 +65,8 @@ public:
         os << ind2 << jsonString("Lp_estimated_H")       << ": " << jsonFloat(cfg.windings.Lp_primary) << ",\n";
         os << ind2 << jsonString("L_leakage_H")          << ": " << jsonFloat(cfg.windings.L_leakage) << ",\n";
         os << ind2 << jsonString("source_impedance_ohm") << ": " << jsonFloat(cfg.windings.sourceImpedance) << ",\n";
-        os << ind2 << jsonString("load_impedance_ohm")   << ": " << jsonFloat(cfg.windings.loadImpedance) << "\n";
+        os << ind2 << jsonString("load_impedance_ohm")   << ": " << jsonFloat(cfg.windings.loadImpedance) << ",\n";
+        os << ind2 << jsonString("plate_impedance_ohm")  << ": " << jsonFloat(cfg.windings.plateImpedance) << "\n";
         os << ind << "},\n";
 
         // --- Jiles-Atherton Parameters ---
@@ -77,6 +78,21 @@ public:
         os << ind2 << jsonString("c")     << ": " << jsonFloat(cfg.material.c) << ",\n";
         os << ind2 << jsonString("K1")    << ": " << jsonFloat(cfg.material.K1) << ",\n";
         os << ind2 << jsonString("K2")    << ": " << jsonFloat(cfg.material.K2) << "\n";
+        os << ind << "},\n";
+
+        // --- Transformer Geometry (K_geo) ---
+        os << "\n" << ind << jsonString("geometry") << ": {\n";
+        os << ind2 << jsonString("K_geo_m") << ": " << jsonFloat(cfg.geometry.K_geo) << "\n";
+        os << ind << "},\n";
+
+        // --- LC Resonance Parameters ---
+        os << "\n" << ind << jsonString("lc_resonance") << ": {\n";
+        os << ind2 << jsonString("Lleak_H")    << ": " << jsonFloat(cfg.lcParams.Lleak) << ",\n";
+        os << ind2 << jsonString("Cw_F")       << ": " << jsonFloat(cfg.lcParams.Cw) << ",\n";
+        os << ind2 << jsonString("Cp_s_F")     << ": " << jsonFloat(cfg.lcParams.Cp_s) << ",\n";
+        os << ind2 << jsonString("CL_F")       << ": " << jsonFloat(cfg.lcParams.CL) << ",\n";
+        os << ind2 << jsonString("Rz_ohm")     << ": " << jsonFloat(cfg.lcParams.Rz) << ",\n";
+        os << ind2 << jsonString("Cz_F")       << ": " << jsonFloat(cfg.lcParams.Cz) << "\n";
         os << ind << "},\n";
 
         // --- Top-level load impedance ---

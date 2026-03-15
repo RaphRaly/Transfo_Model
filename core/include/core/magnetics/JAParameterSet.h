@@ -199,6 +199,15 @@ struct JAParameterSet {
     // K1/K2 same as MuMetal (same alloy family, similar lamination)
     return {5.5e5f, 25.0f, 1e-4f, 80.0f, 0.88f, 1.44e-3f, 0.02f};
   }
+
+  static JAParameterSet defaultHammondSiFe() {
+    // Hammond T1750V (Vox AC30) — M6 silicon steel, similar to Fender
+    // Slightly lower Ms and higher k → less aggressive saturation
+    // alpha*Ms = 1.8e-3 × 1.1e6 = 1980, k=45 << alpha*Ms... PROBLEM
+    // Fixed: alpha=1e-5, alpha*Ms = 11 < k=45 (stable)
+    // K1 = d²/(12ρ) = (0.30mm)²/(12×47μΩ·cm) = 1.60e-2
+    return {1.1e6f, 180.0f, 1e-5f, 45.0f, 0.25f, 1.60e-2f, 0.12f};
+  }
 };
 
 } // namespace transfo
