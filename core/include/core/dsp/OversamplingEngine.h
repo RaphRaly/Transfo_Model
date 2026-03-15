@@ -3,28 +3,51 @@
 // =============================================================================
 // OversamplingEngine — Oversampling for Physical mode (OS 4x).
 //
-// Refactored from DSP/Oversampling.h. In v3 architecture:
-//   - Realtime mode: NO oversampling (ADAA in CPWLLeaf replaces it)
-//   - Physical mode: OS 4x for offline/render precision with J-A model
+// [v3.2] Corrected: Cascaded 2-stage halfband architecture.
 //
-// Uses simple polyphase halfband FIR filters. No JUCE dependency in core/.
-// The JUCE wrapper is in the plugin layer for convenience.
+// Architecture:
+//   - 2 stages of 2x up/downsample (cascade = 4x total)
+//   - Each stage: 53-tap Kaiser halfband FIR (β=7.86, ≥80 dB stopband)
+//   - Halfband optimization: only 14 MACs per sample (13 odd-index + center)
+//   - Correct gain: ×2 per upsample stage (compensates zero-stuffing)
 //
-// [v3] Architecture: oversampling is ALWAYS external to the WDF graph,
-// never inside the scattering chain. Confirmed by chowdsp_wdf study.
+// Design method: Kaiser window, A=80 dB, transition band 0.4π–0.6π
+// Coefficients computed via scipy.signal.firwin, verified ≥80 dB stopband.
+//
+// Bugs fixed [v3.2]:
+//   1. Cutoff was π/2 for 4x OS (needed π/4) → cascaded halfband solves this
+//   2. Only 7 taps = ~25 dB stopband → now 53 taps = 80+ dB per stage
+//   3. Gain was ×8 (factor × filter_DC_gain_2) → now ×1 (amplitude-preserving)
+//   4. Latency was hardcoded 3 → now reflects true group delay (39 samples)
+//
+// Why cascaded halfband and not a single lowpass at π/4?
+//   Each halfband stage has cutoff at π/2 of its rate — the natural Nyquist/2
+//   boundary. The cascade gives effective cutoff at π/4 of the original rate,
+//   exactly what 4x oversampling requires. Each stage can independently achieve
+//   80+ dB stopband with only 53 taps (vs ~200+ for a single-stage π/4 FIR).
+//   Also: the halfband zero structure halves the multiply-accumulate count.
+//
+// Reference: Oppenheim & Schafer ch.7 (FIR design); Kaiser 1974;
+//            MIT RES.6-008 Lecture 17; Smith "Spectral Audio Signal Processing"
 // =============================================================================
 
 #include "../util/AlignedBuffer.h"
 #include "../util/Constants.h"
-#include <cmath>
 #include <array>
+#include <cmath>
 
 namespace transfo {
 
-// ─── Simple halfband FIR filter for up/downsampling ─────────────────────────
-// 7-tap halfband filter: efficient, zero at odd samples.
-// For production: replace with polyphase IIR (lower latency) or
-// use the JUCE wrapper in the plugin layer.
+// ─── Halfband FIR Filter — 53-tap Kaiser (β=7.86, ≥80 dB stopband) ──────────
+//
+// Halfband property: h[n]=0 for even n (except center h[26]≈0.5).
+// Exploited: only 13 symmetric odd-index coefficients + center tap computed.
+// Total cost: 14 multiplications + 26 additions per sample.
+//
+// Frequency response:
+//   Passband:  0 to 0.4π — ripple < 0.001 dB
+//   Transition: 0.4π to 0.6π
+//   Stopband:  0.6π to π — attenuation ≥ 80 dB
 
 class HalfbandFilter
 {
@@ -33,34 +56,63 @@ public:
 
     void reset()
     {
-        for (auto& s : state_) s = 0.0f;
+        state_.fill(0.0f);
+        pos_ = 0;
     }
 
-    // Process one sample through the lowpass halfband filter
     float process(float input)
     {
-        // Shift delay line
-        for (int i = kNumTaps - 1; i > 0; --i)
-            state_[i] = state_[i - 1];
-        state_[0] = input;
+        // Write input into circular delay line
+        state_[pos_] = input;
 
-        // Convolve with halfband FIR coefficients
-        float out = 0.0f;
-        for (int i = 0; i < kNumTaps; ++i)
-            out += state_[i] * coeffs_[i];
+        // Center tap: h[26] * x[n-26]
+        float out = kCenterTap * readDelay(kCenterDelay);
+
+        // Symmetric odd-index pairs: h[k] * (x[n-k] + x[n-(N-1-k)])
+        // where k = 1,3,5,...,25 and N-1-k = 51,49,...,27
+        for (int i = 0; i < kNumOddCoeffs; ++i)
+        {
+            const int k = 2 * i + 1;
+            const int k_mirror = kNumTaps - 1 - k;
+            out += kOddCoeffs[i] * (readDelay(k) + readDelay(k_mirror));
+        }
+
+        // Advance circular write pointer
+        pos_ = (pos_ + 1) % kNumTaps;
         return out;
     }
 
 private:
-    static constexpr int kNumTaps = 7;
-    // Halfband FIR coefficients (symmetric, every other coeff is zero except center)
-    static constexpr float coeffs_[kNumTaps] = {
-        -0.0625f, 0.0f, 0.5625f, 1.0f, 0.5625f, 0.0f, -0.0625f
+    static constexpr int kNumTaps = 53;
+    static constexpr int kCenterDelay = 26;  // Group delay = (N-1)/2
+
+    // Center tap (even index, the only non-zero even coefficient)
+    static constexpr float kCenterTap = 4.9999478972e-01f;
+
+    // 13 unique odd-index coefficients: h[1],h[3],...,h[25]
+    // Symmetric pairs: h[2i+1] = h[N-1-(2i+1)]
+    static constexpr int kNumOddCoeffs = 13;
+    static constexpr float kOddCoeffs[kNumOddCoeffs] = {
+        +8.6790341e-05f, -3.1347383e-04f, +7.9608460e-04f,
+        -1.6901093e-03f, +3.1999384e-03f, -5.5895971e-03f,
+        +9.2091572e-03f, -1.4563182e-02f, +2.2491810e-02f,
+        -3.4691124e-02f, +5.5516009e-02f, -1.0102597e-01f,
+        +3.1657627e-01f
     };
-    float state_[kNumTaps]{};
+
+    std::array<float, kNumTaps> state_{};
+    int pos_ = 0;
+
+    // Read from circular delay line: delay=0 is current sample
+    float readDelay(int delay) const
+    {
+        int idx = pos_ - delay;
+        if (idx < 0) idx += kNumTaps;
+        return state_[idx];
+    }
 };
 
-// ─── Oversampling Engine ────────────────────────────────────────────────────
+// ─── Oversampling Engine — Cascaded 2×2x = 4x ──────────────────────────────
 
 class OversamplingEngine
 {
@@ -74,60 +126,95 @@ public:
         oversampledRate_ = sampleRate * static_cast<float>(factor);
 
         oversampledBuffer_.resize(maxBlockSize * factor);
-        upsampleFilter_.reset();
-        downsampleFilter_.reset();
+        intermediateBuffer_.resize(maxBlockSize * 2);
+
+        reset();
     }
 
     void reset()
     {
-        upsampleFilter_.reset();
-        downsampleFilter_.reset();
+        for (auto& f : upFilters_)   f.reset();
+        for (auto& f : downFilters_) f.reset();
         oversampledBuffer_.clear();
+        intermediateBuffer_.clear();
     }
 
-    // ─── Upsample: insert zeros + lowpass filter ────────────────────────────
+    // ─── Upsample 4x: cascade fs → 2fs → 4fs ──────────────────────────────
     void upsample(const float* input, int numSamples, float* output)
     {
-        for (int i = 0; i < numSamples; ++i)
-        {
-            for (int j = 0; j < factor_; ++j)
-            {
-                float sample = (j == 0) ? input[i] * static_cast<float>(factor_) : 0.0f;
-                output[i * factor_ + j] = upsampleFilter_.process(sample);
-            }
-        }
+        float* mid = intermediateBuffer_.data();
+
+        // Stage 1: fs → 2fs (halfband at π/2 of 2fs = π of fs)
+        upsample2x(input, numSamples, mid, upFilters_[0]);
+
+        // Stage 2: 2fs → 4fs (halfband at π/2 of 4fs = π/2 of 2fs = π/4 of fs)
+        upsample2x(mid, numSamples * 2, output, upFilters_[1]);
     }
 
-    // ─── Downsample: lowpass filter + decimate ──────────────────────────────
+    // ─── Downsample 4x: cascade 4fs → 2fs → fs ────────────────────────────
     void downsample(const float* input, int numOversampledSamples, float* output)
     {
-        int outIdx = 0;
-        for (int i = 0; i < numOversampledSamples; ++i)
-        {
-            float filtered = downsampleFilter_.process(input[i]);
-            if (i % factor_ == 0)
-                output[outIdx++] = filtered;
-        }
+        float* mid = intermediateBuffer_.data();
+
+        // Stage 1: 4fs → 2fs (anti-alias at π/2 of 4fs)
+        downsample2x(input, numOversampledSamples, mid, downFilters_[0]);
+
+        // Stage 2: 2fs → fs (anti-alias at π/2 of 2fs)
+        downsample2x(mid, numOversampledSamples / 2, output, downFilters_[1]);
     }
 
-    // ─── Convenience: get buffer for in-place oversampled processing ────────
-    float* getOversampledBuffer() { return oversampledBuffer_.data(); }
+    // ─── Accessors ──────────────────────────────────────────────────────────
+    float* getOversampledBuffer()                     { return oversampledBuffer_.data(); }
     int    getOversampledSize(int originalSize) const { return originalSize * factor_; }
-
     float  getOversampledRate() const { return oversampledRate_; }
     int    getFactor() const { return factor_; }
-    float  getLatency() const { return static_cast<float>(kFilterLatency) / static_cast<float>(factor_); }
+
+    // Round-trip latency in original-rate samples.
+    // 53-tap FIR group delay = 26 samples at its operating rate.
+    // Upsample path:  stage1 (26 @ 2fs = 13) + stage2 (26 @ 4fs = 6.5) = 19.5
+    // Downsample path: stage1 (26 @ 4fs = 6.5) + stage2 (26 @ 2fs = 13) = 19.5
+    // Total: 39 original-rate samples.
+    float getLatency() const { return kRoundTripLatency; }
 
 private:
     int   factor_ = kOversamplingPhysical;
     float originalRate_ = kDefaultSampleRate;
     float oversampledRate_ = kDefaultSampleRate * kOversamplingPhysical;
 
-    static constexpr int kFilterLatency = 3; // halfband filter group delay
+    // Two cascade stages: [0]=first, [1]=second
+    HalfbandFilter upFilters_[2];
+    HalfbandFilter downFilters_[2];
 
-    HalfbandFilter upsampleFilter_;
-    HalfbandFilter downsampleFilter_;
     AlignedBuffer<float> oversampledBuffer_;
+    AlignedBuffer<float> intermediateBuffer_;  // Holds 2fs intermediate data
+
+    static constexpr float kRoundTripLatency = 39.0f;
+
+    // ─── Single 2x upsample: zero-stuff + halfband lowpass + gain ────────
+    // Gain ×2 compensates the energy loss from zero-stuffing:
+    //   Zero-stuffed DC = original_DC / 2 → ×2 restores unity.
+    static void upsample2x(const float* input, int numSamples,
+                            float* output, HalfbandFilter& filter)
+    {
+        for (int i = 0; i < numSamples; ++i)
+        {
+            output[2 * i]     = filter.process(input[i]) * 2.0f;
+            output[2 * i + 1] = filter.process(0.0f)     * 2.0f;
+        }
+    }
+
+    // ─── Single 2x downsample: halfband anti-alias + decimate ────────────
+    static void downsample2x(const float* input, int numSamples,
+                              float* output, HalfbandFilter& filter)
+    {
+        int outIdx = 0;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float filtered = filter.process(input[i]);
+            if (i % 2 == 0)
+                output[outIdx++] = filtered;
+        }
+    }
 };
 
 } // namespace transfo
