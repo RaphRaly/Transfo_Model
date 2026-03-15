@@ -5,7 +5,7 @@
 //   simulate [options]
 //
 // Options:
-//   --preset <0|1|2>       Transformer preset (0=Jensen, 1=Neve, 2=API)
+//   --preset <0>           Transformer preset (0=Jensen JT-115K-E)
 //   --freq <Hz>            Input sine frequency (default: 1000)
 //   --level <dBFS>         Input level in dBFS (default: -6)
 //   --duration <seconds>   Duration in seconds (default: 1.0)
@@ -41,7 +41,7 @@
 static void printUsage()
 {
     std::cerr << "Usage: simulate [options]\n"
-              << "  --preset <0|1|2>      Transformer (0=Jensen, 1=Neve, 2=API)\n"
+              << "  --preset <0>           Transformer (0=Jensen JT-115K-E)\n"
               << "  --freq <Hz>           Sine frequency (default: 1000)\n"
               << "  --level <dBFS>        Input level (default: -6)\n"
               << "  --duration <s>        Duration (default: 1.0)\n"

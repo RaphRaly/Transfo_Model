@@ -166,9 +166,7 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   addAndMakeVisible(presetLabel_);
 
   presetCombo_.addItemList(
-      {"Jensen JT-115K-E", "Jensen Harrison Preamp",
-       "Neve 1073 Input (10468)", "Neve 1073 Output (LI1166)", "API AP2503",
-       "Neve LO2567 Hot (Ungapped)", "Neve LO1173 Line Output"},
+      {"Jensen JT-115K-E"},
       1);
   addAndMakeVisible(presetCombo_);
   presetAttach_ =
