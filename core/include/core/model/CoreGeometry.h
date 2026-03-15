@@ -98,6 +98,28 @@ struct CoreGeometry
         // Legacy alias — now points to LI1166 output geometry
         return neveLI1166Output();
     }
+
+    static CoreGeometry fenderOutput()
+    {
+        // Fender-style output transformer: EI core, M6 GO SiFe, ungapped
+        // Larger cross-section for power handling, thick laminations (0.35mm)
+        CoreGeometry g;
+        g.Gamma_center = 0.070f; g.Gamma_outer = 0.100f; g.Gamma_yoke = 0.080f;
+        g.Lambda_center = 3.5e-4f; g.Lambda_outer = 3.5e-4f; g.Lambda_yoke = 3.5e-4f;
+        g.airGapLength = 0.0f; // ungapped — saturates readily
+        return g;
+    }
+
+    static CoreGeometry lundahlLL1538()
+    {
+        // Lundahl LL1538: high-grade mu-metal EI core, ungapped
+        // Premium line input, similar size to Jensen JT-115K-E
+        CoreGeometry g;
+        g.Gamma_center = 0.050f; g.Gamma_outer = 0.078f; g.Gamma_yoke = 0.060f;
+        g.Lambda_center = 1.3e-4f; g.Lambda_outer = 1.3e-4f; g.Lambda_yoke = 1.3e-4f;
+        g.airGapLength = 0.0f;
+        return g;
+    }
 };
 
 } // namespace transfo

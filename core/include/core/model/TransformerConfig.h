@@ -141,6 +141,36 @@ struct TransformerConfig
         cfg.loadImpedance = 10000.0f;
         return cfg;
     }
+
+    // ── Factory: Fender Output (M6 Silicon Steel) ────────────────────────────
+    // Push-pull output transformer. Thick M6 GO SiFe (0.35mm), ungapped.
+    // Easy saturation, wide B-H loop → classic "Fender sag" character.
+    // High dynamic losses (K1=2.17e-2, K2=0.15) from thick laminations.
+    static TransformerConfig Fender_Output()
+    {
+        TransformerConfig cfg;
+        cfg.name          = "Fender Output (M6 SiFe)";
+        cfg.core          = CoreGeometry::fenderOutput();
+        cfg.windings      = WindingConfig::fenderOutput();
+        cfg.material      = JAParameterSet::defaultFenderSiFe();
+        cfg.loadImpedance = 8.0f;
+        return cfg;
+    }
+
+    // ── Factory: Lundahl LL1538 (Mu-Metal) ───────────────────────────────────
+    // Premium line input transformer. High-grade 80% NiFe (mu-metal).
+    // Very similar character to Jensen JT-115K-E but slightly different
+    // winding geometry. Low dynamic losses (K1=1.44e-3, K2=0.02).
+    static TransformerConfig Lundahl_LL1538()
+    {
+        TransformerConfig cfg;
+        cfg.name          = "Lundahl LL1538";
+        cfg.core          = CoreGeometry::lundahlLL1538();
+        cfg.windings      = WindingConfig::lundahlLL1538();
+        cfg.material      = JAParameterSet::defaultLundahlMuMetal();
+        cfg.loadImpedance = 100000.0f;
+        return cfg;
+    }
 };
 
 } // namespace transfo

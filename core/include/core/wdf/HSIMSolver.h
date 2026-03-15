@@ -215,6 +215,9 @@ public:
     lastIterCount_ = 0;
     lastConverged_ = true;
 
+    for (int i = 0; i < NumNL; ++i)
+      nonlinearLeaves_[i].reset();
+
     for (int i = 0; i < NumME; ++i)
       meJunctions_[i].reset();
   }

@@ -122,6 +122,33 @@ struct WindingConfig
         return { 1, 5,  15.0f, 375.0f,  100e-12f, 5e-12f,
                  5.0f, 0.5e-3f,  600.0f, 10000.0f };
     }
+
+    // Fender-style output transformer
+    // Push-pull plate-to-speaker, step-down ~25:1 (centertapped primary)
+    // Low source Z (tube plate), low load Z (speaker)
+    static WindingConfig fenderOutput()
+    {
+        WindingConfig w;
+        w.turnsRatio_N1 = 25; w.turnsRatio_N2 = 1;
+        w.Rdc_primary = 120.0f; w.Rdc_secondary = 0.5f;
+        w.C_sec_shield = 50e-12f; w.C_interwinding = 15e-12f;
+        w.Lp_primary = 20.0f; w.L_leakage = 5e-3f;
+        w.sourceImpedance = 3200.0f; w.loadImpedance = 8.0f;
+        return w;
+    }
+
+    // Lundahl LL1538: premium line input, mu-metal
+    // Ratio 1:8, 150 ohm → high-Z, similar concept to Jensen JT-115K-E
+    static WindingConfig lundahlLL1538()
+    {
+        WindingConfig w;
+        w.turnsRatio_N1 = 1; w.turnsRatio_N2 = 8;
+        w.Rdc_primary = 16.0f; w.Rdc_secondary = 1800.0f;
+        w.C_sec_shield = 180e-12f; w.C_interwinding = 8e-12f;
+        w.Lp_primary = 12.0f; w.L_leakage = 0.8e-3f;
+        w.sourceImpedance = 150.0f; w.loadImpedance = 100000.0f;
+        return w;
+    }
 };
 
 } // namespace transfo

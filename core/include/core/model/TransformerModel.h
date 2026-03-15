@@ -137,6 +137,7 @@ public:
     oversampler_.reset();
     bhQueue_.reset();
     directHyst_.reset();
+    directDynLosses_.reset();
     hpState_ = 0.0f;
     hpPrev_ = 0.0f;
     lpState_ = 0.0f;
@@ -160,6 +161,7 @@ private:
 
   // ─── Direct J-A processing (bypasses broken HSIM topology) ──────────────
   HysteresisModel<LangevinPade> directHyst_;
+  DynamicLosses directDynLosses_;  // Bertotti dynamic losses for direct path
   float hScale_ = 100.0f;  // Input → H field scaling
   float bNorm_ = 1.0f;     // B → output normalization (unity gain in linear region)
 
@@ -190,12 +192,25 @@ private:
       hpState_ = hpOut;
       x = hpOut;
 
-      // Direct J-A: scale to H field, solve hysteresis, compute B
-      const float H = x * hScale_;
-      const double M = directHyst_.solveImplicitStep(static_cast<double>(H));
+      // Direct J-A: scale to H field, apply dynamic losses, solve hysteresis
+      const float H_applied = x * hScale_;
+      double H_eff = static_cast<double>(H_applied);
+
+      // Bertotti dynamic extension: reduce effective H at high dB/dt
+      if (directDynLosses_.isEnabled()) {
+        const double M_c = directHyst_.getMagnetization();
+        const double B_pred = kMu0 * (H_eff + M_c);
+        const double dBdt = directDynLosses_.computeBilinearDBdt(B_pred);
+        H_eff -= directDynLosses_.computeHfromDBdt(dBdt);
+      }
+
+      const double M = directHyst_.solveImplicitStep(H_eff);
       directHyst_.commitState();
 
-      const float B = kMu0f * (H + static_cast<float>(M));
+      // B uses total applied H (circuit field, not effective)
+      const float B = kMu0f * (H_applied + static_cast<float>(M));
+      directDynLosses_.commitState(static_cast<double>(B));
+
       float wet = B * bNorm_;
 
       // Circuit LP: secondary load damping HF rolloff
@@ -205,7 +220,7 @@ private:
       // BH scope data
       if (++bhDownsampleCounter_ >= 32) {
         bhDownsampleCounter_ = 0;
-        bhQueue_.push(BHSample{H, B});
+        bhQueue_.push(BHSample{H_applied, B});
       }
 
       output[k] = (dry * (1.0f - mixVal) + wet * mixVal) * gain_out;
@@ -230,12 +245,25 @@ private:
       hpState_ = hpOut;
       x = hpOut;
 
-      // Direct J-A: scale to H field, solve hysteresis, compute B
-      const float H = x * hScale_;
-      const double M = directHyst_.solveImplicitStep(static_cast<double>(H));
+      // Direct J-A: scale to H field, apply dynamic losses, solve hysteresis
+      const float H_applied = x * hScale_;
+      double H_eff = static_cast<double>(H_applied);
+
+      // Bertotti dynamic extension: reduce effective H at high dB/dt
+      if (directDynLosses_.isEnabled()) {
+        const double M_c = directHyst_.getMagnetization();
+        const double B_pred = kMu0 * (H_eff + M_c);
+        const double dBdt = directDynLosses_.computeBilinearDBdt(B_pred);
+        H_eff -= directDynLosses_.computeHfromDBdt(dBdt);
+      }
+
+      const double M = directHyst_.solveImplicitStep(H_eff);
       directHyst_.commitState();
 
-      const float B = kMu0f * (H + static_cast<float>(M));
+      // B uses total applied H (circuit field, not effective)
+      const float B = kMu0f * (H_applied + static_cast<float>(M));
+      directDynLosses_.commitState(static_cast<double>(B));
+
       float wet = B * bNorm_;
 
       // Circuit LP: secondary load damping HF rolloff
@@ -245,7 +273,7 @@ private:
       // BH scope data (less frequent for oversampled)
       if (++bhDownsampleCounter_ >= 128) {
         bhDownsampleCounter_ = 0;
-        bhQueue_.push(BHSample{H, B});
+        bhQueue_.push(BHSample{H_applied, B});
       }
     }
 
@@ -292,6 +320,11 @@ private:
     directHyst_.setParameters(config_.material);
     directHyst_.setSampleRate(static_cast<double>(procRate));
     directHyst_.reset();
+
+    // Bertotti dynamic losses for the direct path
+    directDynLosses_.setCoefficients(config_.material.K1, config_.material.K2);
+    directDynLosses_.setSampleRate(static_cast<double>(procRate));
+    directDynLosses_.reset();
 
     // Scaling: map ±1.0 digital audio to H field around saturation knee
     // 'a' parameter controls the B-H curve knee location

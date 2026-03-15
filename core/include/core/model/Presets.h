@@ -3,7 +3,7 @@
 // =============================================================================
 // Presets — Factory presets + dynamic user presets for audio transformers.
 //
-// The 7 factory presets (indices 0-6) are always available and immutable.
+// The 9 factory presets (indices 0-8) are always available and immutable.
 // User presets loaded from JSON files are appended after the factory presets.
 //
 // Usage:
@@ -35,11 +35,13 @@ namespace Presets
     inline TransformerConfig API_AP2503()                { return TransformerConfig::API_AP2503(); }
     inline TransformerConfig Neve_LO2567_Hot()           { return TransformerConfig::Neve_LO2567_Hot(); }
     inline TransformerConfig Neve_LO1173_Output()        { return TransformerConfig::Neve_LO1173_Output(); }
+    inline TransformerConfig Fender_Output()             { return TransformerConfig::Fender_Output(); }
+    inline TransformerConfig Lundahl_LL1538()            { return TransformerConfig::Lundahl_LL1538(); }
 
     // Legacy alias
     inline TransformerConfig Neve_Marinair_LO1166()  { return Neve_1073_Output(); }
 
-    constexpr int kFactoryCount = 7;
+    constexpr int kFactoryCount = 9;
 
     inline int count() { return kFactoryCount; }
 
@@ -54,6 +56,8 @@ namespace Presets
             case 4: return API_AP2503();
             case 5: return Neve_LO2567_Hot();
             case 6: return Neve_LO1173_Output();
+            case 7: return Fender_Output();
+            case 8: return Lundahl_LL1538();
             default: return Jensen_JT115KE();
         }
     }
@@ -69,6 +73,8 @@ namespace Presets
             case 4: return "API AP2503";
             case 5: return "Neve LO2567 Hot (Ungapped)";
             case 6: return "Neve LO1173 Line Output";
+            case 7: return "Fender Output (M6 SiFe)";
+            case 8: return "Lundahl LL1538";
             default: return "Unknown";
         }
     }
@@ -99,7 +105,7 @@ public:
     }
 
     // ── Get preset by global index (0..N-1) ──────────────────────────────────
-    // Indices 0..6 are factory presets, 7+ are user presets.
+    // Indices 0..8 are factory presets, 9+ are user presets.
     TransformerConfig getByIndex(int index) const
     {
         if (index < Presets::kFactoryCount)
