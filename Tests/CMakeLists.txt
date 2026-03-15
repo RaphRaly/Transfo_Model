@@ -50,6 +50,11 @@ add_executable(test_lc_resonance
 )
 target_include_directories(test_lc_resonance PRIVATE ${CORE_INCLUDE})
 
+add_executable(test_nonlinear_lm
+    test_nonlinear_lm.cpp
+)
+target_include_directories(test_nonlinear_lm PRIVATE ${CORE_INCLUDE})
+
 # ── CTest registration ───────────────────────────────────────────────────────
 enable_testing()
 add_test(NAME cpwl_adaa              COMMAND test_cpwl_adaa)
@@ -59,3 +64,4 @@ add_test(NAME plugin_integration     COMMAND test_plugin_integration)
 add_test(NAME dynamic_losses         COMMAND test_dynamic_losses)
 add_test(NAME dynamic_parallel_adaptor COMMAND test_dynamic_parallel_adaptor)
 add_test(NAME lc_resonance            COMMAND test_lc_resonance)
+add_test(NAME nonlinear_lm             COMMAND test_nonlinear_lm)

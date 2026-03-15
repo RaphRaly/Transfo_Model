@@ -102,6 +102,11 @@ public:
   void setOutputGain(float dB) { outputGain_.setTargetValue(dBtoLinear(dB)); }
   void setMix(float mix01) { mix_.setTargetValue(mix01); }
 
+  // Linear mode: bypass J-A hysteresis entirely (HP → unity gain → LC).
+  // Used for test baselines where a truly linear transfer function is needed.
+  void setLinearMode(bool on) { linearMode_ = on; }
+  bool getLinearMode() const { return linearMode_; }
+
   // ─── Monitoring ─────────────────────────────────────────────────────────
   struct MonitorData {
     int lastIterCount = 0;
@@ -196,6 +201,7 @@ private:
   float lmSmoothed_ = 1.0f;      // One-pole smoothed Lm [H]
   float lmSmoothCoeff_ = 0.999f; // One-pole coefficient: α = exp(-2π×fc_smooth/fs)
   bool  dynLmEnabled_ = false;   // True when K_geo > 0 and Rsource > 0
+  bool  linearMode_ = false;  // Bypass J-A: HP → linear gain → LC (test baselines)
 
   // Safety clamps for mu_inc (H/m)
   // mu_inc_min ~ mu0 (air): dM/dH ≈ 0 in deep saturation
@@ -227,6 +233,11 @@ private:
       hpState_ = hpOut;
       x = hpOut;
 
+      float wet;
+      if (linearMode_) {
+        // Linear bypass: skip J-A, Bertotti, dynLm — unity gain after HP
+        wet = x;
+      } else {
       // Direct J-A: scale to H field, apply dynamic losses, solve hysteresis
       const float H_applied = x * hScale_;
       double H_eff = static_cast<double>(H_applied);
@@ -238,7 +249,8 @@ private:
         const double B_pred = kMu0 * (H_eff + M_c);
         const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
         const double G = directDynLosses_.getK1() * directDynLosses_.getSampleRate() * kMu0 * chi;
-        const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
+        // dBdt_raw already contains (1+χ) via B = µ0(H+M); only apply damping
+        const double dBdt = dBdt_raw / (1.0 + G);
         H_eff -= directDynLosses_.computeHfromDBdt(dBdt);
       }
 
@@ -265,7 +277,14 @@ private:
       const float B = kMu0f * (H_applied + static_cast<float>(M));
       directDynLosses_.commitState(static_cast<double>(B));
 
-      float wet = B * bNorm_;
+      wet = B * bNorm_;
+
+      // BH scope data
+      if (++bhDownsampleCounter_ >= 32) {
+        bhDownsampleCounter_ = 0;
+        bhQueue_.push(BHSample{H_applied, B});
+      }
+      } // end !linearMode_
 
       // HF shaping: LC resonance post-stage or legacy LP
       if (lcEnabled_) {
@@ -273,12 +292,6 @@ private:
       } else {
         lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
         wet = lpState_;
-      }
-
-      // BH scope data
-      if (++bhDownsampleCounter_ >= 32) {
-        bhDownsampleCounter_ = 0;
-        bhQueue_.push(BHSample{H_applied, B});
       }
 
       output[k] = (dry * (1.0f - mixVal) + wet * mixVal) * gain_out;
@@ -303,6 +316,10 @@ private:
       hpState_ = hpOut;
       x = hpOut;
 
+      float wet;
+      if (linearMode_) {
+        wet = x;
+      } else {
       // Direct J-A: scale to H field, apply dynamic losses, solve hysteresis
       const float H_applied = x * hScale_;
       double H_eff = static_cast<double>(H_applied);
@@ -314,7 +331,8 @@ private:
         const double B_pred = kMu0 * (H_eff + M_c);
         const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
         const double G = directDynLosses_.getK1() * directDynLosses_.getSampleRate() * kMu0 * chi;
-        const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
+        // dBdt_raw already contains (1+χ) via B = µ0(H+M); only apply damping
+        const double dBdt = dBdt_raw / (1.0 + G);
         H_eff -= directDynLosses_.computeHfromDBdt(dBdt);
       }
 
@@ -337,7 +355,14 @@ private:
       const float B = kMu0f * (H_applied + static_cast<float>(M));
       directDynLosses_.commitState(static_cast<double>(B));
 
-      float wet = B * bNorm_;
+      wet = B * bNorm_;
+
+      // BH scope data (less frequent for oversampled)
+      if (++bhDownsampleCounter_ >= 128) {
+        bhDownsampleCounter_ = 0;
+        bhQueue_.push(BHSample{H_applied, B});
+      }
+      } // end !linearMode_
 
       // HF shaping: LC resonance post-stage or legacy LP
       if (lcEnabled_) {
@@ -347,12 +372,6 @@ private:
         wet = lpState_;
       }
       osBuffer[k] = wet;
-
-      // BH scope data (less frequent for oversampled)
-      if (++bhDownsampleCounter_ >= 128) {
-        bhDownsampleCounter_ = 0;
-        bhQueue_.push(BHSample{H_applied, B});
-      }
     }
 
     // Downsample

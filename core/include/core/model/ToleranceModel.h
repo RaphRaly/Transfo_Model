@@ -83,6 +83,11 @@ public:
         cfg.windings.C_interwinding *= (1.0f + offset.dC);
         cfg.windings.L_leakage     *= (1.0f + offset.dL_leak);
 
+        // LC parasitic resonance params — tolerance creates stereo spread on HF
+        cfg.lcParams.Lleak *= (1.0f + offset.dL_leak);
+        cfg.lcParams.Cw    *= (1.0f + offset.dC);
+        cfg.lcParams.Cp_s  *= (1.0f + offset.dC);
+
         return cfg;
     }
 
