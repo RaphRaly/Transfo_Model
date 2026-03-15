@@ -243,8 +243,8 @@ void test2_preset_switching()
         model.processBlock(buf.data(), output.data(), N);
         CHECK(allFinite(output.data(), N), "Process before preset switch OK");
 
-        // Switch to preset 3 mid-stream
-        model.setConfig(transfo::Presets::getByIndex(3));
+        // Switch to preset 0 mid-stream (only 1 factory preset)
+        model.setConfig(transfo::Presets::getByIndex(0));
 
         // Process again
         model.processBlock(buf.data(), output.data(), N);
@@ -273,18 +273,21 @@ void test2_preset_switching()
             presetRms[p] = rms(output.data(), N);
         }
 
-        // At least some presets should differ (we allow that not ALL are unique,
-        // but at least not all identical)
-        bool anyDifferent = false;
-        for (int i = 1; i < numPresets; ++i)
+        // With multiple presets, verify they produce different outputs.
+        // With only 1 factory preset, skip this check.
+        if (numPresets > 1)
         {
-            if (std::abs(presetRms[i] - presetRms[0]) > 1e-6)
+            bool anyDifferent = false;
+            for (int i = 1; i < numPresets; ++i)
             {
-                anyDifferent = true;
-                break;
+                if (std::abs(presetRms[i] - presetRms[0]) > 1e-6)
+                {
+                    anyDifferent = true;
+                    break;
+                }
             }
+            CHECK(anyDifferent, "At least two presets produce different RMS outputs");
         }
-        CHECK(anyDifferent, "At least two presets produce different RMS outputs");
 
         // Print RMS for debugging
         for (int p = 0; p < numPresets; ++p)
@@ -756,7 +759,7 @@ void test7_multiblock_consistency()
     const float sr = 44100.0f;
     const int blockSize = 256;
     const int numBlocks = 20;
-    auto cfg = transfo::Presets::Neve_1073_Input();
+    auto cfg = transfo::Presets::Jensen_JT115KE();
 
     // Process 20 consecutive blocks and verify stability
     RealtimeModel model;

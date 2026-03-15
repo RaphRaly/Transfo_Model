@@ -35,15 +35,20 @@ add_executable(test_plugin_integration
 )
 target_include_directories(test_plugin_integration PRIVATE ${CORE_INCLUDE})
 
-add_executable(test_neve_validation
-    test_neve_validation.cpp
-)
-target_include_directories(test_neve_validation PRIVATE ${CORE_INCLUDE})
-
 add_executable(test_dynamic_losses
     test_dynamic_losses.cpp
 )
 target_include_directories(test_dynamic_losses PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_dynamic_parallel_adaptor
+    test_dynamic_parallel_adaptor.cpp
+)
+target_include_directories(test_dynamic_parallel_adaptor PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_lc_resonance
+    test_lc_resonance.cpp
+)
+target_include_directories(test_lc_resonance PRIVATE ${CORE_INCLUDE})
 
 # ── CTest registration ───────────────────────────────────────────────────────
 enable_testing()
@@ -51,5 +56,6 @@ add_test(NAME cpwl_adaa              COMMAND test_cpwl_adaa)
 add_test(NAME cpwl_passivity         COMMAND test_cpwl_passivity)
 add_test(NAME hsim_diagnostics       COMMAND test_hsim_diagnostics)
 add_test(NAME plugin_integration     COMMAND test_plugin_integration)
-add_test(NAME neve_validation        COMMAND test_neve_validation)
 add_test(NAME dynamic_losses         COMMAND test_dynamic_losses)
+add_test(NAME dynamic_parallel_adaptor COMMAND test_dynamic_parallel_adaptor)
+add_test(NAME lc_resonance            COMMAND test_lc_resonance)
