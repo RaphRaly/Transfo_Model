@@ -59,6 +59,8 @@ private:
     ParamSlider kSlider;
     ParamSlider cSlider;
     ParamSlider alphaSlider;
+    ParamSlider kEddySlider;
+    ParamSlider kExcessSlider;
 
     // Oversampling combo
     juce::ComboBox osCombo;

@@ -17,6 +17,7 @@ namespace Colours
     static const juce::Colour arcInput     { 0xFF4FC3F7 };   // cyan
     static const juce::Colour arcMaterial  { 0xFFF0A500 };   // amber
     static const juce::Colour arcOutput    { 0xFF66BB6A };   // green
+    static const juce::Colour arcDynamic   { 0xFFE57373 };   // red-orange for dynamic losses
 }
 
 // =============================================================================
@@ -163,6 +164,8 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     setupSlider(kSlider,     "k",           "Coercivity",    Colours::arcMaterial);
     setupSlider(cSlider,     "c",           "Revers. (c)",   Colours::arcMaterial);
     setupSlider(alphaSlider, "alpha",       "Coupling",      Colours::arcMaterial);
+    setupSlider(kEddySlider,   "kEddy",    "K eddy",        Colours::arcDynamic);
+    setupSlider(kExcessSlider,  "kExcess",  "K excess",      Colours::arcDynamic);
 
     // Oversampling combo box
     osLabel.setText("Oversampling", juce::dontSendNotification);
@@ -322,29 +325,45 @@ void PluginEditor::resized()
 
     area.removeFromRight(sectionGap);
 
-    // ----- MATERIAL section (5 knobs + combo) -----
+    // ----- MATERIAL section (5 static + 2 dynamic knobs + combo) -----
     auto matArea = area.reduced(sectionPadH, sectionPadV);
     matArea.removeFromTop(titleBarH);
 
-    // Bottom row: oversampling combo
-    auto bottomRow = matArea.removeFromBottom(juce::jmax(50, matArea.getHeight() / 5));
+    // Top row: 5 static J-A knobs
+    auto topRow = matArea.removeFromTop(matArea.getHeight() * 2 / 3);
+    ParamSlider* staticSliders[] = { &msSlider, &aSlider, &kSlider, &cSlider, &alphaSlider };
+    const int numStaticKnobs = 5;
+    const int staticKnobW = topRow.getWidth() / numStaticKnobs;
 
-    // 5 knobs in a row
-    ParamSlider* matSliders[] = { &msSlider, &aSlider, &kSlider, &cSlider, &alphaSlider };
-    const int numKnobs = 5;
-    const int knobW = matArea.getWidth() / numKnobs;
-
-    for (int i = 0; i < numKnobs; ++i)
+    for (int i = 0; i < numStaticKnobs; ++i)
     {
-        auto col = matArea.removeFromLeft(knobW);
+        auto col = topRow.removeFromLeft(staticKnobW);
         int labelH = juce::jmax(18, col.getHeight() / 8);
-        matSliders[i]->label.setBounds(col.removeFromTop(labelH));
-        matSliders[i]->slider.setBounds(col);
+        staticSliders[i]->label.setBounds(col.removeFromTop(labelH));
+        staticSliders[i]->slider.setBounds(col);
     }
 
-    // Oversampling combo in bottom row, centred
+    // Bottom row: 2 dynamic loss knobs + oversampling combo
+    auto dynRow = matArea;
+    const int dynKnobW = dynRow.getWidth() / 3;
+
     {
-        auto comboArea = bottomRow.reduced(bottomRow.getWidth() / 4, 4);
+        auto col = dynRow.removeFromLeft(dynKnobW);
+        int labelH = juce::jmax(18, col.getHeight() / 8);
+        kEddySlider.label.setBounds(col.removeFromTop(labelH));
+        kEddySlider.slider.setBounds(col);
+    }
+
+    {
+        auto col = dynRow.removeFromLeft(dynKnobW);
+        int labelH = juce::jmax(18, col.getHeight() / 8);
+        kExcessSlider.label.setBounds(col.removeFromTop(labelH));
+        kExcessSlider.slider.setBounds(col);
+    }
+
+    // Oversampling combo in remaining space
+    {
+        auto comboArea = dynRow.reduced(4, 4);
         int labelH = juce::jmin(22, comboArea.getHeight() / 2);
         osLabel.setBounds(comboArea.removeFromTop(labelH));
         osCombo.setBounds(comboArea.reduced(comboArea.getWidth() / 6, 2));

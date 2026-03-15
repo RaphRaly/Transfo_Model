@@ -4,6 +4,7 @@
 #include "Core/HysteresisProcessor.h"
 #include "DSP/Oversampling.h"
 #include "DSP/DCBlocker.h"
+#include "../../core/include/core/magnetics/DynamicLosses.h"
 
 // =============================================================================
 // PluginProcessor — JUCE AudioProcessor for the Phase 1 "Hysteresis Lab" plugin.
@@ -57,6 +58,7 @@ private:
     static constexpr int maxChannels = 2;
     HysteresisProcessor hysteresis[maxChannels];
     DCBlocker           dcBlocker[maxChannels];
+    transfo::DynamicLosses dynamicLosses[maxChannels];
     OversamplingWrapper oversampling;
 
     // Cached parameter values
@@ -68,6 +70,8 @@ private:
     std::atomic<float>* cParam           = nullptr;
     std::atomic<float>* alphaParam       = nullptr;
     std::atomic<float>* osOrderParam     = nullptr;
+    std::atomic<float>* kEddyParam     = nullptr;
+    std::atomic<float>* kExcessParam   = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };

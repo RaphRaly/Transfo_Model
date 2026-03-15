@@ -13,6 +13,8 @@ static const juce::String ID_K            = "k";
 static const juce::String ID_C            = "c";
 static const juce::String ID_ALPHA        = "alpha";
 static const juce::String ID_OS_ORDER     = "osOrder";
+static const juce::String ID_K_EDDY      = "kEddy";
+static const juce::String ID_K_EXCESS    = "kExcess";
 
 // =============================================================================
 // Parameter layout
@@ -92,6 +94,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
         2   // Default: 8x (index 2)
     ));
 
+    // K_eddy — Classical eddy current loss coefficient (Bertotti)
+    // K1 = d^2 / (12 * rho), typical 0–0.05 for audio transformers
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID(ID_K_EDDY, 1),
+        "Eddy Loss (K1)",
+        juce::NormalisableRange<float>(0.0f, 0.05f, 0.0001f, 0.4f),
+        0.0f
+    ));
+
+    // K_excess — Excess (anomalous) loss coefficient (Bertotti)
+    // Empirical parameter, typical 0–0.20
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID(ID_K_EXCESS, 1),
+        "Excess Loss (K2)",
+        juce::NormalisableRange<float>(0.0f, 0.20f, 0.001f, 0.5f),
+        0.0f
+    ));
+
     return { params.begin(), params.end() };
 }
 
@@ -113,6 +133,8 @@ PluginProcessor::PluginProcessor()
     cParam           = apvts.getRawParameterValue(ID_C);
     alphaParam       = apvts.getRawParameterValue(ID_ALPHA);
     osOrderParam     = apvts.getRawParameterValue(ID_OS_ORDER);
+    kEddyParam       = apvts.getRawParameterValue(ID_K_EDDY);
+    kExcessParam     = apvts.getRawParameterValue(ID_K_EXCESS);
 }
 
 PluginProcessor::~PluginProcessor() = default;
@@ -136,6 +158,8 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         hysteresis[ch].prepare(osRate);
         dcBlocker[ch].prepare(osRate);
         dcBlocker[ch].reset();
+        dynamicLosses[ch].setSampleRate(osRate);
+        dynamicLosses[ch].reset();
     }
 
     // Report latency from oversampling filters
@@ -184,6 +208,8 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const double k_val = static_cast<double>(kParam->load());
     const double c_val = static_cast<double>(cParam->load());
     const double alpha = static_cast<double>(alphaParam->load());
+    const float kEddy   = kEddyParam->load();
+    const float kExcess = kExcessParam->load();
 
     // Update J-A parameters for all channels
     for (int ch = 0; ch < numChannels && ch < maxChannels; ++ch)
@@ -193,6 +219,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         hysteresis[ch].setK(k_val);
         hysteresis[ch].setC(c_val);
         hysteresis[ch].setAlpha(alpha);
+        dynamicLosses[ch].setCoefficients(kEddy, kExcess);
     }
 
     // ── 1. Apply input gain ──
@@ -216,6 +243,16 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
             // Hysteresis (J-A with NR8 solver)
             sample = hysteresis[ch].process(sample);
+
+            // Bertotti dynamic losses: widen B-H loop at high frequencies
+            if (dynamicLosses[ch].isEnabled())
+            {
+                double B_approx = sample;
+                double dBdt = dynamicLosses[ch].computeBilinearDBdt(B_approx);
+                double Hdyn = dynamicLosses[ch].computeHfromDBdt(dBdt);
+                sample -= Hdyn * 0.001;
+                dynamicLosses[ch].commitState(B_approx);
+            }
 
             // DC blocker (remove offset from asymmetric hysteresis)
             sample = dcBlocker[ch].process(sample);
