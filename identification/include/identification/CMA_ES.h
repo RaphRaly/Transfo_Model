@@ -98,7 +98,7 @@ public:
         cancelRequested_.store(false);
         auto tStart = std::chrono::steady_clock::now();
 
-        const int N = JAParameterSet::kNumOptParams;  // Dimension = 5
+        const int N = JAParameterSet::kNumOptParams;  // Dimension = 7 (5 static + K1/K2)
 
         // --- Initialize random generator ---
         std::mt19937 rng(seed_ != 0 ? seed_ : std::random_device{}());
@@ -143,11 +143,11 @@ public:
 
         // --- Initialize state ---
         // Mean (in optimization space)
-        std::array<float, 5> mean;
+        std::array<float, JAParameterSet::kNumOptParams> mean;
         if (logReparametrize_)
             mean = initialGuess.toLogSpace();
         else
-            mean = {initialGuess.Ms, initialGuess.a, initialGuess.k, initialGuess.alpha, initialGuess.c};
+            mean = {initialGuess.Ms, initialGuess.a, initialGuess.k, initialGuess.alpha, initialGuess.c, initialGuess.K1, initialGuess.K2};
 
         float sigma = sigma0_;
 
@@ -169,7 +169,7 @@ public:
         std::vector<float> ps(static_cast<size_t>(N), 0.0f);  // Step-size path
 
         // --- Population storage ---
-        std::vector<std::array<float, 5>> population(static_cast<size_t>(lambda));
+        std::vector<std::array<float, JAParameterSet::kNumOptParams>> population(static_cast<size_t>(lambda));
         std::vector<float> fitness(static_cast<size_t>(lambda));
         std::vector<int> ranking(static_cast<size_t>(lambda));
 
@@ -200,7 +200,7 @@ public:
             for (int i = 0; i < lambda; ++i)
             {
                 // z ~ N(0, I)
-                std::array<float, 5> z;
+                std::array<float, JAParameterSet::kNumOptParams> z;
                 for (int d = 0; d < N; ++d)
                     z[static_cast<size_t>(d)] = normal(rng);
 
@@ -226,6 +226,11 @@ public:
                     population[static_cast<size_t>(i)][3] = std::clamp(population[static_cast<size_t>(i)][3],
                         std::log(bounds.alpha_min + 1e-10f), std::log(bounds.alpha_max));
                     // c (logit space): no explicit bound clamp needed, sigmoid maps R -> (0,1)
+                    // K1, K2 in log space
+                    population[static_cast<size_t>(i)][5] = std::clamp(population[static_cast<size_t>(i)][5],
+                        std::log(bounds.K1_min + 1e-10f), std::log(bounds.K1_max));
+                    population[static_cast<size_t>(i)][6] = std::clamp(population[static_cast<size_t>(i)][6],
+                        std::log(bounds.K2_min + 1e-10f), std::log(bounds.K2_max));
                 }
                 else
                 {
@@ -239,6 +244,10 @@ public:
                         bounds.alpha_min, bounds.alpha_max);
                     population[static_cast<size_t>(i)][4] = std::clamp(population[static_cast<size_t>(i)][4],
                         bounds.c_min, bounds.c_max);
+                    population[static_cast<size_t>(i)][5] = std::clamp(population[static_cast<size_t>(i)][5],
+                        bounds.K1_min, bounds.K1_max);
+                    population[static_cast<size_t>(i)][6] = std::clamp(population[static_cast<size_t>(i)][6],
+                        bounds.K2_min, bounds.K2_max);
                 }
 
                 // --- Evaluate fitness ---
@@ -272,7 +281,7 @@ public:
             }
 
             // --- Weighted mean of best mu individuals ---
-            std::array<float, 5> oldMean = mean;
+            std::array<float, JAParameterSet::kNumOptParams> oldMean = mean;
             for (int d = 0; d < N; ++d)
             {
                 mean[static_cast<size_t>(d)] = 0.0f;
@@ -459,7 +468,7 @@ private:
     // -----------------------------------------------------------------------
     // decodeParams -- convert optimization-space vector to JAParameterSet.
     // -----------------------------------------------------------------------
-    JAParameterSet decodeParams(const std::array<float, 5>& x) const
+    JAParameterSet decodeParams(const std::array<float, JAParameterSet::kNumOptParams>& x) const
     {
         if (logReparametrize_)
             return JAParameterSet::fromLogSpace(x);
@@ -470,13 +479,15 @@ private:
         p.k     = x[2];
         p.alpha = x[3];
         p.c     = x[4];
+        p.K1    = x[5];
+        p.K2    = x[6];
         return p;
     }
 
     // -----------------------------------------------------------------------
     // computeEigendecomposition -- simplified eigendecomposition of C.
     //
-    // For the 5x5 symmetric covariance matrix, we use the Jacobi
+    // For the NxN symmetric covariance matrix (N=7), we use the Jacobi
     // eigenvalue algorithm (simple, robust, exact for small N).
     //
     // Outputs:
