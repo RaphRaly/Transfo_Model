@@ -19,6 +19,11 @@
 //   K1 = K_eddy = d^2 / (12 * rho)   [s/m]
 //   K2 = K_exc                         [A·m^-1·(T/s)^-0.5]
 //
+// Derivative estimation: backward difference dB/dt = fs * (B[n] - B[n-1]).
+// Stable for all inputs (no Nyquist pole, unlike the bilinear derivative).
+// First-order accurate with a half-sample delay — sufficient for audio
+// frequencies well below Nyquist.
+//
 // HSIM-compatible: supports commit/rollback for iterative WDF solvers.
 //
 // K1 and K2 are identified in Phase 2 of the identification pipeline.
@@ -45,13 +50,11 @@ public:
 
     void setSampleRate(double sampleRate)
     {
-        // Reset state when sample rate changes — stale dBdt at the old rate
+        // Reset state when sample rate changes — stale B_prev at the old rate
         // would produce a transient spike on the first sample.
         if (sampleRate != sampleRate_) {
             B_prev_committed_    = 0.0;
             B_prev_backup_       = 0.0;
-            dBdt_prev_committed_ = 0.0;
-            dBdt_prev_backup_    = 0.0;
         }
         sampleRate_ = sampleRate;
     }
@@ -62,8 +65,6 @@ public:
     {
         B_prev_committed_    = 0.0;
         B_prev_backup_       = 0.0;
-        dBdt_prev_committed_ = 0.0;
-        dBdt_prev_backup_    = 0.0;
     }
 
     // ─── Compute H_dynamic from a pre-computed dB/dt ────────────────────────
@@ -82,38 +83,36 @@ public:
         return H_eddy + H_excess;
     }
 
-    // ─── Bilinear (trapezoidal) derivative — consistent with J-A solver ────
-    // dBdt[n] = 2·fs·(B[n] − B[n−1]) − dBdt[n−1]
+    // ─── Backward difference derivative ─────────────────────────────────────
+    // dBdt[n] = fs · (B[n] − B[n−1])
     //
-    // This is the time-domain form of s = (2/T)·(z−1)/(z+1) from
-    // MIT 6.003 Lecture 15 (bilinear transformation).
-    // Matches the trapezoidal integration in HysteresisModel, preserving
-    // passivity and eliminating the aliasing inherent in backward difference.
-    double computeBilinearDBdt(double B_current) const
+    // First-order accurate with a half-sample delay. Stable for all inputs
+    // (no pole at Nyquist, unlike the bilinear transform s=(2/T)(z-1)/(z+1)
+    // which has a pole at z=-1 causing permanent oscillation after any step).
+    double computeDBdt(double B_current) const
     {
-        return 2.0 * sampleRate_ * (B_current - B_prev_committed_)
-               - dBdt_prev_committed_;
+        return sampleRate_ * (B_current - B_prev_committed_);
     }
 
-    // ─── Compute H_dynamic from B_current (bilinear dB/dt) ──────────────────
-    // Computes dBdt internally using the bilinear derivative.
+    // ─── Compute H_dynamic from B_current (backward difference dB/dt) ──────
+    // Computes dBdt internally using the backward difference derivative.
     double computeHdynamic(double B_current) const
     {
-        const double dBdt = computeBilinearDBdt(B_current);
+        const double dBdt = computeDBdt(B_current);
         return computeHfromDBdt(dBdt);
     }
 
     // ─── NR Jacobian: dH_dynamic / dB ──────────────────────────────────────
     // Used to update the Newton-Raphson Jacobian when solving the combined
     // static + dynamic system. Both terms contribute:
-    //   dH_eddy/dB   = K1 * 2·fs   (bilinear: d(dBdt)/dB = 2·fs)
-    //   dH_excess/dB = K2 * 0.5 * 2·fs / sqrt(|dBdt| + eps)
+    //   dH_eddy/dB   = K1 * fs   (backward diff: d(dBdt)/dB = fs)
+    //   dH_excess/dB = K2 * 0.5 * fs / sqrt(|dBdt| + eps)
     //   Note: d/dx [sign(x)*sqrt(|x|)] = 0.5/sqrt(|x|) for all x != 0
     //         (always positive — the function has the same slope sign on both sides)
     double computeJacobian(double dBdt) const
     {
-        // Bilinear derivative sensitivity: d(dBdt)/dB = 2·sampleRate
-        const double dDBdt_dB = 2.0 * sampleRate_;
+        // Backward difference sensitivity: d(dBdt)/dB = sampleRate
+        const double dDBdt_dB = sampleRate_;
 
         const double dH_eddy_dB = K1_ * dDBdt_dB;
 
@@ -126,26 +125,20 @@ public:
 
     // ─── HSIM state management ─────────────────────────────────────────────
     // commitState: lock in the current B as the new B_prev for next sample.
-    // Also updates the bilinear dBdt state for the next derivative computation.
     void commitState(double B_committed)
     {
-        // Compute bilinear dBdt before overwriting B_prev
-        dBdt_prev_committed_ = 2.0 * sampleRate_ * (B_committed - B_prev_committed_)
-                                - dBdt_prev_committed_;
         B_prev_committed_ = B_committed;
     }
 
     // savePrevState / restorePrevState: snapshot for HSIM rollback.
     void savePrevState()
     {
-        B_prev_backup_    = B_prev_committed_;
-        dBdt_prev_backup_ = dBdt_prev_committed_;
+        B_prev_backup_ = B_prev_committed_;
     }
 
     void restorePrevState()
     {
-        B_prev_committed_    = B_prev_backup_;
-        dBdt_prev_committed_ = dBdt_prev_backup_;
+        B_prev_committed_ = B_prev_backup_;
     }
 
     // ─── Legacy API (backward compatibility with ObjectiveFunction) ─────────
@@ -178,8 +171,6 @@ private:
     // HSIM double-buffered state
     double B_prev_committed_    = 0.0; // B[k-1] confirmed
     double B_prev_backup_       = 0.0; // Snapshot for rollback
-    double dBdt_prev_committed_ = 0.0; // dB/dt[k-1] for bilinear derivative
-    double dBdt_prev_backup_    = 0.0; // Snapshot for rollback
 
     // Epsilon for sqrt(0) safety in the function value.
     // Small enough to not affect the sound at zero crossings.

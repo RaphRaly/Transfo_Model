@@ -248,7 +248,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             if (dynamicLosses[ch].isEnabled())
             {
                 double B_approx = sample;
-                double dBdt = dynamicLosses[ch].computeBilinearDBdt(B_approx);
+                double dBdt = dynamicLosses[ch].computeDBdt(B_approx);
                 double Hdyn = dynamicLosses[ch].computeHfromDBdt(dBdt);
                 sample -= Hdyn * 0.001;
                 dynamicLosses[ch].commitState(B_approx);

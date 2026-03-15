@@ -71,15 +71,19 @@ public:
     const double H_applied = (static_cast<double>(a_m) - alpha2_ * M_c) / alpha1_;
 
     // 2. Dynamic Bertotti extension: estimate dB/dt and compute H_dynamic
-    //    Using predictor: B_pred = mu0*(H_applied + M_committed)
-    //    dBdt = (B_pred - B_prev_committed) * sampleRate
-    //    H_dynamic is subtracted from H_applied before J-A solve,
-    //    so the static model sees a reduced field at high frequencies.
+    //    B_pred = mu0*(H + M_committed) backward diff only captures μ₀·ΔH
+    //    (M cancels). Self-consistent damped χ-scaling restores ΔM:
+    //      dBdt = dBdt_raw * (1+χ) / (1 + K1·fs·μ₀·χ)
+    //    The denominator bounds the correction — mirrors the physical
+    //    self-limiting feedback of eddy currents in the laminations.
     double H_effective = H_applied;
 
     if (dynLosses_.isEnabled()) {
+      const double chi = std::max(0.0, hystModel_.getInstantaneousSusceptibility());
       const double B_pred = kMu0 * (H_applied + M_c);
-      const double dBdt = dynLosses_.computeBilinearDBdt(B_pred);
+      const double dBdt_raw = dynLosses_.computeDBdt(B_pred);
+      const double G = dynLosses_.getK1() * dynLosses_.getSampleRate() * kMu0 * chi;
+      const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
       const double H_dynamic = dynLosses_.computeHfromDBdt(dBdt);
       H_effective = H_applied - H_dynamic;
     }
@@ -122,7 +126,8 @@ public:
   // ─── State management (HSIM interface) ──────────────────────────────────
   void commitState() {
     hystModel_.commitState();
-    // Commit the tentative B as the new B_prev for next sample's dBdt
+    // Commit actual B (B_tentative) — the damped χ-scaling in scatterImpl
+    // handles M-cancellation without needing B_pred commit.
     dynLosses_.commitState(B_tentative_);
   }
 

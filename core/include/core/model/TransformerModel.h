@@ -196,11 +196,14 @@ private:
       const float H_applied = x * hScale_;
       double H_eff = static_cast<double>(H_applied);
 
-      // Bertotti dynamic extension: reduce effective H at high dB/dt
+      // Bertotti dynamic extension: damped χ-scaling for self-consistent dBdt
       if (directDynLosses_.isEnabled()) {
         const double M_c = directHyst_.getMagnetization();
+        const double chi = std::max(0.0, directHyst_.getInstantaneousSusceptibility());
         const double B_pred = kMu0 * (H_eff + M_c);
-        const double dBdt = directDynLosses_.computeBilinearDBdt(B_pred);
+        const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
+        const double G = directDynLosses_.getK1() * directDynLosses_.getSampleRate() * kMu0 * chi;
+        const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
         H_eff -= directDynLosses_.computeHfromDBdt(dBdt);
       }
 
@@ -249,11 +252,14 @@ private:
       const float H_applied = x * hScale_;
       double H_eff = static_cast<double>(H_applied);
 
-      // Bertotti dynamic extension: reduce effective H at high dB/dt
+      // Bertotti dynamic extension: damped χ-scaling for self-consistent dBdt
       if (directDynLosses_.isEnabled()) {
         const double M_c = directHyst_.getMagnetization();
+        const double chi = std::max(0.0, directHyst_.getInstantaneousSusceptibility());
         const double B_pred = kMu0 * (H_eff + M_c);
-        const double dBdt = directDynLosses_.computeBilinearDBdt(B_pred);
+        const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
+        const double G = directDynLosses_.getK1() * directDynLosses_.getSampleRate() * kMu0 * chi;
+        const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
         H_eff -= directDynLosses_.computeHfromDBdt(dBdt);
       }
 
