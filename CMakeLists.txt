@@ -92,6 +92,9 @@ target_sources(TransformerModel
         core/include/core/wdf/DynamicParallelAdaptor.h
         core/include/core/wdf/WDFResonanceFilter.h
         core/include/core/wdf/TransformerCircuitWDF.h
+        core/include/core/wdf/DiodeLeaf.h
+        core/include/core/wdf/BJTCompanionModel.h
+        core/include/core/wdf/BJTLeaf.h
 
         # dsp/ (SIMDMath.h and SmoothedValue.h live in util/ only)
         core/include/core/dsp/ADAAEngine.h
@@ -108,6 +111,12 @@ target_sources(TransformerModel
         core/include/core/model/Presets.h
         core/include/core/model/PresetLoader.h
         core/include/core/model/PresetSerializer.h
+        core/include/core/model/BJTParams.h
+        core/include/core/model/PreampConfig.h
+
+        # preamp/
+        core/include/core/preamp/IAmplifierPath.h
+        core/include/core/preamp/GainTable.h
 
         # ── Identification headers ──
         identification/include/identification/MeasurementData.h

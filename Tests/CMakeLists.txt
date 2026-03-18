@@ -60,6 +60,17 @@ add_executable(test_circuit_model
 )
 target_include_directories(test_circuit_model PRIVATE ${CORE_INCLUDE})
 
+# ── Preamp Sprint 0+1 tests ──────────────────────────────────────────────────
+add_executable(test_diode_leaf
+    test_diode_leaf.cpp
+)
+target_include_directories(test_diode_leaf PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_bjt_leaf
+    test_bjt_leaf.cpp
+)
+target_include_directories(test_bjt_leaf PRIVATE ${CORE_INCLUDE})
+
 # ── CTest registration ───────────────────────────────────────────────────────
 enable_testing()
 add_test(NAME cpwl_adaa              COMMAND test_cpwl_adaa)
@@ -71,3 +82,5 @@ add_test(NAME dynamic_parallel_adaptor COMMAND test_dynamic_parallel_adaptor)
 add_test(NAME lc_resonance            COMMAND test_lc_resonance)
 add_test(NAME nonlinear_lm             COMMAND test_nonlinear_lm)
 add_test(NAME circuit_model            COMMAND test_circuit_model)
+add_test(NAME diode_leaf               COMMAND test_diode_leaf)
+add_test(NAME bjt_leaf                 COMMAND test_bjt_leaf)
