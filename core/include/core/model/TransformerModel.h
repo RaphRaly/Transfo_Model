@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <cmath>
 #include <type_traits>
+#include <vector>
 
 namespace transfo {
 
@@ -80,6 +81,8 @@ public:
     outputGain_.reset(sampleRate, 0.02);
     mix_.reset(sampleRate, 0.02);
     mix_.setCurrentAndTargetValue(1.0f);
+
+    dryBuffer_.resize(maxBlockSize);
 
     bhQueue_.reset();
     bhDownsampleCounter_ = 0;
@@ -182,6 +185,7 @@ private:
 
   SPSCQueue<BHSample, 2048> bhQueue_;
   int bhDownsampleCounter_ = 0;
+  std::vector<float> dryBuffer_;  // Pre-allocated buffer for dry signal (Physical mode)
 
   // ─── Direct J-A processing (bypasses broken HSIM topology) ──────────────
   HysteresisModel<LangevinPade> directHyst_;
@@ -340,12 +344,20 @@ private:
     float *osBuffer = oversampler_.getOversampledBuffer();
     const int osSize = oversampler_.getOversampledSize(numSamples);
 
-    // Upsample
-    oversampler_.upsample(input, numSamples, osBuffer);
+    // Save dry signal for mix (input/output may alias)
+    std::copy(input, input + numSamples, dryBuffer_.begin());
+
+    // Apply input gain at base rate (correct smoothing rate)
+    for (int k = 0; k < numSamples; ++k) {
+      output[k] = dryBuffer_[k] * inputGain_.getNextValue();
+    }
+
+    // Upsample the gained signal
+    oversampler_.upsample(output, numSamples, osBuffer);
 
     // Process at oversampled rate with direct J-A
     for (int k = 0; k < osSize; ++k) {
-      float x = osBuffer[k] * inputGain_.getCurrentValue();
+      float x = osBuffer[k];
 
       float wet;
       if (useWdfCircuit_) {
@@ -431,11 +443,11 @@ private:
     // Downsample
     oversampler_.downsample(osBuffer, osSize, output);
 
-    // Apply output gain and mix
+    // Apply output gain and mix (use saved dry signal, not aliased input)
     for (int k = 0; k < numSamples; ++k) {
       const float gain_out = outputGain_.getNextValue();
       const float mixVal = mix_.getNextValue();
-      output[k] = (input[k] * (1.0f - mixVal) + output[k] * mixVal) * gain_out;
+      output[k] = (dryBuffer_[k] * (1.0f - mixVal) + output[k] * mixVal) * gain_out;
     }
   }
 
