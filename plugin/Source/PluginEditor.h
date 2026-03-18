@@ -57,11 +57,11 @@ private:
   // Main controls
   RotarySlider inputGain_, outputGain_, mix_, svuAmount_;
 
-  // Preset and mode
-  juce::ComboBox presetCombo_, modeCombo_;
-  juce::Label presetLabel_, modeLabel_;
+  // Preset, mode, and circuit topology
+  juce::ComboBox presetCombo_, modeCombo_, circuitCombo_;
+  juce::Label presetLabel_, modeLabel_, circuitLabel_;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
-      presetAttach_, modeAttach_;
+      presetAttach_, modeAttach_, circuitAttach_;
 
   // Monitor display
   juce::Label monitorLabel_;

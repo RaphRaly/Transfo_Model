@@ -18,6 +18,7 @@ PluginProcessor::PluginProcessor()
     presetParam_     = apvts_.getRawParameterValue(ParamID::Preset);
     modeParam_       = apvts_.getRawParameterValue(ParamID::Mode);
     svuParam_        = apvts_.getRawParameterValue(ParamID::SVU);
+    circuitParam_    = apvts_.getRawParameterValue(ParamID::Circuit);
 }
 
 PluginProcessor::~PluginProcessor() = default;
@@ -85,6 +86,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float mix          = mixParam_->load();
     const int   presetIndex  = static_cast<int>(presetParam_->load());
     const int   modeIndex    = static_cast<int>(modeParam_->load());
+    const bool  useWdfCircuit = (static_cast<int>(circuitParam_->load()) == 1);
 
     // Check preset change
     if (presetIndex != lastPresetIndex_)
@@ -103,12 +105,14 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             realtimeModel_[ch].setInputGain(inputGainDb);
             realtimeModel_[ch].setOutputGain(outputGainDb);
             realtimeModel_[ch].setMix(mix);
+            realtimeModel_[ch].setUseWdfCircuit(useWdfCircuit);
         }
         else
         {
             physicalModel_[ch].setInputGain(inputGainDb);
             physicalModel_[ch].setOutputGain(outputGainDb);
             physicalModel_[ch].setMix(mix);
+            physicalModel_[ch].setUseWdfCircuit(useWdfCircuit);
         }
     }
 

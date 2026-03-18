@@ -88,6 +88,10 @@ target_sources(TransformerModel
         core/include/core/wdf/ConvergenceGuard.h
         core/include/core/wdf/HSIMDiagnostics.h
         core/include/core/wdf/HSIMSolver.h
+        core/include/core/wdf/WDFSeriesAdaptor.h
+        core/include/core/wdf/DynamicParallelAdaptor.h
+        core/include/core/wdf/WDFResonanceFilter.h
+        core/include/core/wdf/TransformerCircuitWDF.h
 
         # dsp/ (SIMDMath.h and SmoothedValue.h live in util/ only)
         core/include/core/dsp/ADAAEngine.h
@@ -98,6 +102,8 @@ target_sources(TransformerModel
         core/include/core/model/WindingConfig.h
         core/include/core/model/TransformerConfig.h
         core/include/core/model/TransformerModel.h
+        core/include/core/model/TransformerGeometry.h
+        core/include/core/model/LCResonanceParams.h
         core/include/core/model/ToleranceModel.h
         core/include/core/model/Presets.h
         core/include/core/model/PresetLoader.h

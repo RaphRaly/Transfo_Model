@@ -43,10 +43,15 @@ public:
   JilesAthertonLeaf() = default;
 
   // ─── Configuration ──────────────────────────────────────────────────────
+  /// Configure with core geometry and optional K_geo for WDF circuit use.
+  /// When K_geo > 0, port impedance and scattering use electrical-domain
+  /// formulas: Z = 2*K_geo*mu_inc*fs, correct for referred-to-primary WDF.
+  /// When K_geo <= 0 (default), uses legacy magnetic-domain formulas.
   void configure(float Gamma, float Lambda, const JAParameterSet &params,
-                 double sampleRate) {
+                 double sampleRate, float K_geo = 0.0f) {
     Gamma_ = Gamma;
     Lambda_ = Lambda;
+    K_geo_ = K_geo;
     sampleRate_ = sampleRate;
     hystModel_.setParameters(params);
     hystModel_.setSampleRate(sampleRate);
@@ -65,17 +70,29 @@ public:
 
   // ─── WDF scattering (called by WDOnePort CRTP) ─────────────────────────
   float scatterImpl(float a_m) {
-    // 1. Convert wave variable to magnetic field H (applied by circuit)
-    //    H = (a_m - alpha2_ * M_committed) / alpha1_
     const double M_c = hystModel_.getMagnetization();
-    const double H_applied = (static_cast<double>(a_m) - alpha2_ * M_c) / alpha1_;
+    const double Z = static_cast<double>(this->Z_port_);
+    double H_applied;
 
-    // 2. Dynamic Bertotti extension: estimate dB/dt and compute H_dynamic
-    //    B_pred = mu0*(H + M_committed) backward diff only captures μ₀·ΔH
-    //    (M cancels). Self-consistent damped χ-scaling restores ΔM:
-    //      dBdt = dBdt_raw * (1+χ) / (1 + K1·fs·μ₀·χ)
-    //    The denominator bounds the correction — mirrors the physical
-    //    self-limiting feedback of eddy currents in the laminations.
+    if (K_geo_ > 0.0f) {
+      // Electrical-domain WDF: wave variable a_m is in volts.
+      // I = H * le / N,  V = N * Ae * dB/dt
+      // From WDF: I = (a - b) / (2Z).
+      // For adapted port at the root of an NR solve, we estimate H from
+      // the incident wave using the linearized companion model:
+      //   a ≈ 2*V = 2*Z*I + 2*V_hist ≈ 2*Z*I (ignoring history for the NR)
+      // So: I ≈ a/(2Z), H = N*I/le = N*a/(2*Z*le)
+      // With K_geo = N²*Ae/le → N/le = K_geo/(N*Ae) = sqrt(K_geo/le)/sqrt(Ae)...
+      // Simpler: N² = K_geo*le/Ae → N = sqrt(K_geo*le/Ae)
+      // H = N * (a_m) / (2*Z*le)  [rough linearization for NR warm-start]
+      const double N = std::sqrt(static_cast<double>(K_geo_) * Gamma_ / Lambda_);
+      H_applied = N * static_cast<double>(a_m) / (2.0 * Z * Gamma_);
+    } else {
+      // Legacy magnetic-domain: H = (a_m - alpha2*M) / alpha1
+      H_applied = (static_cast<double>(a_m) - alpha2_ * M_c) / alpha1_;
+    }
+
+    // 2. Dynamic Bertotti extension
     double H_effective = H_applied;
 
     if (dynLosses_.isEnabled()) {
@@ -88,21 +105,26 @@ public:
       H_effective = H_applied - H_dynamic;
     }
 
-    // 3. Solve J-A: Newton-Raphson trapezoidal (using effective field)
-    //    Warm-start handled internally by HysteresisModel::solveImplicitStep
+    // 3. Solve J-A: Newton-Raphson trapezoidal
     const double M_new = hystModel_.solveImplicitStep(H_effective);
 
-    // 4. Compute reflected wave b_m from scattering equation
-    //    b_m = a_m - 2 * Z_m * I_m
-    //    where I_m is the magnetic current (flux rate)
-    //    I_m = Lambda * mu0 * dM  (simplified for WDF)
+    // 4. Compute reflected wave b_m
     const double dM = M_new - M_c;
-    const double b_m = static_cast<double>(a_m) -
-                       2.0 * static_cast<double>(this->Z_port_) * Lambda_ *
-                           kMu0 * dM / (Gamma_ + kEpsilonD);
+    double b_m;
 
-    // 5. Store physical state for BHScope monitoring and dynamic losses
-    //    B uses the total applied H (not H_effective) per B = mu0*(H + M)
+    if (K_geo_ > 0.0f) {
+      // Electrical-domain: b = a - 2*Z*I where I = H*le/N
+      const double N = std::sqrt(static_cast<double>(K_geo_) * Gamma_ / Lambda_);
+      const double H_new = H_effective; // Use effective H for current I
+      const double I_m = H_new * Gamma_ / N;
+      b_m = static_cast<double>(a_m) - 2.0 * Z * I_m;
+    } else {
+      // Legacy magnetic-domain
+      b_m = static_cast<double>(a_m) -
+            2.0 * Z * Lambda_ * kMu0 * dM / (Gamma_ + kEpsilonD);
+    }
+
+    // 5. Store physical state for BHScope monitoring
     lastH_ = static_cast<float>(H_applied);
     B_tentative_ = kMu0 * (H_applied + M_new);
     lastB_ = static_cast<float>(B_tentative_);
@@ -112,12 +134,20 @@ public:
 
   // ─── Adaptive port resistance ───────────────────────────────────────────
   float getPortResistanceImpl() const {
-    // Z_m = Gamma / (Lambda * mu0 * (1 + dM/dH))
     const double dMdH = hystModel_.getInstantaneousSusceptibility();
     const double suscept = 1.0 + dMdH;
 
+    if (K_geo_ > 0.0f) {
+      // Electrical-domain: Z = 2 * Lm * fs = 2 * K_geo * mu0 * (1+χ) * fs
+      const double mu_inc = kMu0 * std::max(suscept, kEpsilonD);
+      const double Lm = K_geo_ * mu_inc;
+      const double Z_e = 2.0 * Lm * sampleRate_;
+      return static_cast<float>(std::clamp(Z_e, 1.0, 1e12));
+    }
+
+    // Legacy magnetic-domain: Z_m = Gamma / (Lambda * mu0 * (1 + dM/dH))
     if (std::abs(suscept) < kEpsilonD)
-      return static_cast<float>(Gamma_ / (Lambda_ * kMu0 * 1.0)); // fallback
+      return static_cast<float>(Gamma_ / (Lambda_ * kMu0 * 1.0));
 
     const double Z_m = Gamma_ / (Lambda_ * kMu0 * suscept);
     return static_cast<float>(std::clamp(Z_m, 1e-3, 1e12));

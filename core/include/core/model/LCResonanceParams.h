@@ -31,7 +31,7 @@ namespace transfo {
 struct LCResonanceParams
 {
     // ── Parasitic reactances ─────────────────────────────────────────────────
-    float Lleak = 1e-3f;       // Leakage inductance [H]
+    float Lleak = 5e-3f;       // Leakage inductance [H] (Jensen: 5 mH, to be fitted vs FR)
     float Cw    = 50e-12f;     // Winding capacitance (turn-to-turn + layer) [F]
     float Cp_s  = 10e-12f;     // Inter-winding capacitance (primary-secondary) [F]
     float CL    = 0.0f;        // Load / cable capacitance [F]

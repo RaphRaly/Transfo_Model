@@ -7,7 +7,7 @@
 // leakage inductance for a transformer winding configuration.
 //
 // Jensen JT-115K-E reference (from datasheet):
-//   Ratio: 1:10, Rdc_pri=19.7Ω, Rdc_sec=2465Ω, C_sec_shield=205pF
+//   Ratio: 1:10, Rdc_pri=19.7Ω, Rdc_sec=2465Ω, C_sec_shield=205pF, C_pri_shield=475pF
 //   Source: 150Ω, Load: 150kΩ (secondary)
 //   Lp~10H (derived from fc~2.5Hz), BW~140kHz
 // =============================================================================
@@ -27,10 +27,11 @@ struct WindingConfig
     // ── Parasitic Capacitances ──────────────────────────────────────────────
     float C_sec_shield      = 205e-12f; // Secondary-to-shield capacitance [F]
     float C_interwinding    = 10e-12f;  // Interwinding capacitance [F] (to be fitted)
+    float C_pri_shield     = 475e-12f; // Primary-to-shield capacitance [F] (JT-115K-E datasheet)
 
     // ── Inductances ─────────────────────────────────────────────────────────
     float Lp_primary    = 10.0f;     // Primary magnetizing inductance [H]
-    float L_leakage     = 1e-3f;     // Leakage inductance [H] (to be fitted on FR)
+    float L_leakage     = 5e-3f;     // Leakage inductance [H] (harmonized with LCResonanceParams)
 
     // ── Source/Load impedances ──────────────────────────────────────────────
     float sourceImpedance = 150.0f;      // Nominal source [Ohm] (winding/circuit R, not plate)
@@ -65,7 +66,8 @@ struct WindingConfig
         w.turnsRatio_N1 = 1; w.turnsRatio_N2 = 10;
         w.Rdc_primary = 19.7f; w.Rdc_secondary = 2465.0f;
         w.C_sec_shield = 205e-12f; w.C_interwinding = 10e-12f;
-        w.Lp_primary = 10.0f; w.L_leakage = 1e-3f;
+        w.C_pri_shield = 475e-12f;
+        w.Lp_primary = 10.0f; w.L_leakage = 5e-3f;
         w.sourceImpedance = 150.0f; w.loadImpedance = 150000.0f;
         w.hasFaradayShield = true;  // Jensen: shielded
         return w;

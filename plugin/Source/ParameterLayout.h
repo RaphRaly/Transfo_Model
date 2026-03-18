@@ -20,6 +20,7 @@ namespace ParamID
     static const juce::String Preset        = "preset";
     static const juce::String Mode          = "mode";        // Physical / Realtime
     static const juce::String SVU            = "svu";         // Stereo Variation Units
+    static const juce::String Circuit        = "circuit";     // Legacy Cascade / WDF Circuit
 }
 
 // ─── Create parameter layout ────────────────────────────────────────────────
@@ -61,6 +62,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::ParameterID(ParamID::SVU, 1), "SVU",
         juce::NormalisableRange<float>(0.0f, 5.0f, 0.1f), 2.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Circuit topology: Legacy Cascade (HP→J-A→LC) or WDF Circuit (Test Circuit 1)
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID(ParamID::Circuit, 1), "Circuit",
+        juce::StringArray{"Legacy (Cascade)", "WDF Circuit"},
+        0));
 
     return { params.begin(), params.end() };
 }

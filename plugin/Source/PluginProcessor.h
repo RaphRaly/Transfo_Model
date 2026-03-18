@@ -86,6 +86,7 @@ private:
   std::atomic<float> *presetParam_ = nullptr;
   std::atomic<float> *modeParam_ = nullptr;
   std::atomic<float> *svuParam_ = nullptr;
+  std::atomic<float> *circuitParam_ = nullptr;
 
   int lastPresetIndex_ = -1;
 

@@ -185,6 +185,18 @@ PluginEditor::PluginEditor(PluginProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Mode, modeCombo_);
 
+  // ── Circuit combo ──
+  circuitLabel_.setText("Circuit", juce::dontSendNotification);
+  circuitLabel_.setJustificationType(juce::Justification::centred);
+  circuitLabel_.setFont(juce::Font(13.0f));
+  addAndMakeVisible(circuitLabel_);
+
+  circuitCombo_.addItemList({"Legacy (Cascade)", "WDF Circuit"}, 1);
+  addAndMakeVisible(circuitCombo_);
+  circuitAttach_ =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processorRef_.getAPVTS(), ParamID::Circuit, circuitCombo_);
+
   // ── Monitor label ──
   monitorLabel_.setFont(juce::Font(12.0f));
   monitorLabel_.setColour(juce::Label::textColourId,
@@ -346,10 +358,11 @@ void PluginEditor::resized() {
   auto settingsInner = botRow.reduced(pad);
   settingsInner.removeFromTop(sectionTitleH);
 
-  // Preset combo (left half)
-  auto leftHalf = settingsInner.removeFromLeft(settingsInner.getWidth() / 2);
+  const int colW = settingsInner.getWidth() / 3;
+
+  // Preset combo (left third)
   {
-    auto presetArea = leftHalf.reduced(4, 0);
+    auto presetArea = settingsInner.removeFromLeft(colW).reduced(4, 0);
     int labelH = juce::jmin(20, presetArea.getHeight() / 2);
     presetLabel_.setBounds(presetArea.removeFromTop(labelH));
     presetCombo_.setBounds(
@@ -357,13 +370,23 @@ void PluginEditor::resized() {
             .reduced(0, 2));
   }
 
-  // Mode combo (right half)
+  // Mode combo (center third)
   {
-    auto modeArea = settingsInner.reduced(4, 0);
+    auto modeArea = settingsInner.removeFromLeft(colW).reduced(4, 0);
     int labelH = juce::jmin(20, modeArea.getHeight() / 2);
     modeLabel_.setBounds(modeArea.removeFromTop(labelH));
     modeCombo_.setBounds(
         modeArea.removeFromTop(juce::jmin(28, modeArea.getHeight()))
+            .reduced(0, 2));
+  }
+
+  // Circuit combo (right third)
+  {
+    auto circuitArea = settingsInner.reduced(4, 0);
+    int labelH = juce::jmin(20, circuitArea.getHeight() / 2);
+    circuitLabel_.setBounds(circuitArea.removeFromTop(labelH));
+    circuitCombo_.setBounds(
+        circuitArea.removeFromTop(juce::jmin(28, circuitArea.getHeight()))
             .reduced(0, 2));
   }
 

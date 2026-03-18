@@ -14,6 +14,7 @@
 // Reference: Fettweis "Wave Digital Filters: Theory and Practice" 1986
 // =============================================================================
 
+#include <algorithm>
 #include <cmath>
 #include "../util/Constants.h"
 

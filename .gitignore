@@ -19,6 +19,7 @@ _deps/
 # ─── Test output ──────────────────────────────────────────────────────────────
 Tests/build/
 Tests/build_local/
+build_test/
 Tests/*.csv
 Tests/adaa_out.txt
 Tests/passivity_out.txt

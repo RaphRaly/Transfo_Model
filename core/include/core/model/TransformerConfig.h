@@ -25,6 +25,21 @@ struct TransformerConfig
     WindingConfig       windings;
     JAParameterSet      material;
     float               loadImpedance = 150000.0f;  // Secondary load [Ohm]
+
+    // ── Impedance reflection helpers (referred to primary) ──────────────
+    float Rdc_sec_reflected() const {
+        float n = windings.turnsRatio();
+        return windings.Rdc_secondary / (n * n);
+    }
+    float Rload_reflected() const {
+        float n = windings.turnsRatio();
+        return loadImpedance / (n * n);
+    }
+    float C_sec_reflected() const {
+        float n = windings.turnsRatio();
+        return windings.C_sec_shield * (n * n);
+    }
+
     TransformerGeometry geometry;                     // K_geo for nonlinear Lm [v4]
     LCResonanceParams   lcParams;                    // LC parasitic resonance [v4]
 

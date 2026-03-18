@@ -74,6 +74,11 @@ public:
         return b;
     }
 
+    /// Return reflected wave from current state WITHOUT updating state.
+    /// Use this in split up/down WDF traversals where getReflectedWave()
+    /// would return a stale value (computed from state two samples ago).
+    float getReflectedWaveFromState() const { return state_; }
+
     float getPortResistanceImpl() const { return Z_port_; }
 
     void reset() { state_ = 0.0f; }
@@ -113,6 +118,10 @@ public:
         state_ = a;
         return b;
     }
+
+    /// Return reflected wave from current state WITHOUT updating state.
+    /// For inductor: b = -state_ = -a[n-1]. Use in split up/down WDF traversals.
+    float getReflectedWaveFromState() const { return -state_; }
 
     float getPortResistanceImpl() const { return Z_port_; }
 
