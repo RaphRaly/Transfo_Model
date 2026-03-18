@@ -3,14 +3,14 @@
 // =============================================================================
 // Presets — Factory presets + dynamic user presets for audio transformers.
 //
-// The 1 factory preset (index 0) is always available and immutable.
+// The 2 factory presets (indices 0-1) are always available and immutable.
 // User presets loaded from JSON files are appended after the factory preset.
 //
 // Usage:
 //   PresetManager mgr;
 //   mgr.loadFromDirectory("data/transformers/");
-//   int total = mgr.getPresetCount();       // 1 + loaded
-//   auto cfg  = mgr.getByIndex(1);          // user preset
+//   int total = mgr.getPresetCount();       // 2 + loaded
+//   auto cfg  = mgr.getByIndex(2);          // first user preset
 //   mgr.addPreset(myConfig);                // add at runtime
 //   mgr.removePreset(1);                    // remove user preset (not factory)
 // =============================================================================
@@ -29,8 +29,9 @@ namespace transfo {
 namespace Presets
 {
     inline TransformerConfig Jensen_JT115KE()           { return TransformerConfig::Jensen_JT115KE(); }
+    inline TransformerConfig Jensen_JT11ELCF()          { return TransformerConfig::Jensen_JT11ELCF(); }
 
-    constexpr int kFactoryCount = 1;
+    constexpr int kFactoryCount = 2;
 
     inline int count() { return kFactoryCount; }
 
@@ -38,7 +39,8 @@ namespace Presets
     {
         switch (index)
         {
-            case 0:
+            case 0:  return Jensen_JT115KE();
+            case 1:  return Jensen_JT11ELCF();
             default: return Jensen_JT115KE();
         }
     }
@@ -48,6 +50,7 @@ namespace Presets
         switch (index)
         {
             case 0:  return "Jensen JT-115K-E";
+            case 1:  return "Jensen JT-11ELCF";
             default: return "Unknown";
         }
     }

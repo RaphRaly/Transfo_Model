@@ -112,7 +112,7 @@ struct JAParameterSet {
               0.01f,  0.05f}; // K2
 
     case MaterialFamily::NiFe_50:
-      return {6.0e5f, 9.0e5f, // Ms
+      return {8.0e5f, 1.3e6f, // Ms (50% NiFe Alloy 2: ~1.0-1.3 T saturation)
               20.0f,  200.0f, // a
               50.0f,  500.0f, // k
               5e-6f,  5e-4f,  // alpha (capped to avoid origin instability)
@@ -172,11 +172,11 @@ struct JAParameterSet {
   }
 
   static JAParameterSet defaultNiFe50() {
-    // Ms=7.5e5, alpha=1e-4 → alpha*Ms=75. k=500 >> 75 (stable).
-    // chi0_raw = c*Ms/(3*a) = 0.7*7.5e5/240 = 2187.5
-    // alpha*chi0_raw = 1e-4*2187.5 = 0.22 < 1 (stable origin).
+    // Ms=1.05e6, alpha=1e-4 → alpha*Ms=105. k=500 >> 105 (stable).
+    // chi0_raw = c*Ms/(3*a) = 0.7*1.05e6/240 = 3062.5
+    // alpha*chi0_raw = 1e-4*3062.5 = 0.31 < 1 (stable origin).
     // K1 = d²/(12ρ) = (0.15mm)²/(12×46μΩ·cm) = 4.08e-3  [d=0.15mm, ρ=46μΩ·cm]
-    return {7.5e5f, 80.0f, 1e-4f, 500.0f, 0.70f, 4.08e-3f, 0.06f};
+    return {1.05e6f, 80.0f, 1e-4f, 500.0f, 0.70f, 4.08e-3f, 0.06f};
   }
 
   static JAParameterSet defaultSiFe() {
@@ -207,6 +207,21 @@ struct JAParameterSet {
     // Fixed: alpha=1e-5, alpha*Ms = 11 < k=45 (stable)
     // K1 = d²/(12ρ) = (0.30mm)²/(12×47μΩ·cm) = 1.60e-2
     return {1.1e6f, 180.0f, 1e-5f, 45.0f, 0.25f, 1.60e-2f, 0.12f};
+  }
+
+  static JAParameterSet output50NiFe() {
+    // Jensen JT-11ELCF — 50% NiFe (ASTM A753 Alloy 2) line output
+    // Datasheet: "50% nickel core alloy" (NOT 80% mu-metal)
+    // 50% NiFe has HIGHER Ms (~1.15e6) than 80% NiFe (~5.5e5),
+    // higher coercivity, and lower reversibility.
+    // THD targets: <0.001% @ 1kHz/+4dBu, 0.028% @ 20Hz/+4dBu
+    //
+    // Ms=1.15e6 (50% NiFe typical: 1.0-1.3 T → 8e5-1.03e6 A/m; Alloy 2 ~1.15e6)
+    // a=55 (wide linear knee for low THD at +4dBu)
+    // alpha=1e-4, alpha*Ms=115, k=150 > 115 (stable, ~30% margin)
+    // c=0.70, alpha*chi0 = 1e-4 * 0.70*1.15e6/(3*55) = 0.49 < 1 (origin stable)
+    // K1 = d²/(12ρ) = (0.15mm)²/(12×46μΩ·cm) = 4.08e-3  [NiFe_50 lamination]
+    return {1.15e6f, 55.0f, 1e-4f, 150.0f, 0.70f, 4.08e-3f, 0.06f};
   }
 };
 

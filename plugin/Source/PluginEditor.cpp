@@ -166,7 +166,7 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   addAndMakeVisible(presetLabel_);
 
   presetCombo_.addItemList(
-      {"Jensen JT-115K-E"},
+      {"Jensen JT-115K-E", "Jensen JT-11ELCF"},
       1);
   addAndMakeVisible(presetCombo_);
   presetAttach_ =

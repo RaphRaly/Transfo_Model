@@ -48,7 +48,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     // Transformer Preset
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Preset, 1), "Transformer",
-        juce::StringArray{"Jensen JT-115K-E"},
+        juce::StringArray{"Jensen JT-115K-E", "Jensen JT-11ELCF"},
         0));
 
     // Processing Mode

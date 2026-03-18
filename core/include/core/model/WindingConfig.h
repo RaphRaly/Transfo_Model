@@ -72,6 +72,25 @@ struct WindingConfig
         w.hasFaradayShield = true;  // Jensen: shielded
         return w;
     }
+
+    static WindingConfig jensenJT11ELCF()
+    {
+        // Jensen JT-11ELCF: 1:1 bifilar line output transformer (datasheet)
+        // Rdc=40 Ohm/winding, Cw=22nF (winding-to-winding), 50pF to frame
+        // BW: 0.18 Hz - 15 MHz (Rs=0), Insertion loss: -1.1 dB @ 600 Ohm
+        WindingConfig w;
+        w.turnsRatio_N1 = 1; w.turnsRatio_N2 = 1;
+        w.Rdc_primary = 40.0f; w.Rdc_secondary = 40.0f;
+        w.C_sec_shield = 50e-12f;      // 50 pF windings-to-frame (datasheet)
+        w.C_interwinding = 22e-9f;     // 22 nF winding-to-winding (bifilar)
+        w.C_pri_shield = 50e-12f;      // symmetric for 1:1
+        w.Lp_primary = 33.0f;          // ~33 H (from f_3dB=0.18Hz: Lp=Rdc/(2*pi*f)=40/(2*pi*0.18))
+        w.L_leakage = 2e-6f;           // 2 uH (bifilar → very low leakage)
+        w.sourceImpedance = 10.0f;     // low-Z buffer driving the transformer
+        w.loadImpedance = 600.0f;      // standard line load
+        w.hasFaradayShield = false;    // bifilar winding, no separate shield
+        return w;
+    }
 };
 
 } // namespace transfo

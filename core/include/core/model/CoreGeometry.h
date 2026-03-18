@@ -48,6 +48,19 @@ struct CoreGeometry
         return g;
     }
 
+    static CoreGeometry jensenJT11ELCF()
+    {
+        // Jensen JT-11ELCF: 50% NiFe EI core, ungapped, 1:1 line output
+        // Physical: ~43mm x 29mm x 28mm (datasheet drawing)
+        // Lambda ~3.8e-4 m² estimated from core window and stack height
+        // (larger effective area than JT-115K-E due to output level requirements)
+        CoreGeometry g;
+        g.Gamma_center = 0.035f; g.Gamma_outer = 0.055f; g.Gamma_yoke = 0.042f;
+        g.Lambda_center = 3.8e-4f; g.Lambda_outer = 3.8e-4f; g.Lambda_yoke = 3.8e-4f;
+        g.airGapLength = 0.0f;
+        return g;
+    }
+
     // ── Compute K_geo from this geometry and a given primary turns count ─────
     // K_geo = N^2 * A_eff / l_eff
     float computeKgeo(int N_primary) const

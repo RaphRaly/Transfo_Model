@@ -4,7 +4,9 @@
 // TransformerConfig — Complete transformer configuration combining core,
 // windings, material, and load parameters.
 //
-// Provides factory method for the Jensen JT-115K-E (1:10, mu-metal, line input).
+// Provides factory methods for:
+//   - Jensen JT-115K-E (1:10, 80% NiFe mu-metal, line input)
+//   - Jensen JT-11ELCF (1:1, 50% NiFe, line output)
 //
 // Serializable to/from JSON for preset management.
 // =============================================================================
@@ -64,6 +66,32 @@ struct TransformerConfig
         cfg.lcParams.CL    = 0.0f;
         cfg.lcParams.Rz    = 4700.0f;       // 4.7 kΩ Zobel
         cfg.lcParams.Cz    = 220e-12f;      // 220 pF Zobel
+        return cfg;
+    }
+
+    // ── Factory: Jensen JT-11ELCF ─────────────────────────────────────────────
+    // Line output transformer. Ratio 1:1 bifilar. 50% NiFe core.
+    // Rdc=40Ω/winding, Cw=22nF, BW=0.18Hz-15MHz, THD<0.001%@1kHz/+4dBu
+    // Drives 600Ω loads to +24dBu @20Hz. Insertion loss: -1.1dB.
+    static TransformerConfig Jensen_JT11ELCF()
+    {
+        TransformerConfig cfg;
+        cfg.name          = "Jensen JT-11ELCF";
+        cfg.core          = CoreGeometry::jensenJT11ELCF();
+        cfg.windings      = WindingConfig::jensenJT11ELCF();
+        cfg.material      = JAParameterSet::output50NiFe();
+        cfg.loadImpedance = 600.0f;     // 600 Ohm line load (secondary)
+        // K_geo = 5300 [m] (fitted): 50% NiFe 1:1 bifilar, high turns count
+        // Produces Lm ~33 H at nominal mu, consistent with f_3dB = 0.18 Hz
+        cfg.geometry.K_geo = 5300.0f;
+        // LC: bifilar → ultra-low leakage (2 uH), high Cw (22 nF)
+        // f_res ~760 kHz (far above audio). No Zobel needed.
+        cfg.lcParams.Lleak = 2.0e-6f;      // 2 uH (bifilar winding)
+        cfg.lcParams.Cw    = 22e-9f;       // 22 nF (datasheet: winding-to-winding)
+        cfg.lcParams.Cp_s  = 50e-12f;      // 50 pF (datasheet: windings-to-frame)
+        cfg.lcParams.CL    = 0.0f;
+        cfg.lcParams.Rz    = 0.0f;         // No Zobel (f_res >> audio)
+        cfg.lcParams.Cz    = 0.0f;
         return cfg;
     }
 };
