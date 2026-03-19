@@ -108,3 +108,12 @@ add_executable(test_je990_path
 target_include_directories(test_je990_path PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME je990_path                 COMMAND test_je990_path)
+
+# ── Preamp Sprint 5 tests ──────────────────────────────────────────────────
+add_executable(test_output_stage
+    test_output_stage.cpp
+)
+target_include_directories(test_output_stage PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME output_stage                  COMMAND test_output_stage)
+

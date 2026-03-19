@@ -127,6 +127,8 @@ target_sources(TransformerModel
         core/include/core/preamp/ClassABOutputWDF.h
         core/include/core/preamp/LoadIsolator.h
         core/include/core/preamp/JE990Path.h
+        core/include/core/preamp/ABCrossfade.h
+        core/include/core/preamp/OutputStageWDF.h
 
         # ── Identification headers ──
         identification/include/identification/MeasurementData.h

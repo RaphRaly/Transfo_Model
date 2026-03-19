@@ -1,0 +1,198 @@
+#pragma once
+
+// =============================================================================
+// OutputStageWDF — WDF output stage for the dual-topology preamp.
+//
+// Combines the two amplifier paths (Chemin A: Neve, Chemin B: JE-990) via
+// equal-power crossfade and drives the JT-11ELCF output transformer (T2).
+//
+// Signal flow:
+//
+//   Chemin A (Neve)  ──┐
+//                      ├── ABCrossfade ──[ mixed ]── T2 (JT-11ELCF) ── XLR Out
+//   Chemin B (JE-990) ─┘
+//
+// T2 is a 1:1 bifilar Jensen JT-11ELCF:
+//   Rdc = 40 Ohm per winding, BW = 0.18 Hz – 15 MHz
+//   Insertion loss ≈ -1.1 dB, drives 600 Ohm loads to +24 dBu @ 20 Hz
+//   Output impedance: Zout ≈ 80–91 Ohm (dominated by winding resistance)
+//
+// Source impedance handling (S5-4, P1):
+//   The effective source impedance seen by T2 depends on which path is active:
+//     Chemin A (Neve):   Zout_A ≈ 11 Ohm (EF stage + 10 Ohm series)
+//     Chemin B (JE-990): Zout_B ≈ 44 Ohm (ClassAB + 39 Ohm isolator)
+//   During crossfade, Zout_eff = gA^2 * Zout_A + gB^2 * Zout_B (power-weighted).
+//   T2's WDF tree is NOT re-adapted at runtime (too expensive); the source
+//   impedance from config is used at prepare() time.
+//
+// Template parameter: NonlinearLeaf type for T2 (CPWLLeaf for realtime,
+// JilesAthertonLeaf for physical mode).
+//
+// Pattern: Facade over ABCrossfade + TransformerCircuitWDF.
+//
+// Reference: ANALYSE_ET_DESIGN_Rev2.md §5 (Output Stage);
+//            Jensen JT-11ELCF datasheet; AES preamp design notes
+// =============================================================================
+
+#include "ABCrossfade.h"
+#include "../wdf/TransformerCircuitWDF.h"
+#include "../magnetics/CPWLLeaf.h"
+#include "../model/TransformerConfig.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace transfo {
+
+template <typename NonlinearLeaf = CPWLLeaf>
+class OutputStageWDF
+{
+public:
+    OutputStageWDF() = default;
+
+    // ── Preparation ───────────────────────────────────────────────────────────
+
+    /// Initialize the output stage with T2 config.
+    /// @param sampleRate   Host sample rate [Hz]
+    /// @param t2Config     JT-11ELCF transformer configuration
+    /// @param fadeTimeMs   Crossfade duration [ms] (default 5ms)
+    void prepare(float sampleRate, const TransformerConfig& t2Config,
+                 float fadeTimeMs = 5.0f)
+    {
+        sampleRate_ = sampleRate;
+
+        // Prepare crossfade engine
+        crossfade_.prepare(sampleRate, fadeTimeMs);
+
+        // Prepare T2 transformer WDF tree
+        t2_.prepare(static_cast<double>(sampleRate), t2Config);
+        t2_.reset();
+
+        // Cache T2 winding resistance for output impedance calculation
+        Rdc_pri_ = t2Config.windings.Rdc_primary;
+        Rdc_sec_ = t2Config.windings.Rdc_secondary;
+
+        lastOutput_ = 0.0f;
+    }
+
+    /// Clear all reactive element states and the nonlinear leaf.
+    void reset()
+    {
+        crossfade_.reset();
+        t2_.reset();
+        lastOutput_ = 0.0f;
+    }
+
+    // ── Audio processing ──────────────────────────────────────────────────────
+
+    /// Process both path outputs and return the final output voltage.
+    /// @param sampleA  Output voltage from Neve path (Chemin A) [V]
+    /// @param sampleB  Output voltage from JE-990 path (Chemin B) [V]
+    /// @return         Output voltage after T2 [V]
+    float processSample(float sampleA, float sampleB)
+    {
+        // 1. Crossfade between the two paths
+        const float mixed = crossfade_.processSample(sampleA, sampleB);
+
+        // 2. Drive through T2 output transformer
+        const float out = t2_.processSample(mixed);
+
+        // 3. Store for monitoring
+        lastOutput_ = out;
+
+        return out;
+    }
+
+    /// Block-based processing for efficiency.
+    void processBlock(const float* inputA, const float* inputB,
+                      float* output, int numSamples)
+    {
+        for (int i = 0; i < numSamples; ++i)
+            output[i] = processSample(inputA[i], inputB[i]);
+    }
+
+    // ── Path selection ────────────────────────────────────────────────────────
+
+    /// Set target path position. 0 = Neve (Chemin A), 1 = JE-990 (Chemin B).
+    /// Transition is smoothed over the configured fade time.
+    void setPath(float position)
+    {
+        crossfade_.setPosition(position);
+    }
+
+    /// True while crossfading between paths.
+    bool isTransitioning() const
+    {
+        return crossfade_.isTransitioning();
+    }
+
+    // ── Source impedance ──────────────────────────────────────────────────────
+
+    /// Set the output impedances of each amplifier path [Ohm].
+    /// Used for effective source impedance calculation during crossfade.
+    /// Default: Zout_A = 11 Ohm (Neve EF), Zout_B = 44 Ohm (JE-990 isolator).
+    void setPathImpedances(float ZoutA, float ZoutB)
+    {
+        ZoutA_ = ZoutA;
+        ZoutB_ = ZoutB;
+    }
+
+    /// Effective source impedance seen by T2 [Ohm].
+    /// Power-weighted interpolation: Zout_eff = gA^2 * ZoutA + gB^2 * ZoutB.
+    /// At endpoints: pure path impedance. At midpoint: average (equal power).
+    float getEffectiveSourceZ() const
+    {
+        const float gA = crossfade_.getGainA();
+        const float gB = crossfade_.getGainB();
+        return gA * gA * ZoutA_ + gB * gB * ZoutB_;
+    }
+
+    // ── Monitoring ────────────────────────────────────────────────────────────
+
+    /// Magnetizing current from the T2 nonlinear leaf [A].
+    /// Reads Kirchhoff current at the Lm port of the WDF tree.
+    float getT2MagnetizingCurrent() const
+    {
+        return t2_.getNonlinearLeaf().getKirchhoffI();
+    }
+
+    /// Last output sample absolute value [V]. Quick level check.
+    float getOutputLevel() const
+    {
+        return std::fabs(lastOutput_);
+    }
+
+    /// Output impedance [Ohm].
+    /// T2 dominates: Rdc_pri + Rdc_sec = 40 + 40 = 80 Ohm (1:1 bifilar).
+    /// With reflected source impedance and coupling losses: ~80–91 Ohm.
+    float getOutputImpedance() const
+    {
+        return Rdc_pri_ + Rdc_sec_ + getEffectiveSourceZ();
+    }
+
+    /// Current crossfade position (0 = Neve, 1 = JE-990).
+    float getPathPosition() const { return crossfade_.getPosition(); }
+
+    /// Access the underlying T2 TransformerCircuitWDF for advanced diagnostics.
+    const TransformerCircuitWDF<NonlinearLeaf>& getTransformer() const { return t2_; }
+    TransformerCircuitWDF<NonlinearLeaf>& getTransformer() { return t2_; }
+
+private:
+    // ── Components ────────────────────────────────────────────────────────────
+    ABCrossfade                          crossfade_;
+    TransformerCircuitWDF<NonlinearLeaf> t2_;
+
+    // ── Source impedances per path ────────────────────────────────────────────
+    float ZoutA_ = 11.0f;    // Neve EF stage + 10 Ohm series [Ohm]
+    float ZoutB_ = 44.0f;    // JE-990 ClassAB + 39 Ohm isolator [Ohm]
+
+    // ── T2 winding resistance (cached from config) ───────────────────────────
+    float Rdc_pri_ = 40.0f;  // Primary DC resistance [Ohm]
+    float Rdc_sec_ = 40.0f;  // Secondary DC resistance [Ohm]
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    float sampleRate_ = 44100.0f;
+    float lastOutput_ = 0.0f;
+};
+
+} // namespace transfo
