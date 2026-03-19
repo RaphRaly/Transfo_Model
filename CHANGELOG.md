@@ -7,7 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_(Nothing yet.)_
+### Added
+
+- **TWISTERION branding** -- renamed from "Transformer Model" with "Powered by HysteriCore" tagline.
+- **O.D.T Balanced Preamp** (Original Dual Topology) -- dual-transformer preamp engine with two amplifier paths.
+- **Heritage Mode** -- 3-transistor Class-A path (BC184C/BC214C/BD139) with 11-position gain switch (+10 to +50 dB).
+- **Modern Mode** -- 8-transistor discrete op-amp path (LM-394 diff pair, cascode, VAS, Class-AB output) with load isolation.
+- **Preamp controls**: Gain (11-step), Path (Heritage/Modern), Ratio (1:5/1:10), PAD (-20 dB), Phase invert.
+- **InputStageWDF** -- T1 input transformer with phantom power, pad, and impedance ratio selection.
+- **OutputStageWDF** -- T2 output transformer with cos²/sin² crossfade between amplifier paths.
+- **BJTLeaf / BJTCompanionModel** -- Ebers-Moll BJT WDF nonlinear element with companion-source linearisation.
+- **WDF preamp stages**: CEStageWDF, EFStageWDF, DiffPairWDF, CascodeStage, VASStageWDF, ClassABOutputWDF.
+- **GainTable** -- 11-position Grayhill switch emulation for feedback resistor selection.
+- **ABCrossfade** -- smooth equal-power A/B path switching with no transient clicks.
+- **LoadIsolator** -- 39 ohm + 40 uH output impedance network for stability.
+- **DiodeLeaf** -- WDF diode element for bias networks.
+- **DynamicParallelAdaptor** -- multi-way parallel WDF junction.
+- **WDFSeriesAdaptor** -- series junction for feedback topologies.
+- **Space Grotesk font** -- embedded via JUCE binary data for consistent typography.
+- **LevelMeterComponent** -- 30-segment stereo LED bargraph (green/yellow/red).
+- **SSL-inspired dark GUI** -- 4-column channel strip layout (Input | Preamp | Output | Analysis).
+- **Dynamic magnetizing inductance (Lm)** -- primary inductance varies with incremental permeability for load-dependent bass response.
+- **LC parasitic resonance** -- WDFResonanceFilter for interwinding capacitance + leakage inductance peaks.
+- 260+ tests including preamp path validation, gain accuracy, crossfade, and full-chain integration.
+
+### Changed
+
+- Plugin GUI redesigned with 4-column SSL-inspired layout and Space Grotesk typography.
+- Default engine switched from legacy transformer-only to O.D.T Balanced Preamp.
+- Preamp path labels: "Neve" -> "Heritage Mode", "Jensen" -> "Modern".
 
 ## [3.0.0] - 2025-01-15
 
