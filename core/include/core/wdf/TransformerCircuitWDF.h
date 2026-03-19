@@ -294,6 +294,11 @@ public:
         rdcSecRef_.scatter(0.0f);
         rloadRef_.scatter(0.0f);
         cSecRef_.scatter(0.0f);
+
+        // Recalculate root junction scattering to match the fresh Lm port
+        // impedance. Without this, the adaptor retains stale coefficients
+        // from the pre-reset operating point until the first periodic update.
+        updateAdaptation();
     }
 
     // ─── Impedance adaptation ────────────────────────────────────────────────
@@ -351,7 +356,10 @@ private:
             lm_.reset();
         }
         else {
-            // JilesAthertonLeaf: full configure with geometry + material + rate
+            // JilesAthertonLeaf: full configure with geometry + material + rate.
+            // The WDF tree uses magnetic-domain scattering (K_geo = 0).
+            // K_geo > 0 (electrical-domain mode) is for TransformerModel's
+            // legacy cascade HP filter, NOT for the WDF circuit tree.
             lm_.configure(cfg.core.effectiveLength(),
                           cfg.core.effectiveArea(),
                           cfg.material,

@@ -84,3 +84,11 @@ add_test(NAME nonlinear_lm             COMMAND test_nonlinear_lm)
 add_test(NAME circuit_model            COMMAND test_circuit_model)
 add_test(NAME diode_leaf               COMMAND test_diode_leaf)
 add_test(NAME bjt_leaf                 COMMAND test_bjt_leaf)
+
+# ── Preamp Sprint 2 tests ──────────────────────────────────────────────────
+add_executable(test_input_stage
+    test_input_stage.cpp
+)
+target_include_directories(test_input_stage PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME input_stage               COMMAND test_input_stage)

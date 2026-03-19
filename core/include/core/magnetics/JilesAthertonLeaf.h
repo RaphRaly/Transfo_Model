@@ -197,6 +197,7 @@ private:
   float lastH_ = 0.0f;
   float lastB_ = 0.0f;
 
+  float  K_geo_ = 0.0f;       // Geometry scaling factor for electrical-domain WDF [m]
   double Gamma_ = 0.1;        // Magnetic path length [m]
   double Lambda_ = 1e-4;      // Cross-section area [m^2]
   double sampleRate_ = 44100.0;
