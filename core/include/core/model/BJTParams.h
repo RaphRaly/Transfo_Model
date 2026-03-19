@@ -135,26 +135,30 @@ struct BJTParams
     // ── Chemin B: JE-990 DIY (8 transistors, Class-AB) ──────────────────
 
     /// Q1/Q2 — Differential pair input, NPN matched pair
-    /// National LM394: ultra-matched, en < 1 nV/sqrt(Hz)
+    /// National LM394 supermatch — modeled via MAT02 (same die family)
+    /// Source: Analog Devices MAT02 SPICE model (verified equivalent)
+    /// Matching: Vos < 50µV, drift 0.03 µV/°C typ, en ≈ 0.8 nV/√Hz @ 1.6mA
     static BJTParams LM394()
     {
         BJTParams p;
-        p.Is  = 5e-15f;
-        p.Bf  = 500.0f;
-        p.Br  = 2.0f;
+        p.Is  = 2.985e-15f; // MAT02 verified
+        p.Bf  = 254.3f;     // MAT02 verified (not 500 as estimated)
+        p.Br  = 4.424f;     // MAT02 verified
         p.Vt  = 0.02585f;
-        p.Vaf = 200.0f;     // Very high Early voltage (precision)
-        p.Rb  = 40.0f;      // Higher Rb (die-level matching structure)
-        p.Rc  = 1.0f;
-        p.Re  = 0.5f;
-        p.Cje = 10e-12f;
-        p.Cjc = 4e-12f;
+        p.Vaf = 150.0f;     // MAT02 verified (not 200)
+        p.Rb  = 10.56f;     // MAT02 verified (not 40)
+        p.Rc  = 2.295f;     // MAT02 verified
+        p.Re  = 0.3256f;    // MAT02 verified
+        p.Cje = 9.337e-12f; // MAT02 verified
+        p.Cjc = 4.414e-12f; // MAT02 verified
         p.polarity = Polarity::NPN;
         return p;
     }
 
     /// Q3, Q5, Q6 — PNP cascode, current mirror, VAS
-    /// ON Semi 2N4250A: hFE 100-600 (typ 250), low Cob
+    /// ON Semi 2N4250A: hFE ≈250, fT ≈100 MHz, Cob ≈6 pF
+    /// No complete public SPICE model exists — estimates from datasheet.
+    /// TODO(S4): tune Bf, Vaf, Cjc vs JE-990 loop gain (125 dB DC, 10 MHz ft)
     static BJTParams N2N4250A()
     {
         BJTParams p;
@@ -173,26 +177,29 @@ struct BJTParams
     }
 
     /// Q4 — Tail current source, Q7 — Pre-driver, NPN small signal
-    /// ON Semi 2N2484: hFE 100-800 (typ 300), low noise
+    /// ON Semi 2N2484: hFE up to 800, fT ≈ 60-100 MHz
+    /// Source: Q2N2484 PSpice Gummel-Poon model (academic/Motorola)
     static BJTParams N2N2484()
     {
         BJTParams p;
-        p.Is  = 5e-15f;
-        p.Bf  = 300.0f;
-        p.Br  = 3.0f;
+        p.Is  = 5.911e-15f; // Q2N2484 SPICE verified
+        p.Bf  = 697.1f;     // Q2N2484 verified (not 300 as estimated)
+        p.Br  = 1.297f;     // Q2N2484 verified
         p.Vt  = 0.02585f;
-        p.Vaf = 60.0f;
-        p.Rb  = 10.0f;
-        p.Rc  = 1.0f;
-        p.Re  = 0.5f;
-        p.Cje = 8e-12f;
-        p.Cjc = 4e-12f;
+        p.Vaf = 62.37f;     // Q2N2484 verified
+        p.Rb  = 10.0f;      // Q2N2484 verified
+        p.Rc  = 1.61f;      // Q2N2484 verified
+        p.Re  = 0.5f;       // Not in SPICE model, keep estimate
+        p.Cje = 4.973e-12f; // Q2N2484 verified
+        p.Cjc = 4.017e-12f; // Q2N2484 verified
         p.polarity = Polarity::NPN;
         return p;
     }
 
     /// Q8 — Class-AB output top (NPN)
-    /// ON Semi MJE181: NPN power, hFE 20-100 (typ 30), Ic_max=3A
+    /// ON Semi MJE181: TO-126, 3A, 12.5W, hFE ≥30 @ 0.5A, fT ≥50 MHz
+    /// θJC ≈ 10°C/W. No complete public SPICE model.
+    /// TODO(S4): tune vs Hardy specs: +25 dBu into 75Ω, 16-18 V/µs slew
     static BJTParams MJE181()
     {
         BJTParams p;
@@ -211,7 +218,9 @@ struct BJTParams
     }
 
     /// Q9 — Class-AB output bottom (PNP complement)
-    /// ON Semi MJE171: PNP power, hFE 20-100 (typ 30), Ic_max=3A
+    /// ON Semi MJE171: TO-126, 3A, 12.5W, VCEO=60V, complement of MJE181
+    /// θJC ≈ 10°C/W. No complete public SPICE model.
+    /// TODO(S4): tune as matched complement of MJE181
     static BJTParams MJE171()
     {
         BJTParams p;
