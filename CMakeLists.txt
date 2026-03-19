@@ -118,6 +118,9 @@ target_sources(TransformerModel
         core/include/core/preamp/IAmplifierPath.h
         core/include/core/preamp/GainTable.h
         core/include/core/preamp/InputStageWDF.h
+        core/include/core/preamp/CEStageWDF.h
+        core/include/core/preamp/EFStageWDF.h
+        core/include/core/preamp/NeveClassAPath.h
 
         # ── Identification headers ──
         identification/include/identification/MeasurementData.h

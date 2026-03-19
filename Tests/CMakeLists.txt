@@ -92,3 +92,11 @@ add_executable(test_input_stage
 target_include_directories(test_input_stage PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME input_stage               COMMAND test_input_stage)
+
+# ── Preamp Sprint 3 tests ──────────────────────────────────────────────────
+add_executable(test_neve_path
+    test_neve_path.cpp
+)
+target_include_directories(test_neve_path PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME neve_path                  COMMAND test_neve_path)

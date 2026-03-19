@@ -1283,13 +1283,18 @@ At 176.4 kHz                 ~350-500M ops/s/channel
 | Risk | Impact | Probabilite | Mitigation |
 |------|--------|-------------|------------|
 | BJT Newton-Raphson divergence | Audio artifacts | Moyenne | Warm-start, clamping Vbe, ConvergenceGuard |
-| Feedback loop instability | Oscillation | Haute | DC operating point solver, delay-free loop analysis |
+| Feedback loop instability | Oscillation | **CONFIRME** | **Gain analytique Acl=1+Rfb/Rg** (voir LESSONS_WDF_PREAMP.md §2) |
 | JE-990 CPU trop eleve (8 BJT) | Performance | Moyenne | Cascode linearise, adaptation interval >16 samples |
-| Couplage inter-etages en WDF | Imprecision | Moyenne | Validation vs SPICE simulation |
+| Couplage inter-etages en WDF | Imprecision | **CONFIRME** | **Couplage AC + bias independante** (voir LESSONS_WDF_PREAMP.md §7) |
 | LM-394 matching numerique | Drift diff pair | Faible | Double precision pour paire diff |
 | T2 interaction avec Zout variable | Coloration inattendue | Faible | Zout update vers T2 a chaque switch A/B |
-| Classe-A operating point shift | Distorsion erronee | Moyenne | DC solver at init + servo numerique |
+| Classe-A operating point shift | Distorsion erronee | **CONFIRME** | **V_bias auto-calcule + warmup 32 samples** (voir LESSONS_WDF_PREAMP.md §1,4) |
 | Click au changement de gain | Audio artifacts | Moyenne | SmoothedValue sur Rfb, rampe 10ms |
+| Transitoire post-reset | Rail-to-rail ±24V | **CONFIRME** | **Warmup + init filtres a Vc_quiescent** (voir LESSONS_WDF_PREAMP.md §4,5) |
+
+> **Note** : Les risques marques **CONFIRME** ont ete rencontres et resolus
+> pendant le Sprint 3. Voir `docs/LESSONS_WDF_PREAMP.md` pour les details
+> complets et les regles a appliquer aux sprints suivants.
 
 ---
 
