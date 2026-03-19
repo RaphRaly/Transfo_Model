@@ -1,25 +1,33 @@
 #pragma once
 
 // =============================================================================
-// PluginEditor -- v3 polished, resizable GUI for the Transformer Model plugin.
+// PluginEditor -- SSL Channel Strip 2 inspired GUI for Transformer Model.
 // =============================================================================
 
 #include "BHScopeComponent.h"
+#include "LevelMeterComponent.h"
 #include "PluginProcessor.h"
+#include "VUMeterComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // =============================================================================
-// Custom LookAndFeel for modern rotary knobs with colored arcs
+// SSLLookAndFeel — Dark console-style LookAndFeel
 // =============================================================================
 
-class ModernLookAndFeel : public juce::LookAndFeel_V4 {
+class SSLLookAndFeel : public juce::LookAndFeel_V4 {
 public:
-  ModernLookAndFeel();
+  SSLLookAndFeel();
+
+  juce::Typeface::Ptr getTypefaceForFont(const juce::Font &font) override;
 
   void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height,
                         float sliderPos, float rotaryStartAngle,
                         float rotaryEndAngle, juce::Slider &slider) override;
+
+  void drawToggleButton(juce::Graphics &g, juce::ToggleButton &button,
+                        bool shouldDrawButtonAsHighlighted,
+                        bool shouldDrawButtonAsDown) override;
 
   void drawComboBox(juce::Graphics &g, int width, int height, bool isButtonDown,
                     int buttonX, int buttonY, int buttonW, int buttonH,
@@ -27,6 +35,10 @@ public:
 
   void drawPopupMenuBackground(juce::Graphics &g, int width,
                                 int height) override;
+
+private:
+  juce::Typeface::Ptr typefaceRegular_;
+  juce::Typeface::Ptr typefaceBold_;
 };
 
 // =============================================================================
@@ -44,7 +56,7 @@ public:
 
 private:
   PluginProcessor &processorRef_;
-  ModernLookAndFeel modernLnf_;
+  SSLLookAndFeel sslLnf_;
 
   // ─── UI Components ──────────────────────────────────────────────────────
   struct RotarySlider {
@@ -67,14 +79,19 @@ private:
   juce::Label monitorLabel_;
   BHScopeComponent bhScope_;
 
+  // Level meter (footer bar)
+  LevelMeterComponent levelMeter_;
+
   void setupRotary(RotarySlider &rs, const juce::String &paramId,
-                   const juce::String &text, juce::Colour arcCol);
+                   const juce::String &text, juce::Colour pointerCol);
 
-  // Section painting helper
-  void drawSection(juce::Graphics &g, juce::Rectangle<int> bounds,
-                   const juce::String &title);
+  // Section painting helpers
+  void drawSectionHeader(juce::Graphics &g, juce::Rectangle<int> area,
+                         const juce::String &title, juce::Colour accent);
+  void drawHDivider(juce::Graphics &g, int x, int y, int w);
+  void drawVDivider(juce::Graphics &g, int x, int y, int h);
 
-  // ── Preamp controls (Sprint 7) ──────────────────────────────────────────
+  // ── Preamp controls ────────────────────────────────────────────────────
   RotarySlider preampGain_;
 
   juce::ToggleButton preampPad_, preampPhase_;

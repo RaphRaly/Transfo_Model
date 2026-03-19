@@ -1,128 +1,224 @@
 #include "PluginEditor.h"
+#include "BinaryData.h"
 #include "ParameterLayout.h"
 
 using namespace transfo;
 
 // =============================================================================
-// Colour palette
+// SSL-inspired colour palette — dark charcoal console style
 // =============================================================================
-namespace UiColours {
-static const juce::Colour bgTop{0xFF0D0D1A};
-static const juce::Colour bgBottom{0xFF1A1A2E};
-static const juce::Colour panelBg{0xFF16213E};
-static const juce::Colour panelBorder{0xFF2A2A4A};
-static const juce::Colour titleColour{0xFFE0E0FF};
-static const juce::Colour sectionTitle{0xFF8888CC};
-static const juce::Colour labelColour{0xFFBBBBDD};
-static const juce::Colour textBoxBg{0xFF0E0E1E};
-static const juce::Colour textBoxText{0xFFDDDDFF};
+namespace SSL {
+// Background tones
+static const juce::Colour bgDark      {0xFF1A1A1E};  // main background
+static const juce::Colour bgPanel     {0xFF222226};  // panel area
+static const juce::Colour bgSection   {0xFF2A2A2E};  // section header strip
+static const juce::Colour bgRecessed  {0xFF141418};  // recessed areas (scope, meters)
 
-// Arc colours per section
-static const juce::Colour arcInput{0xFF4FC3F7};   // cyan
-static const juce::Colour arcOutput{0xFF66BB6A};   // green
-static const juce::Colour arcMix{0xFFCE93D8};      // purple
-static const juce::Colour arcSVU{0xFFF0A500};      // amber
-} // namespace UiColours
+// Lines
+static const juce::Colour divider     {0xFF3A3A3E};  // separator lines
+static const juce::Colour dividerLight{0xFF4A4A4E};  // brighter divider (top edge)
+
+// Text
+static const juce::Colour textPrimary  {0xFFCCCCCC};  // labels
+static const juce::Colour textSecondary{0xFF888888};  // secondary / dim
+static const juce::Colour textValue    {0xFFEEEEEE};  // parameter values
+static const juce::Colour textBrand   {0xFFDDDDDD};  // brand name
+
+// Accents (per-section coloring)
+static const juce::Colour accentAmber {0xFFE8A030};  // preamp / gain
+static const juce::Colour accentGreen {0xFF4CAF50};  // active / on / pad
+static const juce::Colour accentRed   {0xFFE53935};  // phase / clip
+static const juce::Colour accentCyan  {0xFF4FC3F7};  // I/O
+static const juce::Colour accentPurple{0xFFAB7CDB};  // mix / SVU
+
+// Knob
+static const juce::Colour knobBody    {0xFF2A2A30};
+static const juce::Colour knobEdge    {0xFF3E3E44};
+static const juce::Colour knobHigh    {0xFF4A4A50};  // top-light highlight
+static const juce::Colour knobShadow  {0xFF111115};
+
+// Buttons (illuminated)
+static const juce::Colour btnOff      {0xFF2E2E34};  // dark off state
+static const juce::Colour btnBorder   {0xFF3A3A40};
+} // namespace SSL
 
 // =============================================================================
-// ModernLookAndFeel
+// SSLLookAndFeel
 // =============================================================================
 
-ModernLookAndFeel::ModernLookAndFeel() {
-  setColour(juce::Slider::textBoxTextColourId, UiColours::textBoxText);
-  setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x00000000));
-  setColour(juce::Slider::textBoxBackgroundColourId, UiColours::textBoxBg);
-  setColour(juce::Label::textColourId, UiColours::labelColour);
-  setColour(juce::ComboBox::backgroundColourId, UiColours::textBoxBg);
-  setColour(juce::ComboBox::outlineColourId, UiColours::panelBorder);
-  setColour(juce::ComboBox::textColourId, UiColours::textBoxText);
-  setColour(juce::ComboBox::arrowColourId, UiColours::sectionTitle);
-  setColour(juce::PopupMenu::backgroundColourId, juce::Colour(0xFF16213E));
-  setColour(juce::PopupMenu::textColourId, UiColours::textBoxText);
-  setColour(juce::PopupMenu::highlightedBackgroundColourId,
-            juce::Colour(0xFF2A2A4A));
+SSLLookAndFeel::SSLLookAndFeel() {
+  // Load embedded Space Grotesk font
+  typefaceRegular_ = juce::Typeface::createSystemTypefaceFor(
+      BinaryData::SpaceGroteskRegular_ttf, BinaryData::SpaceGroteskRegular_ttfSize);
+  typefaceBold_ = juce::Typeface::createSystemTypefaceFor(
+      BinaryData::SpaceGroteskBold_ttf, BinaryData::SpaceGroteskBold_ttfSize);
+
+  // General dark theme
+  setColour(juce::Slider::textBoxTextColourId,       SSL::textValue);
+  setColour(juce::Slider::textBoxOutlineColourId,     juce::Colour(0x00000000));
+  setColour(juce::Slider::textBoxBackgroundColourId,  SSL::bgRecessed);
+  setColour(juce::Label::textColourId,                SSL::textPrimary);
+  setColour(juce::ComboBox::backgroundColourId,       SSL::bgRecessed);
+  setColour(juce::ComboBox::outlineColourId,          SSL::divider);
+  setColour(juce::ComboBox::textColourId,             SSL::textValue);
+  setColour(juce::ComboBox::arrowColourId,            SSL::textSecondary);
+  setColour(juce::PopupMenu::backgroundColourId,      SSL::bgPanel);
+  setColour(juce::PopupMenu::textColourId,            SSL::textValue);
+  setColour(juce::PopupMenu::highlightedBackgroundColourId, SSL::bgSection);
   setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
 }
 
-void ModernLookAndFeel::drawRotarySlider(juce::Graphics &g, int x, int y,
-                                          int width, int height,
-                                          float sliderPos,
-                                          float rotaryStartAngle,
-                                          float rotaryEndAngle,
-                                          juce::Slider &slider) {
-  const float diameter = (float)juce::jmin(width, height) * 0.82f;
-  const float radius = diameter * 0.5f;
-  const float centreX = (float)x + (float)width * 0.5f;
-  const float centreY = (float)y + (float)height * 0.5f;
-  const float angle =
-      rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-
-  // Per-slider arc colour from properties
-  juce::Colour arcCol{0xFFF0A500};
-  if (slider.getProperties().contains("arcColour"))
-    arcCol = juce::Colour(
-        (juce::uint32)(juce::int64)slider.getProperties()["arcColour"]);
-
-  // Track (background arc)
-  const float trackWidth = juce::jmax(2.5f, diameter * 0.06f);
-  juce::Path bgArc;
-  bgArc.addCentredArc(centreX, centreY, radius, radius, 0.0f,
-                      rotaryStartAngle, rotaryEndAngle, true);
-  g.setColour(juce::Colour(0xFF2A2A4A));
-  g.strokePath(bgArc, juce::PathStrokeType(trackWidth,
-                                            juce::PathStrokeType::curved,
-                                            juce::PathStrokeType::rounded));
-
-  // Value arc (coloured)
-  if (sliderPos > 0.0f) {
-    juce::Path valueArc;
-    valueArc.addCentredArc(centreX, centreY, radius, radius, 0.0f,
-                           rotaryStartAngle, angle, true);
-    g.setColour(arcCol);
-    g.strokePath(valueArc, juce::PathStrokeType(trackWidth,
-                                                 juce::PathStrokeType::curved,
-                                                 juce::PathStrokeType::rounded));
-  }
-
-  // Knob body with gradient
-  const float knobRadius = radius * 0.65f;
-  juce::ColourGradient knobGrad(juce::Colour(0xFF3A3A5E), centreX,
-                                 centreY - knobRadius,
-                                 juce::Colour(0xFF1A1A30), centreX,
-                                 centreY + knobRadius, false);
-  g.setGradientFill(knobGrad);
-  g.fillEllipse(centreX - knobRadius, centreY - knobRadius, knobRadius * 2.0f,
-                knobRadius * 2.0f);
-
-  // Knob border
-  g.setColour(juce::Colour(0xFF4A4A6E));
-  g.drawEllipse(centreX - knobRadius, centreY - knobRadius, knobRadius * 2.0f,
-                knobRadius * 2.0f, 1.2f);
-
-  // Pointer
-  const float pointerLength = knobRadius * 0.75f;
-  const float pointerThickness = juce::jmax(2.0f, diameter * 0.04f);
-  juce::Path pointer;
-  pointer.addRoundedRectangle(-pointerThickness * 0.5f, -knobRadius + 3.0f,
-                               pointerThickness, pointerLength,
-                               pointerThickness * 0.5f);
-  pointer.applyTransform(
-      juce::AffineTransform::rotation(angle).translated(centreX, centreY));
-  g.setColour(arcCol);
-  g.fillPath(pointer);
+juce::Typeface::Ptr SSLLookAndFeel::getTypefaceForFont(const juce::Font &font) {
+  if (font.isBold() && typefaceBold_)
+    return typefaceBold_;
+  if (typefaceRegular_)
+    return typefaceRegular_;
+  return LookAndFeel_V4::getTypefaceForFont(font);
 }
 
-void ModernLookAndFeel::drawComboBox(juce::Graphics &g, int width, int height,
-                                      bool, int, int, int, int,
-                                      juce::ComboBox &box) {
+// ─────────────────────────────────────────────────────────────────────────────
+// SSL-style rotary knob — dark body, thin pointer line, NO arc
+// ─────────────────────────────────────────────────────────────────────────────
+void SSLLookAndFeel::drawRotarySlider(juce::Graphics &g, int x, int y,
+                                       int width, int height,
+                                       float sliderPos,
+                                       float rotaryStartAngle,
+                                       float rotaryEndAngle,
+                                       juce::Slider &slider) {
+  const float diameter = (float)juce::jmin(width, height) * 0.78f;
+  const float radius   = diameter * 0.5f;
+  const float centreX  = (float)x + (float)width  * 0.5f;
+  const float centreY  = (float)y + (float)height * 0.5f;
+  const float angle    = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+
+  // Per-slider pointer colour
+  juce::Colour ptrCol{0xFFCCCCCC};
+  if (slider.getProperties().contains("arcColour"))
+    ptrCol = juce::Colour((juce::uint32)(juce::int64)slider.getProperties()["arcColour"]);
+
+  const float knobR = radius * 0.72f;
+
+  // ── 1. Drop shadow ────────────────────────────────────────────────────
+  g.setColour(juce::Colour(0x35000000));
+  g.fillEllipse(centreX - knobR + 1.5f, centreY - knobR + 2.0f,
+                knobR * 2.0f, knobR * 2.0f);
+
+  // ── 2. Outer ring (subtle recessed groove) ────────────────────────────
+  g.setColour(SSL::knobShadow);
+  g.fillEllipse(centreX - knobR - 2.0f, centreY - knobR - 2.0f,
+                knobR * 2.0f + 4.0f, knobR * 2.0f + 4.0f);
+  g.setColour(SSL::knobEdge);
+  g.drawEllipse(centreX - knobR - 2.0f, centreY - knobR - 2.0f,
+                knobR * 2.0f + 4.0f, knobR * 2.0f + 4.0f, 0.8f);
+
+  // ── 3. Knob body — radial gradient (top-light) ───────────────────────
+  {
+    juce::ColourGradient bodyGrad(
+        SSL::knobHigh,
+        centreX - knobR * 0.3f, centreY - knobR * 0.5f,
+        SSL::knobShadow,
+        centreX + knobR * 0.4f, centreY + knobR * 0.6f,
+        true);
+    bodyGrad.addColour(0.35, SSL::knobBody);
+    bodyGrad.addColour(0.7,  juce::Colour(0xFF202024));
+    g.setGradientFill(bodyGrad);
+    g.fillEllipse(centreX - knobR, centreY - knobR,
+                  knobR * 2.0f, knobR * 2.0f);
+  }
+
+  // ── 4. Edge bevel ─────────────────────────────────────────────────────
+  g.setColour(SSL::knobEdge);
+  g.drawEllipse(centreX - knobR, centreY - knobR,
+                knobR * 2.0f, knobR * 2.0f, 1.0f);
+
+  // ── 5. Subtle notch marks around the knob (scale) ────────────────────
+  {
+    const float notchR = knobR + 5.0f;
+    const float totalAngle = rotaryEndAngle - rotaryStartAngle;
+    const int numNotches = 11;
+    for (int i = 0; i <= numNotches; ++i) {
+      float t = (float)i / (float)numNotches;
+      float a = rotaryStartAngle + t * totalAngle;
+      float cs = std::cos(a - juce::MathConstants<float>::halfPi);
+      float sn = std::sin(a - juce::MathConstants<float>::halfPi);
+      float r1 = notchR;
+      float r2 = notchR + 3.0f;
+      g.setColour(SSL::divider);
+      g.drawLine(centreX + r1 * cs, centreY + r1 * sn,
+                 centreX + r2 * cs, centreY + r2 * sn, 0.8f);
+    }
+  }
+
+  // ── 6. Pointer line — thin, clean, SSL style ─────────────────────────
+  {
+    float cs = std::cos(angle - juce::MathConstants<float>::halfPi);
+    float sn = std::sin(angle - juce::MathConstants<float>::halfPi);
+
+    float lineStart = knobR * 0.25f;
+    float lineEnd   = knobR * 0.92f;
+
+    float x1 = centreX + lineStart * cs;
+    float y1 = centreY + lineStart * sn;
+    float x2 = centreX + lineEnd * cs;
+    float y2 = centreY + lineEnd * sn;
+
+    // Pointer line
+    float thick = juce::jmax(1.8f, diameter * 0.028f);
+    g.setColour(ptrCol);
+    g.drawLine(x1, y1, x2, y2, thick);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SSL-style illuminated push button
+// ─────────────────────────────────────────────────────────────────────────────
+void SSLLookAndFeel::drawToggleButton(juce::Graphics &g,
+                                       juce::ToggleButton &button,
+                                       bool highlighted, bool down) {
+  auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
+  bool isOn = button.getToggleState();
+
+  // Determine ON colour from the button's tick colour property
+  auto onColour = button.findColour(juce::ToggleButton::tickColourId);
+  if (onColour.isTransparent())
+    onColour = SSL::accentGreen;
+
+  // Background
+  if (isOn) {
+    g.setColour(onColour);
+    g.fillRoundedRectangle(bounds, 3.0f);
+    // Subtle inner glow
+    g.setColour(onColour.brighter(0.3f).withAlpha(0.3f));
+    g.fillRoundedRectangle(bounds.reduced(1.0f), 2.0f);
+  } else {
+    g.setColour(down ? SSL::bgSection : SSL::btnOff);
+    g.fillRoundedRectangle(bounds, 3.0f);
+  }
+
+  // Border
+  g.setColour(highlighted ? SSL::dividerLight : SSL::btnBorder);
+  g.drawRoundedRectangle(bounds, 3.0f, 0.8f);
+
+  // Text
+  g.setColour(isOn ? SSL::bgDark : SSL::textPrimary);
+  g.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
+  g.drawText(button.getButtonText(), bounds, juce::Justification::centred);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SSL-style ComboBox — dark with subtle border
+// ─────────────────────────────────────────────────────────────────────────────
+void SSLLookAndFeel::drawComboBox(juce::Graphics &g, int width, int height,
+                                   bool, int, int, int, int,
+                                   juce::ComboBox &box) {
   auto bounds = juce::Rectangle<int>(0, 0, width, height).toFloat();
   g.setColour(box.findColour(juce::ComboBox::backgroundColourId));
-  g.fillRoundedRectangle(bounds, 6.0f);
+  g.fillRoundedRectangle(bounds, 3.0f);
   g.setColour(box.findColour(juce::ComboBox::outlineColourId));
-  g.drawRoundedRectangle(bounds.reduced(0.5f), 6.0f, 1.0f);
+  g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, 0.8f);
 
-  // Arrow
-  auto arrowZone = bounds.removeFromRight(height).reduced(height * 0.3f);
+  // Small arrow
+  auto arrowZone = bounds.removeFromRight((float)height).reduced((float)height * 0.35f);
   juce::Path arrow;
   arrow.addTriangle(arrowZone.getX(), arrowZone.getY(),
                     arrowZone.getRight(), arrowZone.getY(),
@@ -131,10 +227,10 @@ void ModernLookAndFeel::drawComboBox(juce::Graphics &g, int width, int height,
   g.fillPath(arrow);
 }
 
-void ModernLookAndFeel::drawPopupMenuBackground(juce::Graphics &g, int width,
-                                                  int height) {
+void SSLLookAndFeel::drawPopupMenuBackground(juce::Graphics &g, int width,
+                                               int height) {
   g.fillAll(findColour(juce::PopupMenu::backgroundColourId));
-  g.setColour(UiColours::panelBorder);
+  g.setColour(SSL::divider);
   g.drawRect(0, 0, width, height, 1);
 }
 
@@ -142,83 +238,83 @@ void ModernLookAndFeel::drawPopupMenuBackground(juce::Graphics &g, int width,
 // PluginEditor
 // =============================================================================
 
-static constexpr int kDefaultW = 920;
-static constexpr int kDefaultH = 600;  // Taller for preamp row (Sprint 7)
-static constexpr int kMinW = 680;
-static constexpr int kMinH = 480;      // Taller minimum for preamp row
+static constexpr int kDefaultW = 860;
+static constexpr int kDefaultH = 520;
+static constexpr int kMinW     = 700;
+static constexpr int kMinH     = 420;
 
 PluginEditor::PluginEditor(PluginProcessor &p)
     : AudioProcessorEditor(p), processorRef_(p), bhScope_(p) {
-  setLookAndFeel(&modernLnf_);
+  setLookAndFeel(&sslLnf_);
+  juce::LookAndFeel::setDefaultLookAndFeel(&sslLnf_);
 
-  // ── Main knobs ──
-  setupRotary(inputGain_, ParamID::InputGain, "Input", UiColours::arcInput);
-  setupRotary(outputGain_, ParamID::OutputGain, "Output", UiColours::arcOutput);
-  setupRotary(mix_, ParamID::Mix, "Mix", UiColours::arcMix);
-  setupRotary(svuAmount_, ParamID::SVU, "SVU", UiColours::arcSVU);
+  // ── Main knobs (pointer colours per-section) ──
+  setupRotary(inputGain_,  ParamID::InputGain,  "INPUT",  SSL::accentCyan);
+  setupRotary(outputGain_, ParamID::OutputGain, "OUTPUT", SSL::accentCyan);
+  setupRotary(mix_,        ParamID::Mix,        "MIX",    SSL::accentPurple);
+  setupRotary(svuAmount_,  ParamID::SVU,        "SVU",    SSL::accentPurple);
 
   addAndMakeVisible(bhScope_);
+  addAndMakeVisible(levelMeter_);
 
-  // ── Preset combo (hidden — preamp handles T1/T2 selection) ──
-  presetCombo_.addItemList(
-      {"Jensen JT-115K-E", "Jensen JT-11ELCF"},
-      1);
+  // ── Preset combo (hidden — preamp handles T1/T2) ──
+  presetCombo_.addItemList({"Jensen JT-115K-E", "Jensen JT-11ELCF"}, 1);
   presetAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Preset, presetCombo_);
 
-  // ── Mode combo (hidden — only used in legacy mode, kept for state persistence) ──
+  // ── Mode combo (hidden) ──
   modeCombo_.addItemList({"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)"}, 1);
   modeAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Mode, modeCombo_);
 
   // ── Engine combo ──
-  circuitLabel_.setText("Engine", juce::dontSendNotification);
+  circuitLabel_.setText("ENGINE", juce::dontSendNotification);
   circuitLabel_.setJustificationType(juce::Justification::centred);
-  circuitLabel_.setFont(juce::Font(13.0f));
+  circuitLabel_.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
+  circuitLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
   addAndMakeVisible(circuitLabel_);
 
-  circuitCombo_.addItemList({"Dual Topology Preamp", "Legacy (Transformer)"}, 1);
+  circuitCombo_.addItemList({"O.D.T Balanced Preamp", "Legacy (Transformer)"}, 1);
   addAndMakeVisible(circuitCombo_);
   circuitAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Circuit, circuitCombo_);
 
-  // ── Preamp section (Sprint 7) ──
-  // Gain knob (11 positions)
-  setupRotary(preampGain_, ParamID::PreampGain, "Gain", UiColours::arcSVU);
+  // ── Preamp section ──
+  setupRotary(preampGain_, ParamID::PreampGain, "GAIN", SSL::accentAmber);
 
-  // PAD toggle
+  // PAD button (illuminated green)
   preampPad_.setButtonText("PAD");
-  preampPad_.setColour(juce::ToggleButton::textColourId, UiColours::labelColour);
-  preampPad_.setColour(juce::ToggleButton::tickColourId, UiColours::arcOutput);
+  preampPad_.setColour(juce::ToggleButton::tickColourId, SSL::accentGreen);
   addAndMakeVisible(preampPad_);
   preampPadAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
       processorRef_.getAPVTS(), ParamID::PreampPad, preampPad_);
 
-  // Phase toggle
+  // Phase button (illuminated red)
   preampPhase_.setButtonText("PHASE");
-  preampPhase_.setColour(juce::ToggleButton::textColourId, UiColours::labelColour);
-  preampPhase_.setColour(juce::ToggleButton::tickColourId, UiColours::arcMix);
+  preampPhase_.setColour(juce::ToggleButton::tickColourId, SSL::accentRed);
   addAndMakeVisible(preampPhase_);
   preampPhaseAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
       processorRef_.getAPVTS(), ParamID::PreampPhase, preampPhase_);
 
-  // Path combo (Neve / Jensen)
-  preampPathLabel_.setText("Path", juce::dontSendNotification);
+  // Path combo
+  preampPathLabel_.setText("PATH", juce::dontSendNotification);
   preampPathLabel_.setJustificationType(juce::Justification::centred);
-  preampPathLabel_.setFont(juce::Font(13.0f));
+  preampPathLabel_.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
+  preampPathLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
   addAndMakeVisible(preampPathLabel_);
-  preampPathCombo_.addItemList({"Neve Heritage", "Jensen Heritage"}, 1);
+  preampPathCombo_.addItemList({"Heritage Mode", "Modern"}, 1);
   addAndMakeVisible(preampPathCombo_);
   preampPathAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
       processorRef_.getAPVTS(), ParamID::PreampPath, preampPathCombo_);
 
-  // Ratio combo (1:5 / 1:10)
-  preampRatioLabel_.setText("Ratio", juce::dontSendNotification);
+  // Ratio combo
+  preampRatioLabel_.setText("RATIO", juce::dontSendNotification);
   preampRatioLabel_.setJustificationType(juce::Justification::centred);
-  preampRatioLabel_.setFont(juce::Font(13.0f));
+  preampRatioLabel_.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
+  preampRatioLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
   addAndMakeVisible(preampRatioLabel_);
   preampRatioCombo_.addItemList({"1:5", "1:10"}, 1);
   addAndMakeVisible(preampRatioCombo_);
@@ -226,9 +322,8 @@ PluginEditor::PluginEditor(PluginProcessor &p)
       processorRef_.getAPVTS(), ParamID::PreampRatio, preampRatioCombo_);
 
   // ── Monitor label ──
-  monitorLabel_.setFont(juce::Font(12.0f));
-  monitorLabel_.setColour(juce::Label::textColourId,
-                          juce::Colour(0xFF66BB6A));
+  monitorLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
+  monitorLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
   addAndMakeVisible(monitorLabel_);
 
   // ── Resizable window ──
@@ -237,30 +332,38 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   setResizable(true, true);
   setSize(kDefaultW, kDefaultH);
 
-  startTimerHz(10);
+  startTimerHz(30);
 }
 
 PluginEditor::~PluginEditor() {
   stopTimer();
   setLookAndFeel(nullptr);
+  juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
 }
 
 void PluginEditor::setupRotary(RotarySlider &rs, const juce::String &paramId,
-                                const juce::String &text, juce::Colour arcCol) {
+                                const juce::String &text, juce::Colour ptrCol) {
   rs.slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-  rs.slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 68, 20);
-  rs.slider.setColour(juce::Slider::textBoxTextColourId,
-                      UiColours::textBoxText);
-  rs.slider.setColour(juce::Slider::textBoxOutlineColourId,
-                      juce::Colour(0x00000000));
-  rs.slider.setColour(juce::Slider::textBoxBackgroundColourId,
-                      UiColours::textBoxBg);
-  rs.slider.getProperties().set("arcColour", (juce::int64)arcCol.getARGB());
+  rs.slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 58, 16);
+  rs.slider.setColour(juce::Slider::textBoxTextColourId,      SSL::textValue);
+  rs.slider.setColour(juce::Slider::textBoxOutlineColourId,    juce::Colour(0x00000000));
+  rs.slider.setColour(juce::Slider::textBoxBackgroundColourId, SSL::bgRecessed);
+  rs.slider.getProperties().set("arcColour", (juce::int64)ptrCol.getARGB());
+  rs.slider.setVelocityBasedMode(false);
+
+  // Double-click reset
+  auto *param = processorRef_.getAPVTS().getParameter(paramId);
+  if (param != nullptr) {
+    float dn = param->getDefaultValue();
+    rs.slider.setDoubleClickReturnValue(true,
+        param->getNormalisableRange().convertFrom0to1(dn));
+  }
   addAndMakeVisible(rs.slider);
 
   rs.label.setText(text, juce::dontSendNotification);
   rs.label.setJustificationType(juce::Justification::centred);
-  rs.label.setFont(juce::Font(13.0f, juce::Font::bold));
+  rs.label.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
+  rs.label.setColour(juce::Label::textColourId, SSL::textSecondary);
   addAndMakeVisible(rs.label);
 
   rs.attachment =
@@ -268,21 +371,35 @@ void PluginEditor::setupRotary(RotarySlider &rs, const juce::String &paramId,
           processorRef_.getAPVTS(), paramId, rs.slider);
 }
 
-void PluginEditor::drawSection(juce::Graphics &g, juce::Rectangle<int> bounds,
-                                const juce::String &title) {
-  // Panel background
-  g.setColour(UiColours::panelBg);
-  g.fillRoundedRectangle(bounds.toFloat(), 10.0f);
+// ─── Section painting helpers ────────────────────────────────────────────────
 
-  // Panel border
-  g.setColour(UiColours::panelBorder);
-  g.drawRoundedRectangle(bounds.toFloat().reduced(0.5f), 10.0f, 1.0f);
+void PluginEditor::drawSectionHeader(juce::Graphics &g,
+                                      juce::Rectangle<int> area,
+                                      const juce::String &title,
+                                      juce::Colour accent) {
+  // Thin accent bar at top
+  g.setColour(accent);
+  g.fillRect(area.getX(), area.getY(), area.getWidth(), 2);
 
-  // Section title
-  g.setColour(UiColours::sectionTitle);
-  g.setFont(juce::Font(13.0f, juce::Font::bold));
-  g.drawText(title, bounds.removeFromTop(26).reduced(12, 0),
+  // Header background
+  g.setColour(SSL::bgSection);
+  g.fillRect(area.getX(), area.getY() + 2, area.getWidth(), area.getHeight() - 2);
+
+  // Title text
+  g.setColour(SSL::textPrimary);
+  g.setFont(juce::Font(juce::FontOptions(11.0f).withStyle("Bold")));
+  g.drawText(title, area.reduced(8, 0).withTrimmedTop(2),
              juce::Justification::centredLeft);
+}
+
+void PluginEditor::drawHDivider(juce::Graphics &g, int x, int y, int w) {
+  g.setColour(SSL::divider);
+  g.drawLine((float)x, (float)y, (float)(x + w), (float)y, 1.0f);
+}
+
+void PluginEditor::drawVDivider(juce::Graphics &g, int x, int y, int h) {
+  g.setColour(SSL::divider);
+  g.drawLine((float)x, (float)y, (float)x, (float)(y + h), 1.0f);
 }
 
 // =============================================================================
@@ -290,59 +407,117 @@ void PluginEditor::drawSection(juce::Graphics &g, juce::Rectangle<int> bounds,
 // =============================================================================
 
 void PluginEditor::paint(juce::Graphics &g) {
-  // Gradient background
-  juce::ColourGradient bgGrad(UiColours::bgTop, 0.0f, 0.0f,
-                               UiColours::bgBottom, 0.0f, (float)getHeight(),
-                               false);
-  g.setGradientFill(bgGrad);
-  g.fillRect(getLocalBounds());
+  const int W = getWidth();
+  const int H = getHeight();
 
-  // Subtle top highlight
-  g.setColour(juce::Colour(0x15FFFFFF));
-  g.fillRect(0, 0, getWidth(), 1);
+  // ── Flat dark background ──
+  g.fillAll(SSL::bgDark);
 
-  // Title bar
-  auto titleArea = getLocalBounds().removeFromTop(50);
-  g.setColour(UiColours::titleColour);
-  g.setFont(juce::Font(22.0f, juce::Font::bold));
-  g.drawText("Transformer Model", titleArea.reduced(20, 0),
+  // ── Header bar (top 36px) ──
+  const int headerH = 36;
+  auto headerArea = juce::Rectangle<int>(0, 0, W, headerH);
+  g.setColour(SSL::bgPanel);
+  g.fillRect(headerArea);
+
+  // Brand name — left
+  g.setColour(SSL::textBrand);
+  g.setFont(juce::Font(juce::FontOptions(16.0f).withStyle("Bold")));
+  g.drawText("TWISTERION", headerArea.reduced(14, 0),
              juce::Justification::centredLeft);
 
-  g.setColour(UiColours::sectionTitle.withAlpha(0.5f));
-  g.setFont(juce::Font(12.0f));
-  g.drawText("Physical Saturation", titleArea.reduced(20, 0),
+  // Subtitle — right
+  g.setColour(SSL::textSecondary);
+  g.setFont(juce::Font(juce::FontOptions(10.0f)));
+  g.drawText("Powered by HysteriCore", headerArea.reduced(14, 0),
              juce::Justification::centredRight);
 
-  // Section panels
-  auto area = getLocalBounds().reduced(12);
-  area.removeFromTop(50);
-  auto bottomBar = area.removeFromBottom(28);
+  // Header bottom line
+  drawHDivider(g, 0, headerH, W);
 
-  const int gap = 10;
-  const int preampRowH = 90;  // Sprint 7: dedicated preamp row
-  const int topRowH = (int)((area.getHeight() - preampRowH - gap) * 0.65f);
+  // ── Footer bar (bottom 24px) ──
+  const int footerH = 24;
+  const int footerY = H - footerH;
+  drawHDivider(g, 0, footerY, W);
+  g.setColour(SSL::bgPanel);
+  g.fillRect(0, footerY + 1, W, footerH - 1);
 
-  auto topRow = area.removeFromTop(topRowH);
-  area.removeFromTop(gap);
-  auto preampRow = area.removeFromTop(preampRowH);
-  area.removeFromTop(gap);
-  auto botRow = area;
+  // ── Main content area ──
+  const int contentY = headerH + 1;
+  const int contentH = footerY - contentY;
 
-  // Top-left: CONTROLS panel
-  int controlsW = juce::jmax(280, (int)(topRow.getWidth() * 0.35f));
-  auto controlsArea = topRow.removeFromLeft(controlsW);
-  drawSection(g, controlsArea, "CONTROLS");
+  // 4-column layout: INPUT | PREAMP | OUTPUT | ANALYSIS
+  // Proportions: 15% | 28% | 20% | 37%
+  const float colRatios[] = {0.13f, 0.22f, 0.22f, 0.43f};
+  int colX[5];
+  colX[0] = 0;
+  for (int i = 0; i < 4; ++i)
+    colX[i + 1] = colX[i] + (int)((float)W * colRatios[i]);
+  colX[4] = W; // ensure last column goes to edge
 
-  topRow.removeFromLeft(gap);
+  const int sectionHeaderH = 20;
 
-  // Top-right: B-H SCOPE panel
-  drawSection(g, topRow, "B-H SCOPE");
+  // ── Column backgrounds & headers ──
 
-  // Middle: PREAMP panel (Sprint 7)
-  drawSection(g, preampRow, "PREAMP");
+  // INPUT column
+  g.setColour(SSL::bgDark);
+  g.fillRect(colX[0], contentY, colX[1] - colX[0], contentH);
+  drawSectionHeader(g, {colX[0], contentY, colX[1] - colX[0], sectionHeaderH},
+                    "INPUT", SSL::accentCyan);
 
-  // Bottom: SETTINGS panel
-  drawSection(g, botRow, "SETTINGS");
+  // PREAMP column
+  g.setColour(SSL::bgDark);
+  g.fillRect(colX[1], contentY, colX[2] - colX[1], contentH);
+  drawSectionHeader(g, {colX[1], contentY, colX[2] - colX[1], sectionHeaderH},
+                    "PREAMP", SSL::accentAmber);
+
+  // OUTPUT column
+  g.setColour(SSL::bgDark);
+  g.fillRect(colX[2], contentY, colX[3] - colX[2], contentH);
+  drawSectionHeader(g, {colX[2], contentY, colX[3] - colX[2], sectionHeaderH},
+                    "OUTPUT", SSL::accentCyan);
+
+  // ANALYSIS column
+  g.setColour(SSL::bgRecessed);
+  g.fillRect(colX[3], contentY, colX[4] - colX[3], contentH);
+  drawSectionHeader(g, {colX[3], contentY, colX[4] - colX[3], sectionHeaderH},
+                    "ANALYSIS", SSL::accentPurple);
+
+  // Vertical dividers between columns
+  for (int i = 1; i < 4; ++i)
+    drawVDivider(g, colX[i], contentY, contentH);
+
+  // ── Sub-section dividers within columns ──
+  {
+    const int pad = 6;
+    const int innerY = contentY + sectionHeaderH + pad;
+    const int innerH = contentH - sectionHeaderH - pad * 2;
+
+    g.setColour(SSL::divider);
+
+    // Column 1 (INPUT): divider between Input Gain and SVU
+    {
+      int divGap = 22;
+      int knobH = (innerH - divGap) / 2;
+      int lineY = innerY + knobH + divGap / 2;
+      g.drawLine((float)(colX[0] + 12), (float)lineY,
+                 (float)(colX[1] - 12), (float)lineY, 1.0f);
+    }
+
+    // Column 3 (OUTPUT): between Output/Mix and Mix/Engine
+    {
+      int divGap = 18;
+      int comboH = 36;
+      int knobH = (innerH - divGap * 2 - comboH) / 2;
+
+      int line1Y = innerY + knobH + divGap / 2;
+      int line2Y = innerY + knobH + divGap + knobH + divGap / 2;
+
+      g.drawLine((float)(colX[2] + 12), (float)line1Y,
+                 (float)(colX[3] - 12), (float)line1Y, 1.0f);
+      g.drawLine((float)(colX[2] + 12), (float)line2Y,
+                 (float)(colX[3] - 12), (float)line2Y, 1.0f);
+    }
+  }
 }
 
 // =============================================================================
@@ -350,136 +525,169 @@ void PluginEditor::paint(juce::Graphics &g) {
 // =============================================================================
 
 void PluginEditor::resized() {
-  auto area = getLocalBounds().reduced(12);
-  area.removeFromTop(50); // title
-  auto bottomBar = area.removeFromBottom(28);
+  const int W = getWidth();
+  const int H = getHeight();
 
-  const int gap = 10;
-  const int pad = 10;
-  const int sectionTitleH = 26;
-  const int preampRowH = 90;  // Sprint 7: preamp row height
-  const int topRowH = (int)((area.getHeight() - preampRowH - gap) * 0.65f);
+  const int headerH = 36;
+  const int footerH = 24;
+  const int contentY = headerH + 1;
+  const int contentH = H - footerH - contentY;
+  const int sectionHeaderH = 20;
 
-  auto topRow = area.removeFromTop(topRowH);
-  area.removeFromTop(gap);
-  auto preampRow = area.removeFromTop(preampRowH);
-  area.removeFromTop(gap);
-  auto botRow = area;
+  // Column boundaries
+  const float colRatios[] = {0.13f, 0.22f, 0.22f, 0.43f};
+  int colX[5];
+  colX[0] = 0;
+  for (int i = 0; i < 4; ++i)
+    colX[i + 1] = colX[i] + (int)((float)W * colRatios[i]);
+  colX[4] = W;
 
-  // ── CONTROLS panel (top-left) ──
-  int controlsW = juce::jmax(280, (int)(topRow.getWidth() * 0.35f));
-  auto controlsArea = topRow.removeFromLeft(controlsW);
-  controlsArea = controlsArea.reduced(pad);
-  controlsArea.removeFromTop(sectionTitleH);
+  const int pad = 6;
+  const int innerY = contentY + sectionHeaderH + pad;
+  const int innerH = contentH - sectionHeaderH - pad * 2;
 
-  // 4 knobs in a row
-  RotarySlider *knobs[] = {&inputGain_, &outputGain_, &mix_, &svuAmount_};
-  const int numKnobs = 4;
-  const int knobW = controlsArea.getWidth() / numKnobs;
+  // ═══════════════════════════════════════════════════════════════════════
+  // COLUMN 1: INPUT  (Input Gain + SVU)
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    auto col = juce::Rectangle<int>(colX[0] + pad, innerY,
+                                     colX[1] - colX[0] - pad * 2, innerH);
+    int divGap = 22;
+    int knobH = (col.getHeight() - divGap) / 2;
 
-  for (int i = 0; i < numKnobs; ++i) {
-    auto col = controlsArea.removeFromLeft(knobW);
-    int labelH = juce::jmax(18, col.getHeight() / 7);
-    knobs[i]->label.setBounds(col.removeFromTop(labelH));
-    knobs[i]->slider.setBounds(col);
+    // Input Gain knob (top)
+    auto inputArea = col.removeFromTop(knobH);
+    inputGain_.label.setBounds(inputArea.removeFromTop(14));
+    inputGain_.slider.setBounds(inputArea);
+
+    col.removeFromTop(divGap);
+
+    // SVU knob (bottom)
+    auto svuArea = col.removeFromTop(knobH);
+    svuAmount_.label.setBounds(svuArea.removeFromTop(14));
+    svuAmount_.slider.setBounds(svuArea);
   }
 
-  topRow.removeFromLeft(gap);
-
-  // ── B-H SCOPE panel (top-right) ──
-  auto scopeArea = topRow.reduced(pad);
-  scopeArea.removeFromTop(sectionTitleH);
-  bhScope_.setBounds(scopeArea);
-
-  // ── PREAMP panel (middle) — Sprint 7 ──
+  // ═══════════════════════════════════════════════════════════════════════
+  // COLUMN 2: PREAMP  (Gain + Path/Ratio + PAD/Phase)
+  // ═══════════════════════════════════════════════════════════════════════
   {
-    auto preampInner = preampRow.reduced(pad);
-    preampInner.removeFromTop(sectionTitleH);
+    auto col = juce::Rectangle<int>(colX[1] + pad, innerY,
+                                     colX[2] - colX[1] - pad * 2, innerH);
 
-    // Layout: [Gain knob 110px] [Path combo 160px] [Ratio combo 110px]
-    //         [PAD toggle 70px] [Phase toggle 80px]
-    const int knobGainW = 110;
-    const int comboPathW = 160;
-    const int comboRatioW = 110;
-    const int padToggleW = 70;
-    const int phaseToggleW = 80;
-    const int innerGap = 10;
-    const int comboH = 26;
-
-    // Gain knob
-    auto gainArea = preampInner.removeFromLeft(knobGainW);
-    int gainLabelH = juce::jmax(14, gainArea.getHeight() / 5);
-    preampGain_.label.setBounds(gainArea.removeFromTop(gainLabelH));
+    // Gain knob (top portion, ~45%)
+    int gainH = (int)(col.getHeight() * 0.45f);
+    auto gainArea = col.removeFromTop(gainH);
+    preampGain_.label.setBounds(gainArea.removeFromTop(14));
     preampGain_.slider.setBounds(gainArea);
-    preampInner.removeFromLeft(innerGap);
+
+    col.removeFromTop(4);
 
     // Path combo
-    auto pathArea = preampInner.removeFromLeft(comboPathW).reduced(2, 0);
-    int pathLabelH = juce::jmin(18, pathArea.getHeight() / 2);
-    preampPathLabel_.setBounds(pathArea.removeFromTop(pathLabelH));
-    preampPathCombo_.setBounds(
-        pathArea.removeFromTop(juce::jmin(comboH, pathArea.getHeight()))
-            .reduced(0, 2));
-    preampInner.removeFromLeft(innerGap);
+    int comboRowH = 36;
+    {
+      auto row = col.removeFromTop(comboRowH);
+      preampPathLabel_.setBounds(row.removeFromTop(13));
+      preampPathCombo_.setBounds(row.reduced(2, 1));
+    }
+
+    col.removeFromTop(4);
 
     // Ratio combo
-    auto ratioArea = preampInner.removeFromLeft(comboRatioW).reduced(2, 0);
-    int ratioLabelH = juce::jmin(18, ratioArea.getHeight() / 2);
-    preampRatioLabel_.setBounds(ratioArea.removeFromTop(ratioLabelH));
-    preampRatioCombo_.setBounds(
-        ratioArea.removeFromTop(juce::jmin(comboH, ratioArea.getHeight()))
-            .reduced(0, 2));
-    preampInner.removeFromLeft(innerGap);
+    {
+      auto row = col.removeFromTop(comboRowH);
+      preampRatioLabel_.setBounds(row.removeFromTop(13));
+      preampRatioCombo_.setBounds(row.reduced(2, 1));
+    }
 
-    // PAD toggle
-    auto padArea = preampInner.removeFromLeft(padToggleW);
-    preampPad_.setBounds(padArea.reduced(2));
-    preampInner.removeFromLeft(innerGap);
+    col.removeFromTop(8);
 
-    // Phase toggle
-    auto phaseArea = preampInner.removeFromLeft(phaseToggleW);
-    preampPhase_.setBounds(phaseArea.reduced(2));
+    // PAD + Phase buttons (side by side)
+    {
+      int btnH = juce::jmin(28, col.getHeight());
+      auto btnRow = col.removeFromTop(btnH);
+      int halfW = btnRow.getWidth() / 2 - 2;
+      preampPad_.setBounds(btnRow.removeFromLeft(halfW));
+      btnRow.removeFromLeft(4);
+      preampPhase_.setBounds(btnRow.removeFromLeft(halfW));
+    }
   }
 
-  // ── SETTINGS panel (bottom) — single Engine selector ──
-  auto settingsInner = botRow.reduced(pad);
-  settingsInner.removeFromTop(sectionTitleH);
-
-  // Center the engine combo (max 300px wide)
+  // ═══════════════════════════════════════════════════════════════════════
+  // COLUMN 3: OUTPUT  (Output Gain + Mix + Engine)
+  // ═══════════════════════════════════════════════════════════════════════
   {
-    const int comboMaxW = juce::jmin(300, settingsInner.getWidth());
-    auto engineArea = settingsInner.withSizeKeepingCentre(comboMaxW, settingsInner.getHeight())
-                                    .reduced(4, 0);
-    int labelH = juce::jmin(20, engineArea.getHeight() / 2);
-    circuitLabel_.setBounds(engineArea.removeFromTop(labelH));
-    circuitCombo_.setBounds(
-        engineArea.removeFromTop(juce::jmin(28, engineArea.getHeight()))
-            .reduced(0, 2));
+    auto col = juce::Rectangle<int>(colX[2] + pad, innerY,
+                                     colX[3] - colX[2] - pad * 2, innerH);
+
+    int divGap = 18;
+    int comboH = 36;
+    int knobH = (col.getHeight() - divGap * 2 - comboH) / 2;
+
+    // Output Gain knob
+    auto outArea = col.removeFromTop(knobH);
+    outputGain_.label.setBounds(outArea.removeFromTop(14));
+    outputGain_.slider.setBounds(outArea);
+
+    col.removeFromTop(divGap);
+
+    // Mix knob
+    auto mixArea = col.removeFromTop(knobH);
+    mix_.label.setBounds(mixArea.removeFromTop(14));
+    mix_.slider.setBounds(mixArea);
+
+    col.removeFromTop(divGap);
+
+    // Engine selector (bottom)
+    {
+      auto engArea = col.removeFromTop(comboH);
+      circuitLabel_.setBounds(engArea.removeFromTop(13));
+      circuitCombo_.setBounds(engArea.reduced(2, 1));
+    }
   }
 
-  // Monitor label at the very bottom
-  monitorLabel_.setBounds(bottomBar.reduced(12, 0));
+  // ═══════════════════════════════════════════════════════════════════════
+  // COLUMN 4: ANALYSIS  (B-H Scope + Level Meter)
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    auto col = juce::Rectangle<int>(colX[3] + pad, innerY,
+                                     colX[4] - colX[3] - pad * 2, innerH);
+
+    // B-H Scope (takes most of the space)
+    auto scopeArea = col.removeFromTop(col.getHeight() - 30);
+    bhScope_.setBounds(scopeArea.reduced(2));
+
+    col.removeFromTop(4);
+
+    // Level meter bar (bottom strip)
+    levelMeter_.setBounds(col.reduced(2, 0));
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // FOOTER
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    auto footer = juce::Rectangle<int>(0, H - footerH, W, footerH).reduced(10, 2);
+    monitorLabel_.setBounds(footer);
+  }
 }
 
 void PluginEditor::timerCallback() {
   auto preampData = processorRef_.getPreampMonitorData();
 
+  // Feed level meter
+  levelMeter_.setLevels(preampData.inputLevel_dBu, preampData.outputLevel_dBu);
+
+  // Text monitor (footer)
   juce::String text;
   if (preampData.inputLevel_dBu > -100.0f)
   {
-    text = juce::String(preampData.inputLevel_dBu, 1) + " dBu -> "
+    text = juce::String(preampData.inputLevel_dBu, 1) + " dBu  >  "
          + juce::String(preampData.outputLevel_dBu, 1) + " dBu"
-         + " | Path: " + juce::String(preampData.currentPath == 0 ? "Neve" : "Jensen")
-         + " | Gain pos: " + juce::String(preampData.gainPosition);
+         + "   |   " + juce::String(preampData.currentPath == 0 ? "Heritage" : "Modern")
+         + "   |   Gain " + juce::String(preampData.gainPosition);
     if (preampData.isClipping)
-      text += " | CLIP";
+      text += "   |   CLIP";
   }
-  else
-  {
-    auto data = processorRef_.getMonitorData();
-    text = "HSIM: " + juce::String(data.lastIterCount) + " iter"
-         + (data.lastConverged ? " OK" : " FAIL");
-  }
-
   monitorLabel_.setText(text, juce::dontSendNotification);
 }

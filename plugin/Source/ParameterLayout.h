@@ -74,7 +74,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     // Engine: Preamp (default) or Legacy transformer-only mode
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Circuit, 1), "Engine",
-        juce::StringArray{"Dual Topology Preamp", "Legacy (Transformer)"},
+        juce::StringArray{"O.D.T Balanced Preamp", "Legacy (Transformer)"},
         0));
 
     // ── Preamp parameters (Sprint 7) ──────────────────────────────────────
@@ -87,7 +87,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     // Preamp Path (0=Neve, 1=Jensen)
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::PreampPath, 1), "Preamp Path",
-        juce::StringArray{"Neve Heritage", "Jensen Heritage"}, 0));
+        juce::StringArray{"Heritage Mode", "Modern"}, 0));
 
     // Preamp PAD (20dB attenuation)
     params.push_back(std::make_unique<juce::AudioParameterBool>(

@@ -150,6 +150,8 @@ target_sources(TransformerModel
         plugin/Source/PluginEditor.cpp
         plugin/Source/BHScopeComponent.h
         plugin/Source/BHScopeComponent.cpp
+        plugin/Source/VUMeterComponent.h
+        plugin/Source/LevelMeterComponent.h
 
         # ── Legacy source (Phase 1 — kept for reference) ──
         Source/Core/HysteresisProcessor.h
@@ -171,6 +173,13 @@ target_include_directories(TransformerModel
         ${CMAKE_CURRENT_SOURCE_DIR}/Source
 )
 
+# ─── Embedded Font (Space Grotesk) ──────────────────────────────────────────
+juce_add_binary_data(FontBinaryData
+    SOURCES
+        plugin/Resources/SpaceGrotesk-Regular.ttf
+        plugin/Resources/SpaceGrotesk-Bold.ttf
+)
+
 # ─── JUCE Configuration ─────────────────────────────────────────────────────
 target_compile_definitions(TransformerModel
     PUBLIC
@@ -181,6 +190,7 @@ target_compile_definitions(TransformerModel
 
 target_link_libraries(TransformerModel
     PRIVATE
+        FontBinaryData
         TransformerCore
         juce::juce_audio_basics
         juce::juce_audio_devices
