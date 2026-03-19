@@ -117,3 +117,19 @@ target_include_directories(test_output_stage PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME output_stage                  COMMAND test_output_stage)
 
+# ── Preamp Sprint 6 tests ──────────────────────────────────────────────────
+add_executable(test_preamp_full
+    test_preamp_full.cpp
+)
+target_include_directories(test_preamp_full PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME preamp_full                     COMMAND test_preamp_full)
+
+# ── Preamp Sprint 7 tests ──────────────────────────────────────────────────
+add_executable(test_preamp_plugin
+    test_preamp_plugin.cpp
+)
+target_include_directories(test_preamp_plugin PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME preamp_plugin                    COMMAND test_preamp_plugin)
+

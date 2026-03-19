@@ -21,6 +21,14 @@ namespace ParamID
     static const juce::String Mode          = "mode";        // Physical / Realtime
     static const juce::String SVU            = "svu";         // Stereo Variation Units
     static const juce::String Circuit        = "circuit";     // Legacy Cascade / WDF Circuit
+
+    // Preamp controls (Sprint 7)
+    static const juce::String PreampGain    = "preampGain";     // int 0-10
+    static const juce::String PreampPath    = "preampPath";     // int 0-1 (Neve/Jensen)
+    static const juce::String PreampPad     = "preampPad";      // bool
+    static const juce::String PreampRatio   = "preampRatio";    // int 0-1 (1:5/1:10)
+    static const juce::String PreampPhase   = "preampPhase";    // bool
+    static const juce::String PreampEnabled = "preampEnabled";  // bool (bypass preamp)
 }
 
 // ─── Create parameter layout ────────────────────────────────────────────────
@@ -68,6 +76,35 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::ParameterID(ParamID::Circuit, 1), "Circuit",
         juce::StringArray{"Legacy (Cascade)", "WDF Circuit"},
         0));
+
+    // ── Preamp parameters (Sprint 7) ──────────────────────────────────────
+
+    // Preamp Gain (11-position Grayhill switch)
+    params.push_back(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID(ParamID::PreampGain, 1), "Preamp Gain",
+        0, 10, 5));  // default position 6 (+30dB)
+
+    // Preamp Path (0=Neve, 1=Jensen)
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID(ParamID::PreampPath, 1), "Preamp Path",
+        juce::StringArray{"Neve Heritage", "Jensen Heritage"}, 0));
+
+    // Preamp PAD (20dB attenuation)
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID(ParamID::PreampPad, 1), "PAD", false));
+
+    // Preamp Ratio (0=1:5, 1=1:10)
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID(ParamID::PreampRatio, 1), "Ratio",
+        juce::StringArray{"1:5", "1:10"}, 1));  // default 1:10
+
+    // Phase Invert
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID(ParamID::PreampPhase, 1), "Phase", false));
+
+    // Preamp Enable/Bypass
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID(ParamID::PreampEnabled, 1), "Preamp", false));  // off by default
 
     return { params.begin(), params.end() };
 }

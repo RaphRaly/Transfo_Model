@@ -19,6 +19,14 @@ PluginProcessor::PluginProcessor()
     modeParam_       = apvts_.getRawParameterValue(ParamID::Mode);
     svuParam_        = apvts_.getRawParameterValue(ParamID::SVU);
     circuitParam_    = apvts_.getRawParameterValue(ParamID::Circuit);
+
+    // Preamp parameter pointers (Sprint 7)
+    preampGainParam_    = apvts_.getRawParameterValue(ParamID::PreampGain);
+    preampPathParam_    = apvts_.getRawParameterValue(ParamID::PreampPath);
+    preampPadParam_     = apvts_.getRawParameterValue(ParamID::PreampPad);
+    preampRatioParam_   = apvts_.getRawParameterValue(ParamID::PreampRatio);
+    preampPhaseParam_   = apvts_.getRawParameterValue(ParamID::PreampPhase);
+    preampEnabledParam_ = apvts_.getRawParameterValue(ParamID::PreampEnabled);
 }
 
 PluginProcessor::~PluginProcessor() = default;
@@ -47,6 +55,18 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         physicalModel_[ch].setProcessingMode(ProcessingMode::Physical);
         physicalModel_[ch].prepareToPlay(sr, samplesPerBlock);
     }
+
+    // Prepare preamp models (Sprint 7)
+    {
+        auto preampCfg = PreampConfig::DualTopology();
+        // Use 10kOhm bridging load for T2 (workaround for WDF low-impedance bug)
+        preampCfg.t2Config.loadImpedance = 10000.0f;
+        for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
+        {
+            preampModel_[ch].setConfig(preampCfg);
+            preampModel_[ch].prepareToPlay(sr, samplesPerBlock);
+        }
+    }
 }
 
 void PluginProcessor::releaseResources()
@@ -55,6 +75,7 @@ void PluginProcessor::releaseResources()
     {
         realtimeModel_[ch].reset();
         physicalModel_[ch].reset();
+        preampModel_[ch].reset();
     }
 }
 
@@ -93,6 +114,29 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     {
         applyPreset(presetIndex);
         lastPresetIndex_ = presetIndex;
+    }
+
+    // Preamp processing (if enabled) — Sprint 7
+    const bool preampEnabled = (preampEnabledParam_->load() > 0.5f);
+    if (preampEnabled)
+    {
+        const int preampGainPos = static_cast<int>(preampGainParam_->load());
+        const int preampPath    = static_cast<int>(preampPathParam_->load());
+        const bool preampPad    = (preampPadParam_->load() > 0.5f);
+        const int preampRatio   = static_cast<int>(preampRatioParam_->load());
+        const bool preampPhase  = (preampPhaseParam_->load() > 0.5f);
+
+        for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
+        {
+            preampModel_[ch].setGainPosition(preampGainPos);
+            preampModel_[ch].setPath(preampPath);
+            preampModel_[ch].setPadEnabled(preampPad);
+            preampModel_[ch].setRatio(preampRatio);
+            preampModel_[ch].setPhaseInvert(preampPhase);
+
+            auto* data = buffer.getWritePointer(ch);
+            preampModel_[ch].processBlock(data, data, numSamples);
+        }
     }
 
     // Update gains on models

@@ -74,6 +74,18 @@ private:
   void drawSection(juce::Graphics &g, juce::Rectangle<int> bounds,
                    const juce::String &title);
 
+  // ── Preamp controls (Sprint 7) ──────────────────────────────────────────
+  RotarySlider preampGain_;
+
+  juce::ToggleButton preampEnabled_, preampPad_, preampPhase_;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      preampEnabledAttach_, preampPadAttach_, preampPhaseAttach_;
+
+  juce::ComboBox preampPathCombo_, preampRatioCombo_;
+  juce::Label preampPathLabel_, preampRatioLabel_;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      preampPathAttach_, preampRatioAttach_;
+
   // Resizable constrainer
   juce::ComponentBoundsConstrainer constrainer_;
 

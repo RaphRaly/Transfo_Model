@@ -22,6 +22,7 @@
 #include "../../core/include/core/model/Presets.h"
 #include "../../core/include/core/model/ToleranceModel.h"
 #include "../../core/include/core/model/TransformerModel.h"
+#include "../../core/include/core/preamp/PreampModel.h"
 #include "ParameterLayout.h"
 
 class PluginProcessor : public juce::AudioProcessor {
@@ -60,6 +61,12 @@ public:
     return realtimeModel_[0].getMonitorData();
   }
 
+  // Preamp monitoring data for editor (Sprint 7)
+  transfo::PreampModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>::MonitorData
+  getPreampMonitorData() const {
+    return preampModel_[0].getMonitorData();
+  }
+
   size_t readBHSamples(transfo::BHSample *dest, size_t maxSamples) {
     const int modeIndex = static_cast<int>(modeParam_->load());
     if (modeIndex == 0)
@@ -91,6 +98,18 @@ private:
   int lastPresetIndex_ = -1;
 
   void applyPreset(int presetIndex);
+
+  // Preamp model (one per channel, stereo) — Sprint 7
+  transfo::PreampModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>
+      preampModel_[kMaxChannels];
+
+  // Cached preamp parameter pointers
+  std::atomic<float> *preampGainParam_ = nullptr;
+  std::atomic<float> *preampPathParam_ = nullptr;
+  std::atomic<float> *preampPadParam_ = nullptr;
+  std::atomic<float> *preampRatioParam_ = nullptr;
+  std::atomic<float> *preampPhaseParam_ = nullptr;
+  std::atomic<float> *preampEnabledParam_ = nullptr;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };

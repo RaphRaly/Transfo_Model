@@ -143,9 +143,9 @@ void ModernLookAndFeel::drawPopupMenuBackground(juce::Graphics &g, int width,
 // =============================================================================
 
 static constexpr int kDefaultW = 920;
-static constexpr int kDefaultH = 500;
+static constexpr int kDefaultH = 600;  // Taller for preamp row (Sprint 7)
 static constexpr int kMinW = 680;
-static constexpr int kMinH = 380;
+static constexpr int kMinH = 480;      // Taller minimum for preamp row
 
 PluginEditor::PluginEditor(PluginProcessor &p)
     : AudioProcessorEditor(p), processorRef_(p), bhScope_(p) {
@@ -196,6 +196,54 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   circuitAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Circuit, circuitCombo_);
+
+  // ── Preamp section (Sprint 7) ──
+  // Gain knob (11 positions)
+  setupRotary(preampGain_, ParamID::PreampGain, "Gain", UiColours::arcSVU);
+
+  // Preamp enable toggle
+  preampEnabled_.setButtonText("PREAMP");
+  preampEnabled_.setColour(juce::ToggleButton::textColourId, UiColours::labelColour);
+  preampEnabled_.setColour(juce::ToggleButton::tickColourId, UiColours::arcInput);
+  addAndMakeVisible(preampEnabled_);
+  preampEnabledAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processorRef_.getAPVTS(), ParamID::PreampEnabled, preampEnabled_);
+
+  // PAD toggle
+  preampPad_.setButtonText("PAD");
+  preampPad_.setColour(juce::ToggleButton::textColourId, UiColours::labelColour);
+  preampPad_.setColour(juce::ToggleButton::tickColourId, UiColours::arcOutput);
+  addAndMakeVisible(preampPad_);
+  preampPadAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processorRef_.getAPVTS(), ParamID::PreampPad, preampPad_);
+
+  // Phase toggle
+  preampPhase_.setButtonText("PHASE");
+  preampPhase_.setColour(juce::ToggleButton::textColourId, UiColours::labelColour);
+  preampPhase_.setColour(juce::ToggleButton::tickColourId, UiColours::arcMix);
+  addAndMakeVisible(preampPhase_);
+  preampPhaseAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processorRef_.getAPVTS(), ParamID::PreampPhase, preampPhase_);
+
+  // Path combo (Neve / Jensen)
+  preampPathLabel_.setText("Path", juce::dontSendNotification);
+  preampPathLabel_.setJustificationType(juce::Justification::centred);
+  preampPathLabel_.setFont(juce::Font(13.0f));
+  addAndMakeVisible(preampPathLabel_);
+  preampPathCombo_.addItemList({"Neve Heritage", "Jensen Heritage"}, 1);
+  addAndMakeVisible(preampPathCombo_);
+  preampPathAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+      processorRef_.getAPVTS(), ParamID::PreampPath, preampPathCombo_);
+
+  // Ratio combo (1:5 / 1:10)
+  preampRatioLabel_.setText("Ratio", juce::dontSendNotification);
+  preampRatioLabel_.setJustificationType(juce::Justification::centred);
+  preampRatioLabel_.setFont(juce::Font(13.0f));
+  addAndMakeVisible(preampRatioLabel_);
+  preampRatioCombo_.addItemList({"1:5", "1:10"}, 1);
+  addAndMakeVisible(preampRatioCombo_);
+  preampRatioAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+      processorRef_.getAPVTS(), ParamID::PreampRatio, preampRatioCombo_);
 
   // ── Monitor label ──
   monitorLabel_.setFont(juce::Font(12.0f));
@@ -291,9 +339,12 @@ void PluginEditor::paint(juce::Graphics &g) {
   auto bottomBar = area.removeFromBottom(28);
 
   const int gap = 10;
-  const int topRowH = (int)(area.getHeight() * 0.65f);
+  const int preampRowH = 90;  // Sprint 7: dedicated preamp row
+  const int topRowH = (int)((area.getHeight() - preampRowH - gap) * 0.65f);
 
   auto topRow = area.removeFromTop(topRowH);
+  area.removeFromTop(gap);
+  auto preampRow = area.removeFromTop(preampRowH);
   area.removeFromTop(gap);
   auto botRow = area;
 
@@ -306,6 +357,9 @@ void PluginEditor::paint(juce::Graphics &g) {
 
   // Top-right: B-H SCOPE panel
   drawSection(g, topRow, "B-H SCOPE");
+
+  // Middle: PREAMP panel (Sprint 7)
+  drawSection(g, preampRow, "PREAMP");
 
   // Bottom: SETTINGS panel
   drawSection(g, botRow, "SETTINGS");
@@ -323,9 +377,12 @@ void PluginEditor::resized() {
   const int gap = 10;
   const int pad = 10;
   const int sectionTitleH = 26;
-  const int topRowH = (int)(area.getHeight() * 0.65f);
+  const int preampRowH = 90;  // Sprint 7: preamp row height
+  const int topRowH = (int)((area.getHeight() - preampRowH - gap) * 0.65f);
 
   auto topRow = area.removeFromTop(topRowH);
+  area.removeFromTop(gap);
+  auto preampRow = area.removeFromTop(preampRowH);
   area.removeFromTop(gap);
   auto botRow = area;
 
@@ -353,6 +410,62 @@ void PluginEditor::resized() {
   auto scopeArea = topRow.reduced(pad);
   scopeArea.removeFromTop(sectionTitleH);
   bhScope_.setBounds(scopeArea);
+
+  // ── PREAMP panel (middle) — Sprint 7 ──
+  {
+    auto preampInner = preampRow.reduced(pad);
+    preampInner.removeFromTop(sectionTitleH);
+
+    // Layout: [Enable toggle 80px] [Gain knob 80px] [Path combo 150px]
+    //         [Ratio combo 100px] [PAD toggle 70px] [Phase toggle 80px]
+    const int toggleW = 80;
+    const int knobGainW = 80;
+    const int comboPathW = 150;
+    const int comboRatioW = 100;
+    const int padToggleW = 70;
+    const int phaseToggleW = 80;
+    const int innerGap = 8;
+    const int comboH = 26;
+
+    // Enable toggle
+    auto enableArea = preampInner.removeFromLeft(toggleW);
+    preampEnabled_.setBounds(enableArea.reduced(2));
+    preampInner.removeFromLeft(innerGap);
+
+    // Gain knob
+    auto gainArea = preampInner.removeFromLeft(knobGainW);
+    int gainLabelH = juce::jmax(14, gainArea.getHeight() / 5);
+    preampGain_.label.setBounds(gainArea.removeFromTop(gainLabelH));
+    preampGain_.slider.setBounds(gainArea);
+    preampInner.removeFromLeft(innerGap);
+
+    // Path combo
+    auto pathArea = preampInner.removeFromLeft(comboPathW).reduced(2, 0);
+    int pathLabelH = juce::jmin(18, pathArea.getHeight() / 2);
+    preampPathLabel_.setBounds(pathArea.removeFromTop(pathLabelH));
+    preampPathCombo_.setBounds(
+        pathArea.removeFromTop(juce::jmin(comboH, pathArea.getHeight()))
+            .reduced(0, 2));
+    preampInner.removeFromLeft(innerGap);
+
+    // Ratio combo
+    auto ratioArea = preampInner.removeFromLeft(comboRatioW).reduced(2, 0);
+    int ratioLabelH = juce::jmin(18, ratioArea.getHeight() / 2);
+    preampRatioLabel_.setBounds(ratioArea.removeFromTop(ratioLabelH));
+    preampRatioCombo_.setBounds(
+        ratioArea.removeFromTop(juce::jmin(comboH, ratioArea.getHeight()))
+            .reduced(0, 2));
+    preampInner.removeFromLeft(innerGap);
+
+    // PAD toggle
+    auto padArea = preampInner.removeFromLeft(padToggleW);
+    preampPad_.setBounds(padArea.reduced(2));
+    preampInner.removeFromLeft(innerGap);
+
+    // Phase toggle
+    auto phaseArea = preampInner.removeFromLeft(phaseToggleW);
+    preampPhase_.setBounds(phaseArea.reduced(2));
+  }
 
   // ── SETTINGS panel (bottom) ──
   auto settingsInner = botRow.reduced(pad);
@@ -404,6 +517,16 @@ void PluginEditor::timerCallback() {
 #ifndef NDEBUG
   text += " | rho: " + juce::String(data.spectralRadius, 3);
 #endif
+
+  // Preamp monitor data (Sprint 7)
+  auto preampData = processorRef_.getPreampMonitorData();
+  if (preampData.inputLevel_dBu > -100.0f)
+  {
+    text += " | Preamp: " + juce::String(preampData.inputLevel_dBu, 1) + " -> "
+          + juce::String(preampData.outputLevel_dBu, 1) + " dBu";
+    if (preampData.isClipping)
+      text += " CLIP";
+  }
 
   monitorLabel_.setText(text, juce::dontSendNotification);
 }
