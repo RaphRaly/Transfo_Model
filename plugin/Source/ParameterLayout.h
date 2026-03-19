@@ -71,10 +71,10 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::NormalisableRange<float>(0.0f, 5.0f, 0.1f), 2.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // Circuit topology: Legacy Cascade (HP→J-A→LC) or WDF Circuit (Test Circuit 1)
+    // Engine: Preamp (default) or Legacy transformer-only mode
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID(ParamID::Circuit, 1), "Circuit",
-        juce::StringArray{"Legacy (Cascade)", "WDF Circuit"},
+        juce::ParameterID(ParamID::Circuit, 1), "Engine",
+        juce::StringArray{"Dual Topology Preamp", "Legacy (Transformer)"},
         0));
 
     // ── Preamp parameters (Sprint 7) ──────────────────────────────────────

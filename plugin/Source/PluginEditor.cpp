@@ -159,39 +159,27 @@ PluginEditor::PluginEditor(PluginProcessor &p)
 
   addAndMakeVisible(bhScope_);
 
-  // ── Preset combo ──
-  presetLabel_.setText("Transformer", juce::dontSendNotification);
-  presetLabel_.setJustificationType(juce::Justification::centred);
-  presetLabel_.setFont(juce::Font(13.0f));
-  addAndMakeVisible(presetLabel_);
-
+  // ── Preset combo (hidden — preamp handles T1/T2 selection) ──
   presetCombo_.addItemList(
       {"Jensen JT-115K-E", "Jensen JT-11ELCF"},
       1);
-  addAndMakeVisible(presetCombo_);
   presetAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Preset, presetCombo_);
 
-  // ── Mode combo ──
-  modeLabel_.setText("Mode", juce::dontSendNotification);
-  modeLabel_.setJustificationType(juce::Justification::centred);
-  modeLabel_.setFont(juce::Font(13.0f));
-  addAndMakeVisible(modeLabel_);
-
+  // ── Mode combo (hidden — only used in legacy mode, kept for state persistence) ──
   modeCombo_.addItemList({"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)"}, 1);
-  addAndMakeVisible(modeCombo_);
   modeAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Mode, modeCombo_);
 
-  // ── Circuit combo ──
-  circuitLabel_.setText("Circuit", juce::dontSendNotification);
+  // ── Engine combo ──
+  circuitLabel_.setText("Engine", juce::dontSendNotification);
   circuitLabel_.setJustificationType(juce::Justification::centred);
   circuitLabel_.setFont(juce::Font(13.0f));
   addAndMakeVisible(circuitLabel_);
 
-  circuitCombo_.addItemList({"Legacy (Cascade)", "WDF Circuit"}, 1);
+  circuitCombo_.addItemList({"Dual Topology Preamp", "Legacy (Transformer)"}, 1);
   addAndMakeVisible(circuitCombo_);
   circuitAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
@@ -200,14 +188,6 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   // ── Preamp section (Sprint 7) ──
   // Gain knob (11 positions)
   setupRotary(preampGain_, ParamID::PreampGain, "Gain", UiColours::arcSVU);
-
-  // Preamp enable toggle
-  preampEnabled_.setButtonText("PREAMP");
-  preampEnabled_.setColour(juce::ToggleButton::textColourId, UiColours::labelColour);
-  preampEnabled_.setColour(juce::ToggleButton::tickColourId, UiColours::arcInput);
-  addAndMakeVisible(preampEnabled_);
-  preampEnabledAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-      processorRef_.getAPVTS(), ParamID::PreampEnabled, preampEnabled_);
 
   // PAD toggle
   preampPad_.setButtonText("PAD");
@@ -325,7 +305,7 @@ void PluginEditor::paint(juce::Graphics &g) {
   auto titleArea = getLocalBounds().removeFromTop(50);
   g.setColour(UiColours::titleColour);
   g.setFont(juce::Font(22.0f, juce::Font::bold));
-  g.drawText("Transformer Model v3", titleArea.reduced(20, 0),
+  g.drawText("Transformer Model", titleArea.reduced(20, 0),
              juce::Justification::centredLeft);
 
   g.setColour(UiColours::sectionTitle.withAlpha(0.5f));
@@ -416,21 +396,15 @@ void PluginEditor::resized() {
     auto preampInner = preampRow.reduced(pad);
     preampInner.removeFromTop(sectionTitleH);
 
-    // Layout: [Enable toggle 80px] [Gain knob 80px] [Path combo 150px]
-    //         [Ratio combo 100px] [PAD toggle 70px] [Phase toggle 80px]
-    const int toggleW = 80;
-    const int knobGainW = 80;
-    const int comboPathW = 150;
-    const int comboRatioW = 100;
+    // Layout: [Gain knob 110px] [Path combo 160px] [Ratio combo 110px]
+    //         [PAD toggle 70px] [Phase toggle 80px]
+    const int knobGainW = 110;
+    const int comboPathW = 160;
+    const int comboRatioW = 110;
     const int padToggleW = 70;
     const int phaseToggleW = 80;
-    const int innerGap = 8;
+    const int innerGap = 10;
     const int comboH = 26;
-
-    // Enable toggle
-    auto enableArea = preampInner.removeFromLeft(toggleW);
-    preampEnabled_.setBounds(enableArea.reduced(2));
-    preampInner.removeFromLeft(innerGap);
 
     // Gain knob
     auto gainArea = preampInner.removeFromLeft(knobGainW);
@@ -467,39 +441,19 @@ void PluginEditor::resized() {
     preampPhase_.setBounds(phaseArea.reduced(2));
   }
 
-  // ── SETTINGS panel (bottom) ──
+  // ── SETTINGS panel (bottom) — single Engine selector ──
   auto settingsInner = botRow.reduced(pad);
   settingsInner.removeFromTop(sectionTitleH);
 
-  const int colW = settingsInner.getWidth() / 3;
-
-  // Preset combo (left third)
+  // Center the engine combo (max 300px wide)
   {
-    auto presetArea = settingsInner.removeFromLeft(colW).reduced(4, 0);
-    int labelH = juce::jmin(20, presetArea.getHeight() / 2);
-    presetLabel_.setBounds(presetArea.removeFromTop(labelH));
-    presetCombo_.setBounds(
-        presetArea.removeFromTop(juce::jmin(28, presetArea.getHeight()))
-            .reduced(0, 2));
-  }
-
-  // Mode combo (center third)
-  {
-    auto modeArea = settingsInner.removeFromLeft(colW).reduced(4, 0);
-    int labelH = juce::jmin(20, modeArea.getHeight() / 2);
-    modeLabel_.setBounds(modeArea.removeFromTop(labelH));
-    modeCombo_.setBounds(
-        modeArea.removeFromTop(juce::jmin(28, modeArea.getHeight()))
-            .reduced(0, 2));
-  }
-
-  // Circuit combo (right third)
-  {
-    auto circuitArea = settingsInner.reduced(4, 0);
-    int labelH = juce::jmin(20, circuitArea.getHeight() / 2);
-    circuitLabel_.setBounds(circuitArea.removeFromTop(labelH));
+    const int comboMaxW = juce::jmin(300, settingsInner.getWidth());
+    auto engineArea = settingsInner.withSizeKeepingCentre(comboMaxW, settingsInner.getHeight())
+                                    .reduced(4, 0);
+    int labelH = juce::jmin(20, engineArea.getHeight() / 2);
+    circuitLabel_.setBounds(engineArea.removeFromTop(labelH));
     circuitCombo_.setBounds(
-        circuitArea.removeFromTop(juce::jmin(28, circuitArea.getHeight()))
+        engineArea.removeFromTop(juce::jmin(28, engineArea.getHeight()))
             .reduced(0, 2));
   }
 
@@ -508,24 +462,23 @@ void PluginEditor::resized() {
 }
 
 void PluginEditor::timerCallback() {
-  auto data = processorRef_.getMonitorData();
-
-  juce::String text = "HSIM: " + juce::String(data.lastIterCount) + " iter" +
-                      (data.lastConverged ? " OK" : " FAIL") +
-                      " | Failures: " + juce::String(data.convergenceFailures);
-
-#ifndef NDEBUG
-  text += " | rho: " + juce::String(data.spectralRadius, 3);
-#endif
-
-  // Preamp monitor data (Sprint 7)
   auto preampData = processorRef_.getPreampMonitorData();
+
+  juce::String text;
   if (preampData.inputLevel_dBu > -100.0f)
   {
-    text += " | Preamp: " + juce::String(preampData.inputLevel_dBu, 1) + " -> "
-          + juce::String(preampData.outputLevel_dBu, 1) + " dBu";
+    text = juce::String(preampData.inputLevel_dBu, 1) + " dBu -> "
+         + juce::String(preampData.outputLevel_dBu, 1) + " dBu"
+         + " | Path: " + juce::String(preampData.currentPath == 0 ? "Neve" : "Jensen")
+         + " | Gain pos: " + juce::String(preampData.gainPosition);
     if (preampData.isClipping)
-      text += " CLIP";
+      text += " | CLIP";
+  }
+  else
+  {
+    auto data = processorRef_.getMonitorData();
+    text = "HSIM: " + juce::String(data.lastIterCount) + " iter"
+         + (data.lastConverged ? " OK" : " FAIL");
   }
 
   monitorLabel_.setText(text, juce::dontSendNotification);

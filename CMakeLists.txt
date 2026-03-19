@@ -52,7 +52,7 @@ juce_add_plugin(TransformerModel
     PLUGIN_MANUFACTURER_CODE Tmfr
     PLUGIN_CODE             Tm01
     FORMATS                 VST3 AU AAX Standalone
-    PRODUCT_NAME            "Transformer Model v3"
+    PRODUCT_NAME            "Transformer Model"
     # AU-specific metadata (required by Logic Pro / auval)
     AU_MAIN_TYPE            kAudioUnitType_Effect
     DESCRIPTION             "Physical transformer saturation model"

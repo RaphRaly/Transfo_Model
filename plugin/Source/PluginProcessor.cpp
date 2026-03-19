@@ -101,25 +101,59 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
-    // Read parameters (offsets: input -10 dB, output +15 dB internal calibration)
-    const float inputGainDb  = inputGainParam_->load() - 10.0f;
-    const float outputGainDb = outputGainParam_->load() + 15.0f;
+    // Read common parameters
+    const float inputGainDb  = inputGainParam_->load();
+    const float outputGainDb = outputGainParam_->load();
     const float mix          = mixParam_->load();
-    const int   presetIndex  = static_cast<int>(presetParam_->load());
-    const int   modeIndex    = static_cast<int>(modeParam_->load());
-    const bool  useWdfCircuit = (static_cast<int>(circuitParam_->load()) == 1);
+    const bool  useLegacy    = (static_cast<int>(circuitParam_->load()) == 1);
 
-    // Check preset change
-    if (presetIndex != lastPresetIndex_)
+    if (useLegacy)
     {
-        applyPreset(presetIndex);
-        lastPresetIndex_ = presetIndex;
+        // ── Legacy mode: old TransformerModel engine ──────────────────────
+        const int presetIndex = static_cast<int>(presetParam_->load());
+        const int modeIndex   = static_cast<int>(modeParam_->load());
+
+        if (presetIndex != lastPresetIndex_)
+        {
+            applyPreset(presetIndex);
+            lastPresetIndex_ = presetIndex;
+        }
+
+        // Legacy calibration offsets
+        const float legacyInputDb  = inputGainDb - 10.0f;
+        const float legacyOutputDb = outputGainDb + 15.0f;
+        const bool isRealtime = (modeIndex == 0);
+
+        for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
+        {
+            if (isRealtime)
+            {
+                realtimeModel_[ch].setInputGain(legacyInputDb);
+                realtimeModel_[ch].setOutputGain(legacyOutputDb);
+                realtimeModel_[ch].setMix(mix);
+                realtimeModel_[ch].setUseWdfCircuit(false);
+            }
+            else
+            {
+                physicalModel_[ch].setInputGain(legacyInputDb);
+                physicalModel_[ch].setOutputGain(legacyOutputDb);
+                physicalModel_[ch].setMix(mix);
+                physicalModel_[ch].setUseWdfCircuit(false);
+            }
+        }
+
+        for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
+        {
+            auto* data = buffer.getWritePointer(ch);
+            if (isRealtime)
+                realtimeModel_[ch].processBlock(data, data, numSamples);
+            else
+                physicalModel_[ch].processBlock(data, data, numSamples);
+        }
     }
-
-    // Preamp processing (if enabled) — Sprint 7
-    const bool preampEnabled = (preampEnabledParam_->load() > 0.5f);
-    if (preampEnabled)
+    else
     {
+        // ── Preamp mode: PreampModel is the main engine ──────────────────
         const int preampGainPos = static_cast<int>(preampGainParam_->load());
         const int preampPath    = static_cast<int>(preampPathParam_->load());
         const bool preampPad    = (preampPadParam_->load() > 0.5f);
@@ -133,42 +167,13 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             preampModel_[ch].setPadEnabled(preampPad);
             preampModel_[ch].setRatio(preampRatio);
             preampModel_[ch].setPhaseInvert(preampPhase);
+            preampModel_[ch].setInputGain(inputGainDb);
+            preampModel_[ch].setOutputGain(outputGainDb);
+            preampModel_[ch].setMix(mix);
 
             auto* data = buffer.getWritePointer(ch);
             preampModel_[ch].processBlock(data, data, numSamples);
         }
-    }
-
-    // Update gains on models
-    const bool isRealtime = (modeIndex == 0);
-
-    for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
-    {
-        if (isRealtime)
-        {
-            realtimeModel_[ch].setInputGain(inputGainDb);
-            realtimeModel_[ch].setOutputGain(outputGainDb);
-            realtimeModel_[ch].setMix(mix);
-            realtimeModel_[ch].setUseWdfCircuit(useWdfCircuit);
-        }
-        else
-        {
-            physicalModel_[ch].setInputGain(inputGainDb);
-            physicalModel_[ch].setOutputGain(outputGainDb);
-            physicalModel_[ch].setMix(mix);
-            physicalModel_[ch].setUseWdfCircuit(useWdfCircuit);
-        }
-    }
-
-    // Process each channel
-    for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
-    {
-        auto* data = buffer.getWritePointer(ch);
-
-        if (isRealtime)
-            realtimeModel_[ch].processBlock(data, data, numSamples);
-        else
-            physicalModel_[ch].processBlock(data, data, numSamples);
     }
 }
 
