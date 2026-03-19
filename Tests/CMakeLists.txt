@@ -100,3 +100,11 @@ add_executable(test_neve_path
 target_include_directories(test_neve_path PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME neve_path                  COMMAND test_neve_path)
+
+# ── Preamp Sprint 4 tests ──────────────────────────────────────────────────
+add_executable(test_je990_path
+    test_je990_path.cpp
+)
+target_include_directories(test_je990_path PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME je990_path                 COMMAND test_je990_path)

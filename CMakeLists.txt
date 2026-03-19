@@ -121,6 +121,12 @@ target_sources(TransformerModel
         core/include/core/preamp/CEStageWDF.h
         core/include/core/preamp/EFStageWDF.h
         core/include/core/preamp/NeveClassAPath.h
+        core/include/core/preamp/DiffPairWDF.h
+        core/include/core/preamp/CascodeStage.h
+        core/include/core/preamp/VASStageWDF.h
+        core/include/core/preamp/ClassABOutputWDF.h
+        core/include/core/preamp/LoadIsolator.h
+        core/include/core/preamp/JE990Path.h
 
         # ── Identification headers ──
         identification/include/identification/MeasurementData.h
