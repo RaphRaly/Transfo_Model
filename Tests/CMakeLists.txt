@@ -141,3 +141,10 @@ target_include_directories(test_preamp_audio_sweep PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME preamp_audio_sweep              COMMAND test_preamp_audio_sweep)
 
+# ── Preamp diagnostic (detailed per-stage tracing) ────────────────────────────
+add_executable(test_preamp_diagnostic
+    test_preamp_diagnostic.cpp
+)
+target_include_directories(test_preamp_diagnostic PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME preamp_diagnostic               COMMAND test_preamp_diagnostic)

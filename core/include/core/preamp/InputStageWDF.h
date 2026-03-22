@@ -79,6 +79,7 @@ public:
     {
         t1_.reset();
         lastOutput_ = 0.0f;
+        hpState_ = 0.0f;
     }
 
     // ── Runtime controls (button-press events) ──────────────────────────────
@@ -118,7 +119,36 @@ public:
     /// @return           Secondary voltage after turns ratio scaling.
     float processSample(float micSignal)
     {
-        lastOutput_ = t1_.processSample(micSignal);
+        // ── Analytical transformer model ───────────────────────────────────
+        // The WDF TransformerCircuitWDF has a Lm scattering domain mismatch
+        // that produces incorrect gain and phase. Use a simplified analytical
+        // model that correctly captures:
+        //   1. Turns ratio voltage gain
+        //   2. Source/load impedance voltage divider
+        //   3. Soft saturation from core nonlinearity
+        //   4. HP bass rolloff from Lm/Rsource
+        //
+        // Keep the WDF tree ticking for B-H monitoring (not in signal path).
+        t1_.processSample(micSignal);
+
+        // Voltage transfer: V_sec = V_in * n * Rload / (Rs*n² + Rdc_pri*n² + Rdc_sec + Rload)
+        float output = micSignal * idealGain_;
+
+        // Core saturation: soft clip at the saturation flux level.
+        // The Bsat point maps to a secondary voltage of approximately
+        // n * Bsat * Ae * 2*pi*f / N_turns ≈ a few volts at audio frequencies.
+        // Use a generous saturation knee to model mu-metal's wide linear region.
+        const float satKnee = idealGain_ * 0.5f;  // Start compressing at 50% of max linear
+        if (satKnee > 0.01f)
+            output = satKnee * std::tanh(output / satKnee);
+
+        // HP bass rolloff from Lm/Rsource interaction
+        // fc = Rsource / (2*pi*Lm) ≈ 2-5 Hz for mu-metal (sub-audio)
+        // Modeled as a one-pole HP that blocks DC and passes audio.
+        hpState_ += hpAlpha_ * (output - hpState_);
+        output -= hpState_;
+
+        lastOutput_ = output;
         return lastOutput_;
     }
 
@@ -160,10 +190,13 @@ public:
 private:
     TransformerCircuitWDF<NonlinearLeaf> t1_;
     InputStageConfig config_;
-    float sampleRate_ = 44100.0f;
-    float Zmic_       = 150.0f;     // Default: SM57
-    float Zs_eff_     = 150.0f;
-    float lastOutput_ = 0.0f;
+    float sampleRate_      = 44100.0f;
+    float Zmic_            = 150.0f;     // Default: SM57
+    float Zs_eff_          = 150.0f;
+    float lastOutput_      = 0.0f;
+    float idealGain_       = 10.0f;      // Analytical transformer voltage gain
+    float hpState_         = 0.0f;       // HP filter state (DC blocking)
+    float hpAlpha_         = 0.0001f;    // HP filter coefficient (sub-audio cutoff)
 
     // ── Effective source impedance computation ──────────────────────────────
 
@@ -224,8 +257,31 @@ private:
             (config_.ratio == InputStageConfig::Ratio::X10) ? 10 : 5;
 
         // Re-prepare the WDF tree with the modified config
+        // (kept for B-H monitoring, not in the primary signal path)
         t1_.prepare(static_cast<double>(sampleRate_), t1Cfg);
         t1_.reset();
+
+        // ── Compute analytical gain ──────────────────────────────────────
+        // V_sec = V_in * n * Rload / (Rs*n² + Rdc_pri*n² + Rdc_sec + Rload)
+        const float n = static_cast<float>(t1Cfg.windings.turnsRatio_N2) /
+                        static_cast<float>(t1Cfg.windings.turnsRatio_N1);
+        const float Rs_ref  = Zs_eff_ * n * n;
+        const float Rdc_pri_ref = t1Cfg.windings.Rdc_primary * n * n;
+        const float Rdc_sec = t1Cfg.windings.Rdc_secondary;
+        const float Rload   = t1Cfg.loadImpedance;
+        const float Rtotal  = Rs_ref + Rdc_pri_ref + Rdc_sec + Rload;
+        idealGain_ = (Rtotal > 0.0f) ? n * Rload / Rtotal : n;
+
+        // ── HP filter: fc = Rsource / (2*pi*Lm_static) ──────────────────
+        const float Lp = t1Cfg.windings.Lp_primary;
+        if (Lp > 0.0f && Zs_eff_ > 0.0f) {
+            const float fc = Zs_eff_ / (kTwoPif * Lp);
+            const float omega = kTwoPif * fc / sampleRate_;
+            hpAlpha_ = omega / (1.0f + omega);
+        } else {
+            hpAlpha_ = 0.0001f;  // ~0.7 Hz at 44.1 kHz
+        }
+        hpState_ = 0.0f;
     }
 };
 

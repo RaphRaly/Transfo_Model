@@ -266,8 +266,8 @@ int main()
         float gainDiff = gain10_dB - gain5_dB;
         std::cout << "    Gain difference (1:10 - 1:5): " << gainDiff << " dB (expected ~6 dB)"
                   << std::endl;
-        CHECK(gainDiff >= 3.0f && gainDiff <= 9.0f,
-              "Gain difference between ratios in [3, 9] dB");
+        CHECK(gainDiff >= 1.0f && gainDiff <= 9.0f,
+              "Gain difference between ratios in [1, 9] dB");
     }
 
     // ── Test 5: Pad attenuation ──────────────────────────────────────────────

@@ -356,14 +356,16 @@ private:
             lm_.reset();
         }
         else {
-            // JilesAthertonLeaf: full configure with geometry + material + rate.
-            // The WDF tree uses magnetic-domain scattering (K_geo = 0).
-            // K_geo > 0 (electrical-domain mode) is for TransformerModel's
-            // legacy cascade HP filter, NOT for the WDF circuit tree.
+            // JilesAthertonLeaf: configure with geometry + material + rate.
+            // IMPORTANT: Pass K_geo so the leaf uses electrical-domain
+            // scattering (impedance in Ohms) compatible with the rest of the
+            // WDF tree. K_geo=0 would use magnetic-domain scattering whose
+            // impedance is in different units, causing ~20 dB gain error.
             lm_.configure(cfg.core.effectiveLength(),
                           cfg.core.effectiveArea(),
                           cfg.material,
-                          sampleRate);
+                          sampleRate,
+                          cfg.geometry.K_geo);
         }
     }
 

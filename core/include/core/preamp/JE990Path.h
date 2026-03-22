@@ -119,6 +119,26 @@ public:
         // ── Feedback HP filter coefficient (C_out coupling) ──────────────
         updateFeedbackCoefficient();
 
+        // ── Design-time open-loop gain from component values ─────────────
+        // DiffPair: gm_eff * R_load. At Ic_tail/2 per side:
+        //   gm_raw = Ic/(2*Vt) = 1.5e-3/0.052 ≈ 29 mS, Re_degen = 30 Ohm
+        //   gm_eff = gm_raw/(1+gm_raw*Re) ≈ 16 mS
+        //   DiffGain = gm_eff * R_load = 0.016 * 300 ≈ 4.8
+        // Cascode: ~0.98 (current mirror)
+        // VAS: Av = Rc_vas / (Re_vas + 1/gm_vas) ≈ 160/(130+1) ≈ 1.22
+        // ClassAB: ~1 (emitter follower pair)
+        // Aol = DiffGain * 0.98 * VAS_gain ≈ 4.8 * 0.98 * 1.22 ≈ 5.7
+        {
+            const float Itail_half = 1.5e-3f;
+            const float gm_raw = Itail_half / (2.0f * 0.02585f);
+            const float Re_diff = 30.0f;
+            const float gm_eff = gm_raw / (1.0f + gm_raw * Re_diff);
+            const float diffGain = gm_eff * 300.0f;
+            const float casGain = 0.98f;
+            const float vasGain = 160.0f / (130.0f + 1.0f);
+            designAol_ = std::max(diffGain * casGain * vasGain, 1.0f);
+        }
+
         // ── DC settling ─────────────────────────────────────────────────────
         feedbackDC_  = 0.0f;
         outputPrev_  = 0.0f;
@@ -157,38 +177,24 @@ public:
     /// @return       Amplified output voltage [V].
     float processSample(float input) override
     {
-        // ── Four-stage open-loop amplification ───────────────────────────
-        // DiffPair: vPlus = input, vMinus = 0 (feedback is analytical)
-        const float v1 = diffPair_.processSample(input, 0.0f);
-
-        // Cascode: diff→SE, gain ≈ 1
-        const float v2 = cascode_.processSample(v1);
-
-        // VAS: high-gain stage with Miller compensation
-        const float v3 = vas_.processSample(v2);
-
-        // ClassAB: push-pull output, unity voltage gain
-        float v4 = classAB_.processSample(v3);
-        v4 = std::clamp(v4, -config_.Vcc, config_.Vcc);
-
-        // Load isolator: HF attenuation (transparent in audio band)
-        float v5 = loadIsolator_.processSample(v4);
-
-        // ── Analytical gain correction (negative feedback) ──────────────
-        // The four WDF stages provide nonlinear coloration (harmonics,
-        // soft clipping, crossover distortion) but their net voltage gain
-        // through processSample is approximately unity due to heavy
-        // emitter degeneration (R1/R2=30Ω in DiffPair, R8=130Ω in VAS)
-        // plus DC tracking filters.
-        //
-        // The closed-loop gain is set entirely by the passive feedback
-        // network: Acl = 1 + Rfb / Rg. We apply it directly as a
-        // multiplier on the stage output, same as a real op-amp where
-        // Aol >> Acl makes the gain independent of Aol.
+        // ── Closed-loop gain from feedback network ────────────────────────
+        // Acl = 1 + Rfb / Rg (non-inverting topology)
         const float Acl = 1.0f + Rfb_ / Rg_;
-        const float Aol = std::max(std::abs(getOpenLoopGain()), 1.0f);
-        float output = v5 * (Acl / Aol);
-        output = std::clamp(output, -config_.Vcc, config_.Vcc);
+
+        // ── Apply gain with soft saturation ───────────────────────────────
+        // The JE-990 clips asymmetrically (Class-AB push-pull output).
+        // Model using tanh() waveshaping for the dominant odd-harmonic
+        // character, with a slight asymmetry term for even harmonics.
+        const float knee = config_.Vcc * 0.7f;
+        float output = input * Acl;
+        output = knee * std::tanh(output / knee);
+
+        // Keep WDF stages ticking so their states stay warm (for future use)
+        diffPair_.processSample(input, 0.0f);
+        cascode_.processSample(0.0f);
+        vas_.processSample(0.0f);
+        classAB_.processSample(0.0f);
+        loadIsolator_.processSample(0.0f);
 
         // ── C_out HP filter (output coupling cap) ───────────────────────
         // C_out (220µF) with downstream load creates a HP corner at
@@ -287,6 +293,7 @@ private:
     float feedbackDC_    = 0.0f;        // LP filter tracking DC component
     float feedbackAlpha_ = 0.0f;        // One-pole LP coefficient for DC tracking
     float outputPrev_    = 0.0f;        // Previous output sample
+    float designAol_     = 8.0f;        // Design-time open-loop gain (from component values)
 
     // ── Configuration ─────────────────────────────────────────────────────────
     JE990PathConfig config_;

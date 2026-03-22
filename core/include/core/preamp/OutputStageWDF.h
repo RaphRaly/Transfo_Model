@@ -72,6 +72,24 @@ public:
         Rdc_pri_ = t2Config.windings.Rdc_primary;
         Rdc_sec_ = t2Config.windings.Rdc_secondary;
 
+        // ── Analytical T2 insertion gain ───────────────────────────────────
+        // T2 is 1:1 bifilar: V_out = V_in * Rload / (Rsource + Rdc_pri + Rdc_sec + Rload)
+        const float Rsrc = t2Config.windings.sourceImpedance;
+        const float Rload = t2Config.loadImpedance;
+        const float Rtotal = Rsrc + Rdc_pri_ + Rdc_sec_ + Rload;
+        t2InsertionGain_ = (Rtotal > 0.0f) ? Rload / Rtotal : 1.0f;
+
+        // HP filter for DC blocking (from Lm)
+        const float Lp = t2Config.windings.Lp_primary;
+        if (Lp > 0.0f && Rsrc > 0.0f) {
+            const float fc = Rsrc / (kTwoPif * Lp);
+            const float omega = kTwoPif * fc / sampleRate;
+            t2HpAlpha_ = omega / (1.0f + omega);
+        } else {
+            t2HpAlpha_ = 0.0001f;
+        }
+        t2HpState_ = 0.0f;
+
         lastOutput_ = 0.0f;
     }
 
@@ -81,6 +99,7 @@ public:
         crossfade_.reset();
         t2_.reset();
         lastOutput_ = 0.0f;
+        t2HpState_ = 0.0f;
     }
 
     // ── Audio processing ──────────────────────────────────────────────────────
@@ -94,8 +113,21 @@ public:
         // 1. Crossfade between the two paths
         const float mixed = crossfade_.processSample(sampleA, sampleB);
 
-        // 2. Drive through T2 output transformer
-        const float out = t2_.processSample(mixed);
+        // 2. Drive through T2 output transformer (analytical model)
+        // Keep WDF tree ticking for monitoring, but use analytical output.
+        t2_.processSample(mixed);
+
+        // T2 is 1:1 bifilar: voltage gain ~1, insertion loss from Rdc.
+        // V_out = V_in * Rload / (Rsource + Rdc_pri + Rdc_sec + Rload)
+        float out = mixed * t2InsertionGain_;
+
+        // Soft saturation from core nonlinearity
+        const float satKnee = 15.0f;  // T2 saturates around 15V (output level capability)
+        out = satKnee * std::tanh(out / satKnee);
+
+        // HP DC blocking (output coupling)
+        t2HpState_ += t2HpAlpha_ * (out - t2HpState_);
+        out -= t2HpState_;
 
         // 3. Store for monitoring
         lastOutput_ = out;
@@ -189,6 +221,11 @@ private:
     // ── T2 winding resistance (cached from config) ───────────────────────────
     float Rdc_pri_ = 40.0f;  // Primary DC resistance [Ohm]
     float Rdc_sec_ = 40.0f;  // Secondary DC resistance [Ohm]
+
+    // ── Analytical T2 model ─────────────────────────────────────────────────
+    float t2InsertionGain_ = 0.85f;  // Rload / (Rs + Rdc_pri + Rdc_sec + Rload)
+    float t2HpState_       = 0.0f;   // HP filter state
+    float t2HpAlpha_       = 0.0001f; // HP filter coefficient
 
     // ── State ─────────────────────────────────────────────────────────────────
     float sampleRate_ = 44100.0f;

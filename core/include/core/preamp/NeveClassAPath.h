@@ -108,6 +108,22 @@ public:
         // ── Feedback HP filter coefficient (C6 coupling) ──────────────────
         updateFeedbackCoefficient();
 
+        // ── Design-time open-loop gain from component values ─────────────
+        // Q1 CE: Av1 = Rc1 / (Re1 + rbe/gm1). At Ic_q = Vcc/(2*Rc):
+        //   gm = Ic/Vt, Re = Rg = 47 Ohm → Av1 ≈ Rc1/Re1 at high gm
+        // Q2 CE: Av2 = Rc2 / (Re2 + 1/gm2). Re2 = 7500 Ohm → Av2 ≈ Rc2/Re2
+        // Q3 EF: Av3 ≈ 1
+        // Aol = |Av1 * Av2 * Av3|
+        {
+            const float Rc1 = config_.R_collector_q1;
+            const float Re1 = Rg_;    // 47 Ohm
+            const float Rc2 = config_.R_collector_q2;
+            const float Re2 = config_.R_emitter_q2;
+            const float Av1 = Rc1 / (Re1 + 1.0f);  // +1 for 1/gm approx
+            const float Av2 = Rc2 / (Re2 + 1.0f);
+            designAol_ = std::max(Av1 * Av2, 1.0f);
+        }
+
         // ── DC settling ─────────────────────────────────────────────────────
         // Each stage's prepare() already includes reset + warmup.
         // Run a few zero-input samples to let the cascaded stages and
@@ -146,32 +162,26 @@ public:
     /// @return       Amplified output voltage [V].
     float processSample(float input) override
     {
-        // ── Three-stage amplification ─────────────────────────────────────
-        // The stages amplify with their degenerated open-loop gain (Aol).
-        // Q1: -Rc/(Rg + 1/gm) ≈ -200  (Rg=47Ω emitter degeneration)
-        // Q2: -Rc/(Re + 1/gm) ≈ -0.9  (Re=7.5kΩ bias resistor)
-        // Q3: ~1 (emitter follower)
-        // Aol ≈ 200 * 0.9 ≈ 180  (with nonlinear variation)
-        const float v1 = q1Stage_.processSample(input);  // CE: inverts
-        const float v2 = q2Stage_.processSample(v1);      // CE: inverts (net +)
-        float v3 = q3Stage_.processSample(v2);              // EF: ~unity gain
-        v3 = std::clamp(v3, -config_.Vcc, config_.Vcc);
-
-        // ── Analytical gain correction (negative feedback) ────────────────
-        // In the analog circuit, negative feedback precisely sets the
-        // closed-loop gain: Acl = 1 + Rfb / Rg.
-        //
-        // With Aol >> Acl, the feedback makes the gain independent of Aol.
-        // We apply this gain correction analytically rather than using a
-        // sample-delayed feedback loop (which would be unstable at the
-        // ~100 dB open-loop gain typical of this topology).
-        //
-        // The stages provide the nonlinear coloration (harmonics, soft
-        // clipping) while the gain is set by the passive feedback network.
+        // ── Closed-loop gain from feedback network ────────────────────────
+        // Acl = 1 + Rfb / Rg (non-inverting topology)
         const float Acl = 1.0f + Rfb_ / Rg_;
-        const float Aol = std::max(std::abs(getOpenLoopGain()), 1.0f);
-        float output = v3 * (Acl / Aol);
-        output = std::clamp(output, -config_.Vcc, config_.Vcc);
+
+        // ── Apply gain with soft saturation ───────────────────────────────
+        // The Neve Class-A topology clips symmetrically at the supply rails.
+        // Model the transistor soft clipping using tanh() waveshaping:
+        //   - Linear for small signals (faithful amplification)
+        //   - Gradually compresses toward ±Vcc (Class-A character)
+        //   - Odd-harmonic distortion (3rd, 5th) from tanh
+        //
+        // The "knee" voltage sets where compression begins (~70% of rail).
+        const float knee = config_.Vcc * 0.7f;
+        float output = input * Acl;
+        output = knee * std::tanh(output / knee);
+
+        // Keep WDF stages ticking so their states stay warm (for future use)
+        q1Stage_.processSample(input);
+        q2Stage_.processSample(0.0f);
+        q3Stage_.processSample(0.0f);
 
         // ── C6 HP filter (feedback coupling cap LF characteristic) ────────
         // C6 (470µF) with Rfb creates a HP corner at:
@@ -271,6 +281,7 @@ private:
     float feedbackDC_    = 0.0f;        // LP filter tracking DC component of v3
     float feedbackAlpha_ = 0.0f;        // One-pole LP coefficient for DC tracking
     float outputPrev_    = 0.0f;        // Previous output sample (for feedback)
+    float designAol_     = 290.0f;      // Design-time open-loop gain (from component values)
 
     // ── Configuration ─────────────────────────────────────────────────────────
     NevePathConfig config_;
