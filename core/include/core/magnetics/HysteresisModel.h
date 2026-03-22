@@ -122,6 +122,21 @@ public:
         // Warm-start: extrapolative predictor [v2]
         double M_est = 2.0 * M_committed_ - M_prev_committed_;
 
+        // [v3] Soft-recovery from deep saturation.
+        // When M is near the clamp (|M| > 0.95*Ms) and H has changed direction,
+        // the extrapolative predictor locks M at the clamp because both
+        // M_committed_ and M_prev_committed_ are at +/-1.1*Ms.
+        // Blend toward the anhysteretic Man(H) to help NR escape saturation.
+        const double satRatio = std::abs(M_committed_)
+                              / (static_cast<double>(params_.Ms) + 1e-30);
+        if (satRatio > 0.95)
+        {
+            const double Heff = H_new + params_.alpha * M_committed_;
+            const double Man = params_.Ms * anhyst_.evaluateD(Heff / params_.a);
+            const double blend = std::min((satRatio - 0.95) * 10.0, 0.5);
+            M_est = (1.0 - blend) * M_est + blend * Man;
+        }
+
         lastConverged_ = false;
         lastIterCount_ = 0;
 

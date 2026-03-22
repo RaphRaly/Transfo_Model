@@ -159,6 +159,10 @@ public:
         }
 
         // ── 4. Per-sample processing ──────────────────────────────────────
+        // Reset peak meters per-block so they track current block, not all-time peak
+        lastInputLevel_ = 0.0f;
+        lastOutputLevel_ = 0.0f;
+
         for (int i = 0; i < numSamples; ++i)
         {
             // a. Apply input gain (smoothed)
@@ -286,7 +290,7 @@ public:
         data.t2_magnetizing_current = outputStage_.getT2MagnetizingCurrent();
         data.currentPath = targetPath_.load(std::memory_order_relaxed);
         data.gainPosition = gainPosition_;
-        data.isClipping = (lastOutputLevel_ > 10.0f);  // ~+24 dBu hard clip
+        data.isClipping = (lastOutputLevel_ > 1.0f);   // 0 dBFS digital clip
 
         return data;
     }

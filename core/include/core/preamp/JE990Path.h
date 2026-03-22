@@ -186,7 +186,8 @@ public:
         // multiplier on the stage output, same as a real op-amp where
         // Aol >> Acl makes the gain independent of Aol.
         const float Acl = 1.0f + Rfb_ / Rg_;
-        float output = v5 * Acl;
+        const float Aol = std::max(std::abs(getOpenLoopGain()), 1.0f);
+        float output = v5 * (Acl / Aol);
         output = std::clamp(output, -config_.Vcc, config_.Vcc);
 
         // ── C_out HP filter (output coupling cap) ───────────────────────

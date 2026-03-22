@@ -106,9 +106,9 @@ public:
         Vbe_prev_ = static_cast<float>(Vbe);
         lastIterCount_ = iter;
 
-        // Update operating point
+        // Update operating point (clamp must match NR loop to avoid exp overflow)
         const double sVbe = sign_ * Vbe_prev_;
-        const double expVbe = std::exp(std::clamp(sVbe, -2.0, 35.0)
+        const double expVbe = std::exp(std::clamp(sVbe, -2.0, 1.5)
                                        / static_cast<double>(params_.Vt));
         Ib_last_ = static_cast<float>(sign_ * Is / Bf * (expVbe - 1.0));
         Ic_last_ = static_cast<float>(params_.Bf * Ib_last_);

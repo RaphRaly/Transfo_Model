@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cmath>
 
 using namespace transfo;
 
@@ -149,6 +150,13 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                 realtimeModel_[ch].processBlock(data, data, numSamples);
             else
                 physicalModel_[ch].processBlock(data, data, numSamples);
+
+            // Safety: clamp NaN/Inf to zero (prevents corrupted IIR states in DAW)
+            for (int s = 0; s < numSamples; ++s)
+            {
+                if (!std::isfinite(data[s]))
+                    data[s] = 0.0f;
+            }
         }
     }
     else
@@ -173,6 +181,13 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
             auto* data = buffer.getWritePointer(ch);
             preampModel_[ch].processBlock(data, data, numSamples);
+
+            // Safety: clamp NaN/Inf to zero (prevents corrupted IIR states in DAW)
+            for (int s = 0; s < numSamples; ++s)
+            {
+                if (!std::isfinite(data[s]))
+                    data[s] = 0.0f;
+            }
         }
     }
 }

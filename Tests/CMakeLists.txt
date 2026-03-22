@@ -133,3 +133,11 @@ target_include_directories(test_preamp_plugin PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME preamp_plugin                    COMMAND test_preamp_plugin)
 
+# ── Preamp audio sweep (post-fix validation with WAV output) ─────────────────
+add_executable(test_preamp_audio_sweep
+    test_preamp_audio_sweep.cpp
+)
+target_include_directories(test_preamp_audio_sweep PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME preamp_audio_sweep              COMMAND test_preamp_audio_sweep)
+

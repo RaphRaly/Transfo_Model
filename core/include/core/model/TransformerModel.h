@@ -236,10 +236,15 @@ private:
   static constexpr float kLmSmoothTimeMs = 2.0f;          // Smoothing time constant [ms]
 
   // ── Compute hpAlpha from dynamic Lm (called per-sample) ──────────────
+  // Floor at 0.95 prevents the HP filter from ever cutting audio-band content.
+  // Without this, deep saturation (Lm→0) would make hpAlpha→0, blocking ALL
+  // signal and creating a positive-feedback death spiral (silence locks in).
+  static constexpr float kHpAlphaMin = 0.95f;
+
   float computeHpAlphaFromLm(float Lm) const {
     // RC = Lm / Rsource → alpha = RC / (RC + Ts)
     const float RC = Lm / Rsource_;
-    return RC / (RC + Ts_hp_);
+    return std::max(RC / (RC + Ts_hp_), kHpAlphaMin);
   }
 
   // ─── Realtime processing — direct J-A bypass (no OS) ─────────────────────
