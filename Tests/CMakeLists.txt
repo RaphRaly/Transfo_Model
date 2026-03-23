@@ -148,3 +148,11 @@ add_executable(test_preamp_diagnostic
 target_include_directories(test_preamp_diagnostic PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME preamp_diagnostic               COMMAND test_preamp_diagnostic)
+
+# Neve gain diagnostic
+add_executable(test_neve_gain_diag test_neve_gain_diag.cpp)
+target_include_directories(test_neve_gain_diag PRIVATE ${CORE_INCLUDE})
+
+# Per-stage gain diagnostic
+add_executable(test_neve_stage_gains test_neve_stage_gains.cpp)
+target_include_directories(test_neve_stage_gains PRIVATE ${CORE_INCLUDE})

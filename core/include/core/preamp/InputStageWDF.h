@@ -119,36 +119,8 @@ public:
     /// @return           Secondary voltage after turns ratio scaling.
     float processSample(float micSignal)
     {
-        // ── Analytical transformer model ───────────────────────────────────
-        // The WDF TransformerCircuitWDF has a Lm scattering domain mismatch
-        // that produces incorrect gain and phase. Use a simplified analytical
-        // model that correctly captures:
-        //   1. Turns ratio voltage gain
-        //   2. Source/load impedance voltage divider
-        //   3. Soft saturation from core nonlinearity
-        //   4. HP bass rolloff from Lm/Rsource
-        //
-        // Keep the WDF tree ticking for B-H monitoring (not in signal path).
-        t1_.processSample(micSignal);
-
-        // Voltage transfer: V_sec = V_in * n * Rload / (Rs*n² + Rdc_pri*n² + Rdc_sec + Rload)
-        float output = micSignal * idealGain_;
-
-        // Core saturation: soft clip at the saturation flux level.
-        // The Bsat point maps to a secondary voltage of approximately
-        // n * Bsat * Ae * 2*pi*f / N_turns ≈ a few volts at audio frequencies.
-        // Use a generous saturation knee to model mu-metal's wide linear region.
-        const float satKnee = idealGain_ * 0.5f;  // Start compressing at 50% of max linear
-        if (satKnee > 0.01f)
-            output = satKnee * std::tanh(output / satKnee);
-
-        // HP bass rolloff from Lm/Rsource interaction
-        // fc = Rsource / (2*pi*Lm) ≈ 2-5 Hz for mu-metal (sub-audio)
-        // Modeled as a one-pole HP that blocks DC and passes audio.
-        hpState_ += hpAlpha_ * (output - hpState_);
-        output -= hpState_;
-
-        lastOutput_ = output;
+        // Drive the full WDF transformer model — J-A nonlinear leaf + T-circuit
+        lastOutput_ = t1_.processSample(micSignal);
         return lastOutput_;
     }
 
@@ -257,7 +229,6 @@ private:
             (config_.ratio == InputStageConfig::Ratio::X10) ? 10 : 5;
 
         // Re-prepare the WDF tree with the modified config
-        // (kept for B-H monitoring, not in the primary signal path)
         t1_.prepare(static_cast<double>(sampleRate_), t1Cfg);
         t1_.reset();
 

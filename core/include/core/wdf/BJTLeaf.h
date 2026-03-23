@@ -80,19 +80,21 @@ public:
     float scatterImpl(float a)
     {
         const float Vbe = companion_.solve(a, Z_port_);
-        // Update Z_port_ to track small-signal impedance at current operating point.
-        // In a full WDF tree the adaptor handles this; for standalone use we self-adapt.
-        Z_port_ = std::clamp(companion_.getCompanionResistance(), 1.0f, 1e8f);
+        // DO NOT update Z_port_ here — keep it fixed per Werner/Bernardini standard.
+        // Adapting Z_port to track rbe creates a positive feedback loop: when Ic→0,
+        // Z_port→∞, making the incident wave tiny, keeping Ic≈0 (startup lockup).
+        // The port resistance is a fixed design parameter set once in configure().
         return 2.0f * Vbe - a;
     }
 
-    /// Adaptive port resistance based on current operating point.
+    /// Fixed port resistance set at configuration time.
     ///
-    /// Z = rbe = Bf * Vt / |Ic| at the current bias point.
-    /// Updated periodically by the HSIM solver (every adaptationInterval).
+    /// Per Werner (CCRMA 2016) and Bernardini et al. (2020), WDF port
+    /// resistances are fixed design parameters, not adapted per-sample.
+    /// Z_port_ = rbe at nominal 1mA bias, set once in configure().
     float getPortResistanceImpl() const
     {
-        return std::clamp(companion_.getCompanionResistance(), 1.0f, 1e8f);
+        return Z_port_;
     }
 
     // ── State management (HSIM interface) ───────────────────────────────────

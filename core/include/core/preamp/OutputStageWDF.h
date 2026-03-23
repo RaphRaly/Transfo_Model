@@ -113,25 +113,11 @@ public:
         // 1. Crossfade between the two paths
         const float mixed = crossfade_.processSample(sampleA, sampleB);
 
-        // 2. Drive through T2 output transformer (analytical model)
-        // Keep WDF tree ticking for monitoring, but use analytical output.
-        t2_.processSample(mixed);
-
-        // T2 is 1:1 bifilar: voltage gain ~1, insertion loss from Rdc.
-        // V_out = V_in * Rload / (Rsource + Rdc_pri + Rdc_sec + Rload)
-        float out = mixed * t2InsertionGain_;
-
-        // Soft saturation from core nonlinearity
-        const float satKnee = 15.0f;  // T2 saturates around 15V (output level capability)
-        out = satKnee * std::tanh(out / satKnee);
-
-        // HP DC blocking (output coupling)
-        t2HpState_ += t2HpAlpha_ * (out - t2HpState_);
-        out -= t2HpState_;
+        // 2. Drive through T2 output transformer (full WDF model)
+        float out = t2_.processSample(mixed);
 
         // 3. Store for monitoring
         lastOutput_ = out;
-
         return out;
     }
 

@@ -177,28 +177,28 @@ public:
     /// @return       Amplified output voltage [V].
     float processSample(float input) override
     {
-        // ── Closed-loop gain from feedback network ────────────────────────
-        // Acl = 1 + Rfb / Rg (non-inverting topology)
+        // 1. Drive all WDF stages (open-loop path)
+        const float v1 = diffPair_.processSample(input, 0.0f);   // Differential pair
+        const float v2 = cascode_.processSample(v1);              // Cascode: diff→SE
+        const float v3 = vas_.processSample(v2);                  // VAS: voltage gain
+        const float v4 = classAB_.processSample(v3);              // Class-AB output
+        float v5 = loadIsolator_.processSample(v4);               // Load isolator
+
+        // Clamp to supply rails
+        v5 = std::clamp(v5, -config_.Vcc, config_.Vcc);
+
+        // 2. Apply closed-loop gain correction analytically
         const float Acl = 1.0f + Rfb_ / Rg_;
+        const float Aol = getOpenLoopGain();
 
-        // ── Apply gain with soft saturation ───────────────────────────────
-        // The JE-990 clips asymmetrically (Class-AB push-pull output).
-        // Model using tanh() waveshaping for the dominant odd-harmonic
-        // character, with a slight asymmetry term for even harmonics.
-        const float knee = config_.Vcc * 0.7f;
-        float output = input * Acl;
-        output = knee * std::tanh(output / knee);
+        float output;
+        if (Aol > 1.0f) {
+            output = v5 * std::min(Acl / Aol, Acl);
+        } else {
+            output = v5 * std::min(Acl / designAol_, Acl);
+        }
 
-        // Keep WDF stages ticking so their states stay warm (for future use)
-        diffPair_.processSample(input, 0.0f);
-        cascode_.processSample(0.0f);
-        vas_.processSample(0.0f);
-        classAB_.processSample(0.0f);
-        loadIsolator_.processSample(0.0f);
-
-        // ── C_out HP filter (output coupling cap) ───────────────────────
-        // C_out (220µF) with downstream load creates a HP corner at
-        // sub-Hz frequencies. Blocks DC, passes audio.
+        // 3. C_out HP filter (output coupling cap)
         feedbackDC_ += feedbackAlpha_ * (output - feedbackDC_);
         output -= feedbackDC_;
 

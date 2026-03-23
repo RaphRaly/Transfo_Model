@@ -174,7 +174,7 @@ public:
         lastVce_        = Vcc_;
 
         // Warm up: settle the BJT at the bias point
-        for (int i = 0; i < 32; ++i)
+        for (int i = 0; i < 64; ++i)
             processSample(0.0f);
 
         // Re-initialize DC tracker to the converged emitter voltage
@@ -198,50 +198,49 @@ public:
     /// the base with a nearly constant Vbe offset (~0.65V for BD139).
     float processSample(float input)
     {
-        // ── Companion-source approach for emitter follower ──────────────────
+        // ── Emitter follower: Av ≈ 1.0 ─────────────────────────────────────
         //
-        // The EF is fundamentally simple:
-        //   1. Drive BJTLeaf with the base voltage (input)
-        //   2. Ve = Vbase - Vbe (emitter follows base minus one diode drop)
-        //   3. AC-couple the emitter voltage through C_out
-        //   4. Add series resistance R_series_out
+        // The EF gain is Av = gm*R_bias / (1 + gm*R_bias). For BD139 at
+        // Ic ≈ 60mA: gm*R_bias ≈ 878, so Av ≈ 0.999 (essentially unity).
         //
-        // This is simpler than a full WDF tree and more numerically stable,
-        // since the EF gain is ~1 and doesn't require adaptor scattering.
+        // The WDF one-port BJT is driven to maintain the correct DC operating
+        // point and gm. The AC output is computed analytically as input × Av.
+        // The BJT leaf provides gm modulation for subtle nonlinear coloring
+        // (compression at large signals due to gm reduction).
 
-        // ── Step 1: Add DC bias and drive BJTLeaf ─────────────────────────
-        // V_bias forward-biases the BE junction at the target emitter current.
+        // ── Step 1: Drive BJTLeaf for DC bias and gm tracking ──────────────
         const float baseDrive = input + V_bias_base_;
         const float b_prev = bjtLeaf_.getReflectedWave();
         const float a_bjt = 2.0f * baseDrive - b_prev;
         bjtLeaf_.scatter(a_bjt);
 
-        // ── Step 2: Compute emitter voltage ─────────────────────────────────
-        const float Vbe = bjtLeaf_.getVbe();
-        emitterVoltage_ = baseDrive - Vbe;
+        // ── Step 2: Compute EF voltage gain ─────────────────────────────────
+        // Av = gm * R_bias / (1 + gm * R_bias)
+        // This naturally models:
+        //   - Near-unity gain in forward-active (gm*R >> 1)
+        //   - Soft compression when driven hard (gm drops → Av drops)
+        //   - Cutoff behavior when BJT turns off (gm → 0 → Av → 0)
+        const float gm = bjtLeaf_.getGm();
+        const float gmR = gm * config_.R_bias;
+        const float Av = (gmR > kEpsilonF) ? gmR / (1.0f + gmR) : 0.0f;
 
-        // Clamp emitter to supply rails: Ve in [-Vcc, +Vcc]
+        // ── Step 3: Emitter voltage = input scaled by Av ────────────────────
+        emitterVoltage_ = input * Av;
+
+        // Clamp to supply rails
         emitterVoltage_ = std::clamp(emitterVoltage_, -Vcc_, Vcc_);
 
-        // ── Step 3: Collector-emitter voltage ───────────────────────────────
-        lastVce_ = Vcc_ - emitterVoltage_;
+        // ── Step 4: Collector-emitter voltage (monitoring) ──────────────────
+        // Ve ≈ -Vcc + Ie*R_bias at quiescence. For monitoring, approximate
+        // Vce from the bias point.
+        const float Ve_est = -Vcc_ + bjtLeaf_.getIc() * config_.R_bias;
+        lastVce_ = Vcc_ - Ve_est;
 
-        // ── Step 4: AC-coupling through C_out ───────────────────────────────
-        // C_eff = C_out + C_out_film is a large electrolytic (224.7µF).
-        // Model as a one-pole HP filter: blocks DC, passes audio.
-        //   dcState_ tracks the DC component of Ve
-        //   AC output = Ve - dcState_
-        //
-        // Time constant: tau = C_eff * R_load (R_load ~ R_bias || downstream)
-        // For R_bias=390 and typical downstream load, tau ~ 0.1s.
-        // alpha = Ts / (Ts + tau)
+        // ── Step 5: AC-coupling through C_out ───────────────────────────────
         dcState_ += dcAlpha_ * (emitterVoltage_ - dcState_);
         const float Ve_ac = emitterVoltage_ - dcState_;
 
-        // ── Step 5: Series output resistance ────────────────────────────────
-        // The 10 Ohm resistor attenuates slightly and adds output impedance.
-        // In a real circuit, it forms a voltage divider with the load.
-        // For simplicity, pass through (load >> 10 Ohm).
+        // ── Step 6: Series output resistance ────────────────────────────────
         lastOutput_ = Ve_ac;
         return lastOutput_;
     }

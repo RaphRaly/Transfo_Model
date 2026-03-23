@@ -172,7 +172,7 @@ public:
         // Warm up: run zero-input samples so the BJT NR solver converges
         // at the bias point, eliminating the initial transient that would
         // otherwise be amplified by the high open-loop gain.
-        for (int i = 0; i < 32; ++i)
+        for (int i = 0; i < 64; ++i)
             processSample(0.0f);
 
         // Re-initialize DC tracker to the converged collector voltage
@@ -217,6 +217,33 @@ public:
         // quiescent current. At WDF steady state, Vbe → baseDrive.
         baseDrive += V_bias_base_;
 
+        // ── Step 2b: Input-side emitter degeneration ─────────────────────────
+        // In a real circuit, the emitter resistor Re provides current-series
+        // negative feedback: Ve = Ie*Re reduces the effective Vbe, limiting
+        // the collector current swing and preventing the BJT from being driven
+        // into severe nonlinearity.
+        //
+        // The WDF one-port BJT model doesn't include Re in its tree, so
+        // without correction the BJT sees the full undegen input swing.
+        // For heavy degeneration (gm*Re >> 1), this can drive the BJT from
+        // cutoff to saturation each cycle, producing incorrect gain in cascade.
+        //
+        // Fix: scale the AC component of baseDrive by 1/(1+gm*Re) BEFORE
+        // the BJT scatter. This keeps the BJT in its linear region and
+        // produces the correct degenerated gain: Av = -Rc/(Re + 1/gm).
+        //
+        // The degeneration uses the current gm (adapts to operating point).
+        if (config_.R_emitter > 0.0f && !hasBypassCap_)
+        {
+            const float gm = bjtLeaf_.getGm();
+            if (gm > kEpsilonF)
+            {
+                const float degen = 1.0f / (1.0f + gm * config_.R_emitter);
+                const float ac_input = baseDrive - V_bias_base_;
+                baseDrive = V_bias_base_ + ac_input * degen;
+            }
+        }
+
         // ── Step 3: Drive BJTLeaf (BE junction NR solve) ─────────────────────
         const float b_prev = bjtLeaf_.getReflectedWave();
         const float a_bjt = 2.0f * baseDrive - b_prev;
@@ -234,27 +261,10 @@ public:
         //   PNP: sign=-1, Ic<0 => Vc = -Vcc - (-|Ic|)*Rc = -Vcc + |Ic|*Rc (correct)
         float Vc = sign_ * config_.Vcc - Ic * config_.R_collector;
 
-        // Clamp collector voltage to supply rail limits.
-        // In a real circuit, Vc cannot exceed the supply rails.
-        // NPN: Vc in [~0, Vcc], PNP: Vc in [-Vcc, ~0].
-        // We use ±Vcc as a conservative clamp.
+        // Clamp collector voltage to supply rails.
+        // With input-side degeneration, the BJT operates near its linear
+        // region, so Vc should rarely exceed the rails.
         Vc = std::clamp(Vc, -config_.Vcc, config_.Vcc);
-
-        // ── Step 5b: Emitter degeneration ──────────────────────────────────
-        // Models the gain reduction from R_emitter in the signal path.
-        // Av = -gm * Rc / (1 + gm * Re) = -Rc / (Re + 1/gm)
-        // Applied as a scaling factor on the AC component of Vc.
-        // Only when no bypass cap handles frequency-dependent degeneration.
-        if (config_.R_emitter > 0.0f && !hasBypassCap_)
-        {
-            const float gm = bjtLeaf_.getGm();
-            if (gm > kEpsilonF)
-            {
-                const float degen = 1.0f / (1.0f + gm * config_.R_emitter);
-                const float Vc_ac = Vc - Vc_dc_;
-                Vc = Vc_dc_ + Vc_ac * degen;
-            }
-        }
 
         // ── Step 6: Emitter bypass degeneration ──────────────────────────────
         // At low frequencies, the emitter resistor reduces gain.

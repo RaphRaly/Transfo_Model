@@ -1,0 +1,10 @@
+^C:\USERS\USER\DESKTOP\TRANSFO_MODEL\BUILD_TESTS\CMAKEFILES\4A6A4ED3CB57FFFB03501DAE97C39949\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/user/Desktop/Transfo_Model/Tests -BC:/Users/user/Desktop/Transfo_Model/build_tests --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/user/Desktop/Transfo_Model/build_tests/HysteresisTests.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

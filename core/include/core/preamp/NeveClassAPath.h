@@ -162,32 +162,31 @@ public:
     /// @return       Amplified output voltage [V].
     float processSample(float input) override
     {
-        // ── Closed-loop gain from feedback network ────────────────────────
-        // Acl = 1 + Rfb / Rg (non-inverting topology)
+        // 1. Drive the three WDF stages (open-loop amplifier)
+        const float v1 = q1Stage_.processSample(input);      // Q1 CE: inverts
+        const float v2 = q2Stage_.processSample(v1);          // Q2 CE: inverts (net positive)
+        float v3 = q3Stage_.processSample(v2);                // Q3 EF: ~unity gain buffer
+
+        // Clamp to supply rails
+        v3 = std::clamp(v3, -config_.Vcc, config_.Vcc);
+
+        // 2. Apply closed-loop gain correction analytically
+        // Acl = 1 + Rfb/Rg (feedback network gain)
+        // Aol = measured open-loop gain from WDF stages
+        // Output = v3 * (Acl / Aol) if Aol > Acl, else just v3
         const float Acl = 1.0f + Rfb_ / Rg_;
+        const float Aol = std::abs(getOpenLoopGain());
 
-        // ── Apply gain with soft saturation ───────────────────────────────
-        // The Neve Class-A topology clips symmetrically at the supply rails.
-        // Model the transistor soft clipping using tanh() waveshaping:
-        //   - Linear for small signals (faithful amplification)
-        //   - Gradually compresses toward ±Vcc (Class-A character)
-        //   - Odd-harmonic distortion (3rd, 5th) from tanh
-        //
-        // The "knee" voltage sets where compression begins (~70% of rail).
-        const float knee = config_.Vcc * 0.7f;
-        float output = input * Acl;
-        output = knee * std::tanh(output / knee);
+        float output;
+        if (Aol > 1.0f) {
+            // Scale WDF output by feedback ratio
+            output = v3 * std::min(Acl / Aol, Acl);
+        } else {
+            // Aol too low (startup/convergence) — use design-time estimate
+            output = v3 * std::min(Acl / designAol_, Acl);
+        }
 
-        // Keep WDF stages ticking so their states stay warm (for future use)
-        q1Stage_.processSample(input);
-        q2Stage_.processSample(0.0f);
-        q3Stage_.processSample(0.0f);
-
-        // ── C6 HP filter (feedback coupling cap LF characteristic) ────────
-        // C6 (470µF) with Rfb creates a HP corner at:
-        //   f_hp = 1 / (2*pi*C6*Rfb)
-        // At audio frequencies: transparent. At sub-Hz: blocks.
-        // Modeled as a one-pole HP on the output.
+        // 3. C6 HP filter (feedback coupling cap)
         feedbackDC_ += feedbackAlpha_ * (output - feedbackDC_);
         output -= feedbackDC_;
 

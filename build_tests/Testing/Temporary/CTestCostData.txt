@@ -1,0 +1,20 @@
+cpwl_adaa 1 0.0481513
+cpwl_passivity 1 0.0389936
+hsim_diagnostics 1 0.0387453
+plugin_integration 1 0.107545
+dynamic_losses 1 0.791277
+dynamic_parallel_adaptor 1 0.0406368
+lc_resonance 1 0.0502099
+nonlinear_lm 1 2.86841
+circuit_model 1 3.82642
+diode_leaf 1 0.0451883
+bjt_leaf 1 0.0518104
+input_stage 1 0.515873
+neve_path 1 0.0827351
+je990_path 1 0.0851406
+output_stage 1 0.289356
+preamp_full 1 1.29778
+preamp_plugin 1 0.104682
+preamp_audio_sweep 1 13.4001
+preamp_diagnostic 1 14.5357
+---
