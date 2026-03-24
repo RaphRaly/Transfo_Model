@@ -258,13 +258,20 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   addAndMakeVisible(levelMeter_);
 
   // ── Preset combo (hidden — preamp handles T1/T2) ──
-  presetCombo_.addItemList({"Jensen JT-115K-E", "Jensen JT-11ELCF"}, 1);
+  presetCombo_.addItemList({
+      "Jensen JT-115K-E", "Jensen JT-11ELCF",
+      "Neve 10468 Input", "Neve LI1166 Output",
+      "API AP2503", "Lundahl LL1538",
+      "Fender Deluxe OT", "Vox AC30 OT",
+      "UTC HA-100X", "Clean DI",
+      "Vocal Warmth", "Bass Thickener",
+      "Drum Punch", "Guitar Crunch", "Master Glue"}, 1);
   presetAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Preset, presetCombo_);
 
   // ── Mode combo (hidden) ──
-  modeCombo_.addItemList({"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)"}, 1);
+  modeCombo_.addItemList({"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)", "Physical (J-A+OS2x)"}, 1);
   modeAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Mode, modeCombo_);
@@ -320,6 +327,17 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   addAndMakeVisible(preampRatioCombo_);
   preampRatioAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
       processorRef_.getAPVTS(), ParamID::PreampRatio, preampRatioCombo_);
+
+  // ── P1.2: Saturation meter ──
+  addAndMakeVisible(satMeter_);
+  satLabel_.setText("SAT", juce::dontSendNotification);
+  satLabel_.setJustificationType(juce::Justification::centred);
+  satLabel_.setFont(juce::Font(juce::FontOptions(9.0f).withStyle("Bold")));
+  satLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
+  addAndMakeVisible(satLabel_);
+
+  // ── P1.3: Info panel ──
+  addAndMakeVisible(infoPanel_);
 
   // ── Monitor label ──
   monitorLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -653,11 +671,24 @@ void PluginEditor::resized() {
     auto col = juce::Rectangle<int>(colX[3] + pad, innerY,
                                      colX[4] - colX[3] - pad * 2, innerH);
 
-    // B-H Scope (takes most of the space)
-    auto scopeArea = col.removeFromTop(col.getHeight() - 30);
+    // P1.2: Saturation meter (right strip, 24px wide)
+    auto satCol = col.removeFromRight(24);
+    satLabel_.setBounds(satCol.removeFromTop(12));
+    satMeter_.setBounds(satCol.reduced(2, 0));
+
+    col.removeFromRight(4);
+
+    // B-H Scope (main area)
+    auto scopeArea = col.removeFromTop(col.getHeight() - 50);
     bhScope_.setBounds(scopeArea.reduced(2));
 
     col.removeFromTop(4);
+
+    // P1.3: Info panel (between scope and level meter)
+    auto infoArea = col.removeFromTop(16);
+    infoPanel_.setBounds(infoArea.reduced(2, 0));
+
+    col.removeFromTop(2);
 
     // Level meter bar (bottom strip)
     levelMeter_.setBounds(col.reduced(2, 0));
@@ -673,6 +704,16 @@ void PluginEditor::resized() {
 }
 
 void PluginEditor::timerCallback() {
+  // P1.2: Update saturation meter
+  float sat = processorRef_.getPeakSaturation();
+  satMeter_.setSaturation(sat);
+
+  // P1.3: Update info panel
+  auto monData = processorRef_.getMonitorData();
+  infoPanel_.setNRIter(monData.lastIterCount);
+  infoPanel_.setSatPct(sat);
+  infoPanel_.setLmValue(processorRef_.getLmSmoothed());
+
   auto preampData = processorRef_.getPreampMonitorData();
 
   // Feed level meter

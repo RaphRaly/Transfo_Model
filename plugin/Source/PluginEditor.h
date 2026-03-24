@@ -103,6 +103,66 @@ private:
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
       preampPathAttach_, preampRatioAttach_;
 
+  // ── P1.2: Saturation Meter ──────────────────────────────────────────────
+  class SaturationMeter : public juce::Component {
+  public:
+    void setSaturation(float pct) { saturation_ = pct; repaint(); }
+    float getSaturation() const { return saturation_; }
+    void paint(juce::Graphics& g) override {
+      auto b = getLocalBounds().toFloat();
+      g.setColour(juce::Colour(0xFF141418));
+      g.fillRoundedRectangle(b, 3.0f);
+      float fillH = b.getHeight() * std::min(saturation_ / 100.0f, 1.0f);
+      auto fillRect = b.removeFromBottom(fillH);
+      juce::Colour col = saturation_ < 30.f ? juce::Colour(0xFF4CAF50)
+                        : saturation_ < 70.f ? juce::Colour(0xFFFFB300)
+                        : juce::Colour(0xFFE53935);
+      g.setColour(col);
+      g.fillRoundedRectangle(fillRect, 2.0f);
+      g.setColour(juce::Colour(0xFF3A3A3E));
+      g.drawRoundedRectangle(getLocalBounds().toFloat(), 3.0f, 0.8f);
+      g.setColour(juce::Colour(0xFFCCCCCC));
+      g.setFont(juce::Font(juce::FontOptions(9.0f)));
+      g.drawText(juce::String((int)saturation_) + "%",
+                 getLocalBounds(), juce::Justification::centred);
+    }
+  private:
+    float saturation_ = 0.0f;
+  };
+
+  // ── P1.3: Engineering Info Panel ───────────────────────────────────────
+  class InfoPanel : public juce::Component {
+  public:
+    void setNRIter(int n) { nrIter_ = n; repaint(); }
+    void setSatPct(float p) { satPct_ = p; }
+    void setLmValue(float lm) { lmValue_ = lm; }
+    void paint(juce::Graphics& g) override {
+      auto b = getLocalBounds().toFloat();
+      g.setColour(juce::Colour(0xFF1A1A1E));
+      g.fillRoundedRectangle(b, 4.0f);
+      g.setColour(juce::Colour(0xFF3A3A3E));
+      g.drawRoundedRectangle(b, 4.0f, 0.8f);
+      g.setFont(juce::Font(juce::FontOptions(10.0f)));
+      g.setColour(juce::Colour(0xFF888888));
+      auto tb = getLocalBounds().reduced(6, 2);
+      // P1.3: Show saturation, NR iterations, and dynamic Lm
+      juce::String lmStr = (lmValue_ >= 1.0f) ? juce::String(lmValue_, 1) + "H"
+                         : (lmValue_ >= 0.001f) ? juce::String(lmValue_ * 1000.0f, 1) + "mH"
+                         : juce::String(lmValue_ * 1e6f, 0) + "uH";
+      g.drawText("Sat: " + juce::String(satPct_, 1) + "%  NR: " + juce::String(nrIter_)
+                 + "  Lm: " + lmStr,
+                 tb, juce::Justification::centredLeft);
+    }
+  private:
+    int nrIter_ = 0;
+    float satPct_ = 0.0f;
+    float lmValue_ = 1.0f;
+  };
+
+  SaturationMeter satMeter_;
+  InfoPanel infoPanel_;
+  juce::Label satLabel_;
+
   // Resizable constrainer
   juce::ComponentBoundsConstrainer constrainer_;
 

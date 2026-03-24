@@ -53,7 +53,10 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         realtimeModel_[ch].setProcessingMode(ProcessingMode::Realtime);
         realtimeModel_[ch].prepareToPlay(sr, samplesPerBlock);
 
+        // P1.1: Physical models prepared with default 4x OS
+        // (runtime OS factor set per-mode in processBlock)
         physicalModel_[ch].setProcessingMode(ProcessingMode::Physical);
+        physicalModel_[ch].setOversamplingFactor(4);
         physicalModel_[ch].prepareToPlay(sr, samplesPerBlock);
     }
 
@@ -68,6 +71,9 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
             preampModel_[ch].prepareToPlay(sr, samplesPerBlock);
         }
     }
+
+    // A2.2: Report latency to host
+    updateLatencyReport();
 }
 
 void PluginProcessor::releaseResources()
@@ -108,11 +114,33 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float mix          = mixParam_->load();
     const bool  useLegacy    = (static_cast<int>(circuitParam_->load()) == 1);
 
+    // A2.2: Preamp mode has zero latency — update when switching engines
+    if (!useLegacy && lastModeIndex_ != -1)
+    {
+        lastModeIndex_ = -1;
+        setLatencySamples(0);
+    }
+
     if (useLegacy)
     {
         // ── Legacy mode: old TransformerModel engine ──────────────────────
         const int presetIndex = static_cast<int>(presetParam_->load());
         const int modeIndex   = static_cast<int>(modeParam_->load());
+
+        // A2.2 + P1.1: Update latency and OS factor when mode changes
+        if (modeIndex != lastModeIndex_)
+        {
+            lastModeIndex_ = modeIndex;
+            // P1.1: mode 1 = OS4x, mode 2 = OS2x
+            const int osFactor = (modeIndex == 2) ? 2 : 4;
+            for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
+            {
+                physicalModel_[ch].setOversamplingFactor(osFactor);
+                physicalModel_[ch].prepareToPlay(
+                    static_cast<float>(getSampleRate()), getBlockSize());
+            }
+            updateLatencyReport();
+        }
 
         if (presetIndex != lastPresetIndex_)
         {
@@ -151,10 +179,10 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             else
                 physicalModel_[ch].processBlock(data, data, numSamples);
 
-            // Safety: clamp NaN/Inf to zero (prevents corrupted IIR states in DAW)
+            // Safety: clamp NaN/Inf/denormals to zero (A2.1)
             for (int s = 0; s < numSamples; ++s)
             {
-                if (!std::isfinite(data[s]))
+                if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
                     data[s] = 0.0f;
             }
         }
@@ -182,10 +210,10 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             auto* data = buffer.getWritePointer(ch);
             preampModel_[ch].processBlock(data, data, numSamples);
 
-            // Safety: clamp NaN/Inf to zero (prevents corrupted IIR states in DAW)
+            // Safety: clamp NaN/Inf/denormals to zero (A2.1)
             for (int s = 0; s < numSamples; ++s)
             {
-                if (!std::isfinite(data[s]))
+                if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
                     data[s] = 0.0f;
             }
         }
@@ -210,6 +238,20 @@ void PluginProcessor::applyPreset(int presetIndex)
         realtimeModel_[ch].setConfig(cfg);
         physicalModel_[ch].setConfig(cfg);
     }
+}
+
+// =============================================================================
+// Latency Reporting (A2.2)
+// =============================================================================
+void PluginProcessor::updateLatencyReport()
+{
+    const int modeIndex = static_cast<int>(modeParam_->load());
+    if (modeIndex == 0)
+        setLatencySamples(0);       // Realtime (CPWL+ADAA): < 1 sample, report 0
+    else if (modeIndex == 2)
+        setLatencySamples(13);      // Physical (J-A+OS2x): single halfband = 13 samples
+    else
+        setLatencySamples(39);      // Physical (J-A+OS4x): halfband cascade = 39 samples
 }
 
 // =============================================================================

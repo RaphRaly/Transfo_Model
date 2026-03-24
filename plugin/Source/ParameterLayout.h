@@ -56,13 +56,20 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     // Transformer Preset
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Preset, 1), "Transformer",
-        juce::StringArray{"Jensen JT-115K-E", "Jensen JT-11ELCF"},
+        juce::StringArray{
+            "Jensen JT-115K-E", "Jensen JT-11ELCF",
+            "Neve 10468 Input", "Neve LI1166 Output",
+            "API AP2503", "Lundahl LL1538",
+            "Fender Deluxe OT", "Vox AC30 OT",
+            "UTC HA-100X", "Clean DI",
+            "Vocal Warmth", "Bass Thickener",
+            "Drum Punch", "Guitar Crunch", "Master Glue"},
         0));
 
-    // Processing Mode
+    // Processing Mode (P1.1: added 2x OS option)
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Mode, 1), "Mode",
-        juce::StringArray{"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)"},
+        juce::StringArray{"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)", "Physical (J-A+OS2x)"},
         0));
 
     // SVU — Stereo Variation Units

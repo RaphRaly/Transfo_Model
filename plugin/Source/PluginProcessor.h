@@ -53,6 +53,27 @@ public:
   void getStateInformation(juce::MemoryBlock &destData) override;
   void setStateInformation(const void *data, int sizeInBytes) override;
 
+  // A2.2: Latency compensation — reports correct latency based on processing mode
+  void updateLatencyReport();
+
+  // P1.2: Peak saturation percentage (0-100) for GUI meter
+  float getPeakSaturation() {
+    const int m = static_cast<int>(modeParam_->load());
+    if (m == 0)
+      return realtimeModel_[0].getPeakSaturation();
+    else
+      return physicalModel_[0].getPeakSaturation();
+  }
+
+  // P1.3: Dynamic Lm readout (Henry) for engineering info panel
+  float getLmSmoothed() {
+    const int m = static_cast<int>(modeParam_->load());
+    if (m == 0)
+      return realtimeModel_[0].getLmSmoothed();
+    else
+      return physicalModel_[0].getLmSmoothed();
+  }
+
   juce::AudioProcessorValueTreeState &getAPVTS() { return apvts_; }
 
   // Monitoring data for editor
@@ -96,6 +117,7 @@ private:
   std::atomic<float> *circuitParam_ = nullptr;
 
   int lastPresetIndex_ = -1;
+  int lastModeIndex_ = 0;    // A2.2: Track mode for latency updates
 
   void applyPreset(int presetIndex);
 
