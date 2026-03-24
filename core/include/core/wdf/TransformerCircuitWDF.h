@@ -307,7 +307,11 @@ public:
     /// Called periodically (every kDefaultAdaptationInterval samples).
     void updateAdaptation()
     {
+        // 1. Sync leaf's cached Z_port_ with current J-A susceptibility
+        lm_.syncPortImpedance();
+        // 2. Read the (now-consistent) port resistance
         const float newZ = lm_.getPortResistance();
+        // 3. Update junction and recalculate scattering coefficients
         pRoot_.setPortImpedance(3, newZ);
         pRoot_.recalculateScattering();
     }

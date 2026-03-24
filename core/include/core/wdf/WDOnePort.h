@@ -55,6 +55,18 @@ public:
         return (Z > 1e-10f) ? (a_incident_ - b_reflected_) / (2.0f * Z) : 0.0f;
     }
 
+    // ─── Port resistance cache synchronization ──────────────────────────────
+    // For elements with dynamic port resistance (e.g. JilesAthertonLeaf),
+    // getPortResistanceImpl() computes the correct value but does not store
+    // it in Z_port_. Call syncPortImpedance() after any state change that
+    // affects port resistance so that scatterImpl() reads a consistent value.
+    // For elements that set Z_port_ directly (resistors, capacitors, etc.)
+    // this is a harmless no-op.
+    void syncPortImpedance()
+    {
+        Z_port_ = static_cast<const Derived*>(this)->getPortResistanceImpl();
+    }
+
     // ─── Wave variable access ───────────────────────────────────────────────
     float getIncidentWave()  const { return a_incident_; }
     float getReflectedWave() const { return b_reflected_; }

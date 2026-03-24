@@ -75,12 +75,16 @@ public:
     dynLosses_.setSampleRate(sampleRate);
     dynLosses_.reset();
     updateCachedCoeffs();
+    // Sync Z_port_ so scatterImpl() uses the correct port resistance
+    // in its companion model (not the WDOnePort default of 1.0).
+    this->syncPortImpedance();
   }
 
   void setParameters(const JAParameterSet &params) {
     hystModel_.setParameters(params);
     dynLosses_.setCoefficients(params.K1, params.K2);
     updateCachedCoeffs();
+    this->syncPortImpedance();
   }
 
   // ─── WDF scattering (called by WDOnePort CRTP) ─────────────────────────
