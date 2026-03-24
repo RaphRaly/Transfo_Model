@@ -47,6 +47,7 @@ enum class ProcessingMode {
 struct BHSample {
   float h = 0.0f;
   float b = 0.0f;
+  float saturationPercent = 0.0f;  // P1.2: |M|/Ms × 100
 };
 
 template <typename NonlinearLeaf> class TransformerModel {
@@ -67,10 +68,11 @@ public:
     maxBlockSize_ = maxBlockSize;
 
     if (processingMode_ == ProcessingMode::Physical) {
-      // Physical: OS 4x polyphase filter design
-      oversampler_.prepare(sampleRate, maxBlockSize, kOversamplingPhysical);
+      // Physical: OS 2x or 4x (P1.1: configurable via setOversamplingFactor)
+      const int osFact = osFactor_;
+      oversampler_.prepare(sampleRate, maxBlockSize, osFact);
       hsim_.prepareToPlay(oversampler_.getOversampledRate(),
-                          maxBlockSize * kOversamplingPhysical);
+                          maxBlockSize * osFact);
     } else {
       // Realtime: no OS, ADAA coefficients precomputed in CPWLLeaf
       hsim_.prepareToPlay(sampleRate, maxBlockSize);
@@ -92,7 +94,7 @@ public:
     // Always prepare unified WDF circuit so it's ready for runtime switching
     wdfCircuit_.prepare(static_cast<double>(
         (processingMode_ == ProcessingMode::Physical)
-            ? sampleRate * kOversamplingPhysical
+            ? sampleRate * static_cast<float>(osFactor_)
             : sampleRate),
         config_);
     wdfCircuit_.reset();
@@ -146,6 +148,20 @@ public:
     return count;
   }
 
+  // ─── P1.2: Peak saturation tracking ─────────────────────────────────────
+  float getPeakSaturation() {
+    float v = peakSaturation_;
+    peakSaturation_ = 0.0f;
+    return v * 100.0f;
+  }
+
+  // ─── P1.1: Oversampling factor control ────────────────────────────────
+  void setOversamplingFactor(int factor) { osFactor_ = factor; }
+  int  getOversamplingFactor() const { return osFactor_; }
+
+  // ─── P1.3: Dynamic Lm readout for GUI ─────────────────────────────────
+  float getLmSmoothed() const { return lmSmoothed_; }
+
   // ─── Access ─────────────────────────────────────────────────────────────
   HSIMSolver<NonlinearLeaf> &getHSIM() { return hsim_; }
   const TransformerConfig &getConfig() const { return config_; }
@@ -168,6 +184,8 @@ public:
     lmSmoothed_ = config_.windings.Lp_primary; // Reset to static Lp
     lcFilter_.reset();
     wdfCircuit_.reset();
+    bertottiUpdateCounter_ = 0;  // V2.4
+    peakSaturation_ = 0.0f;      // P1.2
   }
 
 private:
@@ -182,6 +200,7 @@ private:
 
   float sampleRate_ = kDefaultSampleRate;
   int maxBlockSize_ = 512;
+  int osFactor_ = kOversamplingPhysical;  // P1.1: 2 or 4
 
   SPSCQueue<BHSample, 2048> bhQueue_;
   int bhDownsampleCounter_ = 0;
@@ -213,6 +232,13 @@ private:
   TransformerCircuitWDF<NonlinearLeaf> wdfCircuit_;
   bool useWdfCircuit_ = false;  // Feature flag — true to use unified WDF
 
+  // ─── V2.4: Bertotti dynamic loss → LC Q coupling ──────────────────────
+  int bertottiUpdateCounter_ = 0;
+  static constexpr int kBertottiUpdateInterval = 64;
+
+  // ─── P1.2: Peak saturation tracking ──────────────────────────────────
+  float peakSaturation_ = 0.0f;
+
   // Legacy LP filter (kept for fallback when LC is disabled)
   float lpAlpha_ = 0.0f;   // LP coefficient (0.0 = bypass)
   float lpState_ = 0.0f;
@@ -236,15 +262,23 @@ private:
   static constexpr float kLmSmoothTimeMs = 2.0f;          // Smoothing time constant [ms]
 
   // ── Compute hpAlpha from dynamic Lm (called per-sample) ──────────────
-  // Floor at 0.95 prevents the HP filter from ever cutting audio-band content.
-  // Without this, deep saturation (Lm→0) would make hpAlpha→0, blocking ALL
-  // signal and creating a positive-feedback death spiral (silence locks in).
-  static constexpr float kHpAlphaMin = 0.95f;
+  // Floor prevents deep saturation (Lm→0) from blocking ALL signal.
+  // Frequency-based floor: HP cutoff never exceeds kHpFloorFreqHz,
+  // regardless of sample rate. Computed once in configureCircuit().
+  static constexpr float kHpFloorFreqHz = 10.0f;
+  float hpAlphaMin_ = 0.95f;  // Computed from kHpFloorFreqHz in configureCircuit()
+
+  // ── Cascade Bertotti eddy-current scaling factor ────────────────────
+  // The cascade code applies H_eff -= H_dyn directly (lumped subtraction),
+  // which over-estimates eddy damping vs the WDF's wave-coupled approach.
+  // Factor 0.15 pushes the Bertotti LP from ~15 kHz to ~101 kHz,
+  // matching Jensen datasheet: -0.2 dB @ 20 kHz.
+  static constexpr float kCascadeEddyFactor = 0.15f;
 
   float computeHpAlphaFromLm(float Lm) const {
     // RC = Lm / Rsource → alpha = RC / (RC + Ts)
     const float RC = Lm / Rsource_;
-    return std::max(RC / (RC + Ts_hp_), kHpAlphaMin);
+    return std::max(RC / (RC + Ts_hp_), hpAlphaMin_);
   }
 
   // ─── Realtime processing — direct J-A bypass (no OS) ─────────────────────
@@ -271,17 +305,15 @@ private:
           }
         }
       } else {
-        // === EXISTING CASCADE CODE (HP → J-A → Bertotti → LC) ===
-
-        // Circuit HP: source impedance / Lp bass rolloff
-        const float hpOut = hpAlpha_ * (hpState_ + x - hpPrev_);
-        hpPrev_ = x;
-        hpState_ = hpOut;
-        x = hpOut;
+        // === CASCADE CODE (A1.1: J-A → HP → LC) ===
+        // J-A sees full-bandwidth input. HP applies Lm-driven rolloff to flux output.
 
         if (linearMode_) {
-          // Linear bypass: skip J-A, Bertotti, dynLm — unity gain after HP
-          wet = x;
+          // Linear bypass: HP only, no J-A/Bertotti/dynLm
+          const float hpOut = hpAlpha_ * (hpState_ + x - hpPrev_);
+          hpPrev_ = x;
+          hpState_ = hpOut;
+          wet = hpOut;
         } else {
         // Direct J-A: scale to H field, apply dynamic losses, solve hysteresis
         const float H_applied = x * hScale_;
@@ -294,35 +326,46 @@ private:
           const double B_pred = kMu0 * (H_eff + M_c);
           const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
           const double G = directDynLosses_.getK1() * directDynLosses_.getSampleRate() * kMu0 * chi;
-          // dBdt_raw already contains (1+χ) via B = µ0(H+M); only apply damping
           const double dBdt = dBdt_raw / (1.0 + G);
-          H_eff -= directDynLosses_.computeHfromDBdt(dBdt);
+          H_eff -= kCascadeEddyFactor * directDynLosses_.computeHfromDBdt(dBdt);
         }
 
         const double M = directHyst_.solveImplicitStep(H_eff);
         directHyst_.commitState();
 
+        // P1.2: Track peak saturation
+        {
+          float satR = static_cast<float>(std::abs(M)
+                       / (static_cast<double>(config_.material.Ms) + 1e-30));
+          if (satR > peakSaturation_) peakSaturation_ = satR;
+        }
+
         // ── Dynamic Lm: update HP filter cutoff from J-A susceptibility ───
         if (dynLmEnabled_) {
           const double dMdH = directHyst_.getInstantaneousSusceptibility();
-          // mu_inc = mu0 * (1 + dM/dH), clamped to physical range
           const float mu_inc = std::clamp(
               kMu0f * (1.0f + static_cast<float>(dMdH)),
               kMuIncMin, kMuIncMax);
-          // Lm = K_geo * mu_inc
           const float Lm_raw = config_.geometry.computeLm(mu_inc);
-          // One-pole smooth to avoid discontinuities / clicks
           lmSmoothed_ = lmSmoothCoeff_ * lmSmoothed_
                        + (1.0f - lmSmoothCoeff_) * Lm_raw;
-          // Update HP coefficient from smoothed Lm
           hpAlpha_ = computeHpAlphaFromLm(lmSmoothed_);
         }
 
-        // B uses total applied H (circuit field, not effective)
         const float B = kMu0f * (H_applied + static_cast<float>(M));
         directDynLosses_.commitState(static_cast<double>(B));
 
         wet = B * bNorm_;
+
+        // A1.1: HP filter applied to flux output (after J-A)
+        {
+          const float hpOut = hpAlpha_ * (hpState_ + wet - hpPrev_);
+          hpPrev_ = wet;
+          hpState_ = hpOut;
+          wet = hpOut;
+          // A2.1: Snap HP state denormals
+          if (std::abs(hpState_) < 1e-15f) hpState_ = 0.0f;
+        }
 
         // BH scope data
         if (++bhDownsampleCounter_ >= 32) {
@@ -331,11 +374,28 @@ private:
         }
         } // end !linearMode_
 
+        // V2.4: Dynamic LC Q from Bertotti eddy loss
+        if (lcEnabled_ && directDynLosses_.isEnabled() && !linearMode_) {
+          if (++bertottiUpdateCounter_ >= kBertottiUpdateInterval) {
+            bertottiUpdateCounter_ = 0;
+            const double dBdt = directDynLosses_.computeDBdt(
+                static_cast<double>(kMu0f * (x * hScale_ + static_cast<float>(directHyst_.getMagnetization()))));
+            const float R_eddy = static_cast<float>(
+                directDynLosses_.getK1() * std::abs(dBdt) * 1000.0);
+            float Rs_eff = config_.windings.sourceImpedance
+                         + config_.windings.Rdc_primary + R_eddy;
+            lcFilter_.updateParameters(config_.lcParams, Rs_eff,
+                config_.loadImpedance, config_.windings.turnsRatio(),
+                config_.windings.hasFaradayShield);
+          }
+        }
+
         // HF shaping: LC resonance post-stage or legacy LP
         if (lcEnabled_) {
           wet = lcFilter_.processSample(wet);
         } else {
           lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
+          if (std::abs(lpState_) < 1e-15f) lpState_ = 0.0f;  // A2.1
           wet = lpState_;
         }
       } // end !useWdfCircuit_
@@ -378,37 +438,37 @@ private:
           }
         }
       } else {
-        // === EXISTING CASCADE CODE (HP → J-A → Bertotti → LC) ===
-
-        // Circuit HP: source impedance / Lp bass rolloff
-        const float hpOut = hpAlpha_ * (hpState_ + x - hpPrev_);
-        hpPrev_ = x;
-        hpState_ = hpOut;
-        x = hpOut;
+        // === CASCADE CODE (A1.1: J-A → HP → LC) — Physical path ===
 
         if (linearMode_) {
-          wet = x;
+          const float hpOut = hpAlpha_ * (hpState_ + x - hpPrev_);
+          hpPrev_ = x;
+          hpState_ = hpOut;
+          wet = hpOut;
         } else {
-        // Direct J-A: scale to H field, apply dynamic losses, solve hysteresis
         const float H_applied = x * hScale_;
         double H_eff = static_cast<double>(H_applied);
 
-        // Bertotti dynamic extension: damped χ-scaling for self-consistent dBdt
         if (directDynLosses_.isEnabled()) {
           const double M_c = directHyst_.getMagnetization();
           const double chi = std::max(0.0, directHyst_.getInstantaneousSusceptibility());
           const double B_pred = kMu0 * (H_eff + M_c);
           const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
           const double G = directDynLosses_.getK1() * directDynLosses_.getSampleRate() * kMu0 * chi;
-          // dBdt_raw already contains (1+χ) via B = µ0(H+M); only apply damping
           const double dBdt = dBdt_raw / (1.0 + G);
-          H_eff -= directDynLosses_.computeHfromDBdt(dBdt);
+          H_eff -= kCascadeEddyFactor * directDynLosses_.computeHfromDBdt(dBdt);
         }
 
         const double M = directHyst_.solveImplicitStep(H_eff);
         directHyst_.commitState();
 
-        // ── Dynamic Lm: update HP filter cutoff from J-A susceptibility ───
+        // P1.2: Track peak saturation (Physical path)
+        {
+          float satR = static_cast<float>(std::abs(M)
+                       / (static_cast<double>(config_.material.Ms) + 1e-30));
+          if (satR > peakSaturation_) peakSaturation_ = satR;
+        }
+
         if (dynLmEnabled_) {
           const double dMdH = directHyst_.getInstantaneousSusceptibility();
           const float mu_inc = std::clamp(
@@ -420,11 +480,20 @@ private:
           hpAlpha_ = computeHpAlphaFromLm(lmSmoothed_);
         }
 
-        // B uses total applied H (circuit field, not effective)
         const float B = kMu0f * (H_applied + static_cast<float>(M));
         directDynLosses_.commitState(static_cast<double>(B));
 
         wet = B * bNorm_;
+
+        // A1.1: HP applied to flux output (after J-A)
+        {
+          const float hpOut = hpAlpha_ * (hpState_ + wet - hpPrev_);
+          hpPrev_ = wet;
+          hpState_ = hpOut;
+          wet = hpOut;
+          // A2.1: Snap HP state denormals
+          if (std::abs(hpState_) < 1e-15f) hpState_ = 0.0f;
+        }
 
         // BH scope data (less frequent for oversampled)
         if (++bhDownsampleCounter_ >= 128) {
@@ -433,11 +502,28 @@ private:
         }
         } // end !linearMode_
 
+        // V2.4: Dynamic LC Q from Bertotti eddy loss (Physical path)
+        if (lcEnabled_ && directDynLosses_.isEnabled() && !linearMode_) {
+          if (++bertottiUpdateCounter_ >= kBertottiUpdateInterval) {
+            bertottiUpdateCounter_ = 0;
+            const double dBdt = directDynLosses_.computeDBdt(
+                static_cast<double>(kMu0f * (x * hScale_ + static_cast<float>(directHyst_.getMagnetization()))));
+            const float R_eddy = static_cast<float>(
+                directDynLosses_.getK1() * std::abs(dBdt) * 1000.0);
+            float Rs_eff = config_.windings.sourceImpedance
+                         + config_.windings.Rdc_primary + R_eddy;
+            lcFilter_.updateParameters(config_.lcParams, Rs_eff,
+                config_.loadImpedance, config_.windings.turnsRatio(),
+                config_.windings.hasFaradayShield);
+          }
+        }
+
         // HF shaping: LC resonance post-stage or legacy LP
         if (lcEnabled_) {
           wet = lcFilter_.processSample(wet);
         } else {
           lpState_ = (1.0f - lpAlpha_) * wet + lpAlpha_ * lpState_;
+          if (std::abs(lpState_) < 1e-15f) lpState_ = 0.0f;  // A2.1
           wet = lpState_;
         }
       } // end !useWdfCircuit_
@@ -481,7 +567,7 @@ private:
 
     // ─── Direct J-A model (bypasses HSIM) ──────────────────────────────────
     float procRate = (processingMode_ == ProcessingMode::Physical)
-                         ? sampleRate_ * kOversamplingPhysical
+                         ? sampleRate_ * static_cast<float>(osFactor_)
                          : sampleRate_;
     if (procRate <= 0.0f) procRate = kDefaultSampleRate;
 
@@ -518,8 +604,18 @@ private:
     // sourceImpedance carries only winding/circuit R for the LC filter.
     // The HP filter needs the total: sourceImpedance + plateImpedance.
     Rsource_ = config_.windings.sourceImpedance
+             + config_.windings.Rdc_primary
              + config_.windings.plateImpedance;
     float K_geo = config_.geometry.K_geo;
+
+    // Compute frequency-based HP floor: alpha_min so fc never exceeds kHpFloorFreqHz
+    // alpha = RC/(RC+Ts) → for fc_max: Lm_floor = Rsource/(2π·fc_max)
+    // Computed directly (not via computeHpAlphaFromLm to avoid circular dep)
+    {
+      const float Lm_floor = Rsource_ / (kTwoPif * kHpFloorFreqHz);
+      const float RC_floor = Lm_floor / Rsource_;
+      hpAlphaMin_ = RC_floor / (RC_floor + Ts);
+    }
 
     // Enable dynamic Lm if geometry and source impedance are valid
     dynLmEnabled_ = (Rsource_ > 0.0f && K_geo > 0.0f);

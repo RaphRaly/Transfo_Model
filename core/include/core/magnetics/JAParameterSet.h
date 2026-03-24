@@ -180,9 +180,10 @@ struct JAParameterSet {
   }
 
   static JAParameterSet defaultSiFe() {
-    // GO Si-Fe (API-style, thinner laminations for studio quality)
-    // K1 = d²/(12ρ) = (0.30mm)²/(12×48μΩ·cm) = 1.56e-2  [d=0.30mm, ρ=48μΩ·cm]
-    return {1.2e6f, 80.0f, 1e-4f, 200.0f, 0.10f, 1.56e-2f, 0.12f};
+    // GO Si-Fe M6: Bsat ≈ 1.8-2.0 T → Ms ≈ 1.5e6 A/m (A1.5 corrected)
+    // k=300 > alpha*Ms = 1e-4*1.5e6 = 150 (stable, 100% margin)
+    // K1 = d²/(12ρ) = (0.30mm)²/(12×48μΩ·cm) = 1.56e-2
+    return {1.5e6f, 100.0f, 1e-4f, 300.0f, 0.10f, 1.56e-2f, 0.12f};
   }
 
   static JAParameterSet defaultFenderSiFe() {
@@ -194,10 +195,10 @@ struct JAParameterSet {
   }
 
   static JAParameterSet defaultLundahlMuMetal() {
-    // Lundahl LL1538 — high-grade mu-metal, similar to Jensen
-    // Slightly different shape (a=25) and lower coercivity (k=80)
-    // K1/K2 same as MuMetal (same alloy family, similar lamination)
-    return {5.5e5f, 25.0f, 1e-4f, 80.0f, 0.88f, 1.44e-3f, 0.02f};
+    // Lundahl LL1538 — amorphous ribbon, d=0.025mm (1 mil)
+    // K1 = d²/(12ρ) = (2.5e-5)²/(12×58e-8) ≈ 9e-5 (A1.4 corrected)
+    // 16× less eddy loss than Jensen (d=0.1mm → K1=1.44e-3)
+    return {5.5e5f, 25.0f, 1e-4f, 80.0f, 0.88f, 9e-5f, 0.005f};
   }
 
   static JAParameterSet defaultHammondSiFe() {

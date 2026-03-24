@@ -31,7 +31,7 @@ namespace Presets
     inline TransformerConfig Jensen_JT115KE()           { return TransformerConfig::Jensen_JT115KE(); }
     inline TransformerConfig Jensen_JT11ELCF()          { return TransformerConfig::Jensen_JT11ELCF(); }
 
-    constexpr int kFactoryCount = 2;
+    constexpr int kFactoryCount = 15;
 
     inline int count() { return kFactoryCount; }
 
@@ -39,9 +39,22 @@ namespace Presets
     {
         switch (index)
         {
-            case 0:  return Jensen_JT115KE();
-            case 1:  return Jensen_JT11ELCF();
-            default: return Jensen_JT115KE();
+            case 0:  return TransformerConfig::Jensen_JT115KE();
+            case 1:  return TransformerConfig::Jensen_JT11ELCF();
+            case 2:  return TransformerConfig::Neve_10468_Input();
+            case 3:  return TransformerConfig::Neve_LI1166_Output();
+            case 4:  return TransformerConfig::API_AP2503();
+            case 5:  return TransformerConfig::Lundahl_LL1538();
+            case 6:  return TransformerConfig::Fender_Deluxe_OT();
+            case 7:  return TransformerConfig::Vox_AC30_OT();
+            case 8:  return TransformerConfig::UTC_HA100X();
+            case 9:  return TransformerConfig::Clean_DI();
+            case 10: return TransformerConfig::Vocal_Warmth();
+            case 11: return TransformerConfig::Bass_Thickener();
+            case 12: return TransformerConfig::Drum_Punch();
+            case 13: return TransformerConfig::Guitar_Crunch();
+            case 14: return TransformerConfig::Master_Glue();
+            default: return TransformerConfig::Jensen_JT115KE();
         }
     }
 
@@ -51,6 +64,19 @@ namespace Presets
         {
             case 0:  return "Jensen JT-115K-E";
             case 1:  return "Jensen JT-11ELCF";
+            case 2:  return "Neve 10468 Input";
+            case 3:  return "Neve LI1166 Output";
+            case 4:  return "API AP2503";
+            case 5:  return "Lundahl LL1538";
+            case 6:  return "Fender Deluxe OT";
+            case 7:  return "Vox AC30 OT";
+            case 8:  return "UTC HA-100X";
+            case 9:  return "Clean DI";
+            case 10: return "Vocal Warmth";
+            case 11: return "Bass Thickener";
+            case 12: return "Drum Punch";
+            case 13: return "Guitar Crunch";
+            case 14: return "Master Glue";
             default: return "Unknown";
         }
     }

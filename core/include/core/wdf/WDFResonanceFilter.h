@@ -186,7 +186,18 @@ public:
         x_[1] = b_[2] * input - a_[2] * output + x_[2];
         x_[2] = b_[3] * input - a_[3] * output;
 
+        // A2.1: Snap denormals to zero in feedback state
+        snapDenormal(x_[0]);
+        snapDenormal(x_[1]);
+        snapDenormal(x_[2]);
+
         return output;
+    }
+
+    static void snapDenormal(float& v)
+    {
+        // Flush subnormals: |v| < 1e-15 → 0 (covers both FP32 denormal range and near-DC tail)
+        if (std::abs(v) < 1e-15f) v = 0.0f;
     }
 
     // ── Block processing ─────────────────────────────────────────────────────

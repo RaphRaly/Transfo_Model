@@ -112,7 +112,10 @@ private:
     }
 };
 
-// ─── Oversampling Engine — Cascaded 2×2x = 4x ──────────────────────────────
+// ─── P1.1: Oversampling factor selection ─────────────────────────────────
+enum class OversamplingFactor { OS_2x = 2, OS_4x = 4 };
+
+// ─── Oversampling Engine — Cascaded 2×2x = 4x (or single 2x) ───────────
 
 class OversamplingEngine
 {
@@ -139,28 +142,30 @@ public:
         intermediateBuffer_.clear();
     }
 
-    // ─── Upsample 4x: cascade fs → 2fs → 4fs ──────────────────────────────
+    // ─── Upsample: cascade fs → 2fs (→ 4fs) ────────────────────────────────
     void upsample(const float* input, int numSamples, float* output)
     {
-        float* mid = intermediateBuffer_.data();
-
-        // Stage 1: fs → 2fs (halfband at π/2 of 2fs = π of fs)
-        upsample2x(input, numSamples, mid, upFilters_[0]);
-
-        // Stage 2: 2fs → 4fs (halfband at π/2 of 4fs = π/2 of 2fs = π/4 of fs)
-        upsample2x(mid, numSamples * 2, output, upFilters_[1]);
+        if (factor_ == 2) {
+            // P1.1: Single stage 2x
+            upsample2x(input, numSamples, output, upFilters_[0]);
+        } else {
+            float* mid = intermediateBuffer_.data();
+            upsample2x(input, numSamples, mid, upFilters_[0]);
+            upsample2x(mid, numSamples * 2, output, upFilters_[1]);
+        }
     }
 
-    // ─── Downsample 4x: cascade 4fs → 2fs → fs ────────────────────────────
+    // ─── Downsample: cascade (4fs →) 2fs → fs ──────────────────────────────
     void downsample(const float* input, int numOversampledSamples, float* output)
     {
-        float* mid = intermediateBuffer_.data();
-
-        // Stage 1: 4fs → 2fs (anti-alias at π/2 of 4fs)
-        downsample2x(input, numOversampledSamples, mid, downFilters_[0]);
-
-        // Stage 2: 2fs → fs (anti-alias at π/2 of 2fs)
-        downsample2x(mid, numOversampledSamples / 2, output, downFilters_[1]);
+        if (factor_ == 2) {
+            // P1.1: Single stage 2x
+            downsample2x(input, numOversampledSamples, output, downFilters_[0]);
+        } else {
+            float* mid = intermediateBuffer_.data();
+            downsample2x(input, numOversampledSamples, mid, downFilters_[0]);
+            downsample2x(mid, numOversampledSamples / 2, output, downFilters_[1]);
+        }
     }
 
     // ─── Accessors ──────────────────────────────────────────────────────────
@@ -174,7 +179,9 @@ public:
     // Upsample path:  stage1 (26 @ 2fs = 13) + stage2 (26 @ 4fs = 6.5) = 19.5
     // Downsample path: stage1 (26 @ 4fs = 6.5) + stage2 (26 @ 2fs = 13) = 19.5
     // Total: 39 original-rate samples.
-    float getLatency() const { return kRoundTripLatency; }
+    float getLatency() const {
+        return (factor_ == 2) ? kLatency2x : kRoundTripLatency;
+    }
 
 private:
     int   factor_ = kOversamplingPhysical;
@@ -188,7 +195,8 @@ private:
     AlignedBuffer<float> oversampledBuffer_;
     AlignedBuffer<float> intermediateBuffer_;  // Holds 2fs intermediate data
 
-    static constexpr float kRoundTripLatency = 39.0f;
+    static constexpr float kRoundTripLatency = 39.0f;  // 4x OS
+    static constexpr float kLatency2x = 13.0f;         // 2x OS: single halfband stage
 
     // ─── Single 2x upsample: zero-stuff + halfband lowpass + gain ────────
     // Gain ×2 compensates the energy loss from zero-stuffing:
