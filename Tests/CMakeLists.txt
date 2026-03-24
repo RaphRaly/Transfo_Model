@@ -149,6 +149,30 @@ target_include_directories(test_preamp_diagnostic PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME preamp_diagnostic               COMMAND test_preamp_diagnostic)
 
+# ── THD Validation Tests (V1.1-V1.3) ──────────────────────────────────────
+add_executable(test_thd_validation
+    test_thd_validation.cpp
+)
+target_include_directories(test_thd_validation PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME thd_validation                  COMMAND test_thd_validation)
+
+# ── Frequency Response Validation (V1.4) ──────────────────────────────────
+add_executable(test_freq_response_validation
+    test_freq_response_validation.cpp
+)
+target_include_directories(test_freq_response_validation PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME freq_response_validation        COMMAND test_freq_response_validation)
+
+# ── Plugin State Tests (A2.4) ──────────────────────────────────────────────
+add_executable(test_plugin_state
+    test_plugin_state.cpp
+)
+target_include_directories(test_plugin_state PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME plugin_state                    COMMAND test_plugin_state)
+
 # Neve gain diagnostic
 add_executable(test_neve_gain_diag test_neve_gain_diag.cpp)
 target_include_directories(test_neve_gain_diag PRIVATE ${CORE_INCLUDE})
@@ -156,3 +180,9 @@ target_include_directories(test_neve_gain_diag PRIVATE ${CORE_INCLUDE})
 # Per-stage gain diagnostic
 add_executable(test_neve_stage_gains test_neve_stage_gains.cpp)
 target_include_directories(test_neve_stage_gains PRIVATE ${CORE_INCLUDE})
+
+# ── Demo Audio Generator (P2.3) ──────────────────────────────────────────────
+add_executable(generate_demo_audio
+    ../tools/generate_demo_audio.cpp
+)
+target_include_directories(generate_demo_audio PRIVATE ${CORE_INCLUDE})
