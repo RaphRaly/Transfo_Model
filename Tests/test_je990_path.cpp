@@ -290,9 +290,18 @@ void test6_numerical_stability()
     path.setGain(transfo::GainTable::getRfb(5));
     path.reset();
 
+    const float Vcc = config.Vcc;  // ±24V rails
+
     bool hasNaN = false;
     bool hasInf = false;
     float maxAbs = 0.0f;
+    bool selfExcited = false;
+
+    // Track last 3 peaks to detect self-excited growth (oscillation/runaway)
+    float peakWindow[3] = { 0.0f, 0.0f, 0.0f };
+    int peakIdx = 0;
+    float prevSample = 0.0f;
+    float prevPrevSample = 0.0f;
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -304,17 +313,43 @@ void test6_numerical_stability()
         if (std::isinf(output)) hasInf = true;
         float absOut = std::abs(output);
         if (absOut > maxAbs) maxAbs = absOut;
+
+        // Detect local peaks (sign change in derivative) after warmup
+        if (i > 500)
+        {
+            if ((prevSample > prevPrevSample && prevSample > output)
+                || (prevSample < prevPrevSample && prevSample < output))
+            {
+                peakWindow[peakIdx % 3] = std::abs(prevSample);
+                peakIdx++;
+            }
+        }
+        prevPrevSample = prevSample;
+        prevSample = output;
     }
 
-    std::cout << "    Max |output|: " << maxAbs << " V" << std::endl;
+    // Self-excited growth: if the last few peaks are all > Vcc and growing
+    if (peakIdx >= 3)
+    {
+        float p0 = peakWindow[(peakIdx - 3) % 3];
+        float p1 = peakWindow[(peakIdx - 2) % 3];
+        float p2 = peakWindow[(peakIdx - 1) % 3];
+        if (p0 > Vcc && p1 > p0 && p2 > p1)
+            selfExcited = true;
+    }
+
+    std::cout << "    Max |output|: " << maxAbs << " V"
+              << "  (Vcc = " << Vcc << " V)" << std::endl;
 
     CHECK(!hasNaN && !hasInf,
-          "No NaN or Inf in output with extreme inputs");
-    // Audio-range bound: a preamp outputting > 10V peak is diverging.
-    // The old 1000V threshold was meaningless — it would never fire
-    // unless the model produced literally kilovolts.
-    CHECK(maxAbs < 10.0f,
-          "Output bounded < 10V (audio range)");
+          "No NaN or Inf in output");
+    // Rail-aware bound: JE-990 operates on ±24V rails (Jensen 1980).
+    // With 1V input at Acl≈31.6×, the output WILL clip near the rails.
+    // The model should stay within Vcc + small numerical margin.
+    CHECK(maxAbs < Vcc + 1.0f,
+          "Output bounded within supply rails + 1V margin");
+    CHECK(!selfExcited,
+          "No self-excited growth (peaks not diverging)");
 }
 
 // =============================================================================
