@@ -17,8 +17,9 @@ namespace transfo {
 struct WindingConfig
 {
     // ── Turns ───────────────────────────────────────────────────────────────
-    int   turnsRatio_N1 = 1;         // Primary turns
-    int   turnsRatio_N2 = 10;        // Secondary turns
+    int   turnsRatio_N1 = 1;         // Primary turns (ratio numerator)
+    int   turnsRatio_N2 = 10;        // Secondary turns (ratio denominator)
+    int   N_primary     = 0;         // Actual primary turns count (0 = derive from K_geo)
 
     // ── DC Resistances ──────────────────────────────────────────────────────
     float Rdc_primary   = 19.7f;     // Primary DC resistance [Ohm]
@@ -64,6 +65,7 @@ struct WindingConfig
     {
         WindingConfig w;
         w.turnsRatio_N1 = 1; w.turnsRatio_N2 = 10;
+        w.N_primary = 806;  // Derived from K_geo=736, l_e=0.106, A_e=1.2e-4
         w.Rdc_primary = 19.7f; w.Rdc_secondary = 2465.0f;
         w.C_sec_shield = 205e-12f; w.C_interwinding = 10e-12f;
         w.C_pri_shield = 475e-12f;
@@ -80,6 +82,7 @@ struct WindingConfig
         // BW: 0.18 Hz - 15 MHz (Rs=0), Insertion loss: -1.1 dB @ 600 Ohm
         WindingConfig w;
         w.turnsRatio_N1 = 1; w.turnsRatio_N2 = 1;
+        w.N_primary = 1036;  // Derived from K_geo=5300, l_e=0.077, A_e=3.8e-4
         w.Rdc_primary = 40.0f; w.Rdc_secondary = 40.0f;
         w.C_sec_shield = 50e-12f;      // 50 pF windings-to-frame (datasheet)
         w.C_interwinding = 22e-9f;     // 22 nF winding-to-winding (bifilar)

@@ -93,7 +93,7 @@ int main(int argc, char* argv[])
     }
 
     // Clamp preset
-    if (preset < 0 || preset > 2) preset = 0;
+    if (preset < 0 || preset > 14) preset = 0;
 
     const int numSamples = static_cast<int>(duration * sampleRate);
     const float amplitude = std::pow(10.0f, levelDB / 20.0f);

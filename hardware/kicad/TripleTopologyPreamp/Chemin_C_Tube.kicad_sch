@@ -1,0 +1,52 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "d6000001-tube-chmc-0006-000000000006")
+	(paper "A3")
+	(title_block
+		(title "Chemin C — Tube Heritage (2×ECC83 + White Cathode Follower)")
+		(date "2026-03-24")
+		(rev "1.0")
+		(comment 1 "V1a(gain) → attenuator → V1b(gain) → V2a+V2b(WCF buffer) → Output C")
+		(comment 2 "B+ ~275V. Gain by interstage attenuation (Pole C of SW1).")
+	)
+	(lib_symbols)
+
+	(hierarchical_label "SIGNAL_IN"
+		(shape input)
+		(at 25.4 76.2 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e6000001-tube-chmc-0006-000000000001")
+	)
+	(hierarchical_label "OUTPUT_C"
+		(shape output)
+		(at 355.6 76.2 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e6000002-tube-chmc-0006-000000000002")
+	)
+	(hierarchical_label "GAIN_ATTEN_C"
+		(shape input)
+		(at 25.4 152.4 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e6000003-tube-chmc-0006-000000000003")
+	)
+	(hierarchical_label "B+"
+		(shape input)
+		(at 25.4 25.4 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e6000004-tube-chmc-0006-000000000004")
+	)
+	(hierarchical_label "HEATER"
+		(shape input)
+		(at 355.6 25.4 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e6000005-tube-chmc-0006-000000000005")
+	)
+
+	(text "CHEMIN C — TUBE HERITAGE\n\nTube 1 (V1, ECC83 #1):\n  V1a (section A): Common-cathode gain stage\n    Rp1=220K, Rk1=1.5K, Ck1=22µF/63V, Rg1=1M\n    Av ≈ -78 (37.8 dB) with cathode bypassed\n    Coupling: C3C(1µF/400V film) from Signal Rail\n\n  INTERSTAGE ATTENUATOR (Pole C of SW1):\n    V1a plate → Cc1(470nF/400V) → R_shunt to GND → Cc2(470nF/400V) → V1b grid\n    R_shunt values: 2.2K (+10dB) to 1M (+50dB)\n\n  V1b (section B): Common-cathode gain stage\n    Rp2=220K, Rk2=1.5K, Ck2=22µF/63V, Rg2=1M\n    Same gain as V1a\n\nTube 2 (V2, ECC83 #2) — White Cathode Follower:\n  V2a (section A, bottom): Cathode-follower amplifier\n    Input: V1b plate via Cc3(330nF/400V)\n    Rk_WCF=1.5K, Rg3=1M\n  V2b (section B, top): Shunt regulator\n    Rp_WCF=100K, Cg_WCF=1µF/400V (feedback from V2a plate)\n  OUTPUT: V2a cathode = V2b cathode junction\n    Zout ≈ 100-150R (WCF advantage)\n\n  Output: WCF junction → C_outC(100µF bipol + 4.7µF film) → R_outC(10R) → OUTPUT_C\n\nUse ECC83_Triode symbol from TripleTopoCustom library\n  V1 = unit 1 (V1a) + unit 2 (V1b)\n  V2 = unit 1 (V2a) + unit 2 (V2b)"
+		(at 25.4 180.0 0)
+		(effects (font (size 1.524 1.524)) (justify left))
+		(uuid "f6000001-tube-text-0006-000000000001")
+	)
+)

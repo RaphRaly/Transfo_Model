@@ -25,11 +25,6 @@ add_executable(test_cpwl_passivity
 )
 target_include_directories(test_cpwl_passivity PRIVATE ${CORE_INCLUDE})
 
-add_executable(test_hsim_diagnostics
-    test_hsim_diagnostics.cpp
-)
-target_include_directories(test_hsim_diagnostics PRIVATE ${CORE_INCLUDE})
-
 add_executable(test_plugin_integration
     test_plugin_integration.cpp
 )
@@ -75,7 +70,6 @@ target_include_directories(test_bjt_leaf PRIVATE ${CORE_INCLUDE})
 enable_testing()
 add_test(NAME cpwl_adaa              COMMAND test_cpwl_adaa)
 add_test(NAME cpwl_passivity         COMMAND test_cpwl_passivity)
-add_test(NAME hsim_diagnostics       COMMAND test_hsim_diagnostics)
 add_test(NAME plugin_integration     COMMAND test_plugin_integration)
 add_test(NAME dynamic_losses         COMMAND test_dynamic_losses)
 add_test(NAME dynamic_parallel_adaptor COMMAND test_dynamic_parallel_adaptor)
@@ -180,6 +174,62 @@ target_include_directories(test_neve_gain_diag PRIVATE ${CORE_INCLUDE})
 # Per-stage gain diagnostic
 add_executable(test_neve_stage_gains test_neve_stage_gains.cpp)
 target_include_directories(test_neve_stage_gains PRIVATE ${CORE_INCLUDE})
+
+# ── Jensen Transformer Coverage Tests ─────────────────────────────────────────
+add_executable(test_jensen_passivity
+    test_jensen_passivity.cpp
+)
+target_include_directories(test_jensen_passivity PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_jensen_convergence
+    test_jensen_convergence.cpp
+)
+target_include_directories(test_jensen_convergence PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_jensen_harmonics
+    test_jensen_harmonics.cpp
+)
+target_include_directories(test_jensen_harmonics PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_jensen_bertotti_freq
+    test_jensen_bertotti_freq.cpp
+)
+target_include_directories(test_jensen_bertotti_freq PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_jensen_cpwl_parity
+    test_jensen_cpwl_parity.cpp
+)
+target_include_directories(test_jensen_cpwl_parity PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME jensen_passivity              COMMAND test_jensen_passivity)
+add_test(NAME jensen_convergence            COMMAND test_jensen_convergence)
+add_test(NAME jensen_harmonics              COMMAND test_jensen_harmonics)
+add_test(NAME jensen_bertotti_freq          COMMAND test_jensen_bertotti_freq)
+add_test(NAME jensen_cpwl_parity            COMMAND test_jensen_cpwl_parity)
+
+# ── ODT Differentiation Tests ──────────────────────────────────────────────
+add_executable(test_odt_differentiation
+    test_odt_differentiation.cpp
+)
+target_include_directories(test_odt_differentiation PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME odt_differentiation              COMMAND test_odt_differentiation)
+
+# ── Sample Rate Invariance Tests (Sprint 3 polish) ───────────────────────────
+add_executable(test_sample_rate_invariance
+    test_sample_rate_invariance.cpp
+)
+target_include_directories(test_sample_rate_invariance PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME sample_rate_invariance           COMMAND test_sample_rate_invariance)
+
+# ── Channel Strip Integration Test ────────────────────────────────────────────
+add_executable(test_channel_strip
+    test_channel_strip.cpp
+)
+target_include_directories(test_channel_strip PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME channel_strip                   COMMAND test_channel_strip)
 
 # ── Demo Audio Generator (P2.3) ──────────────────────────────────────────────
 add_executable(generate_demo_audio

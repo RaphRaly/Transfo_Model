@@ -301,6 +301,35 @@ public:
         updateAdaptation();
     }
 
+    // ─── Source impedance update ────────────────────────────────────────────
+
+    /// Dynamically update the Thevenin source impedance (Rs) of the input
+    /// source element.  This is used by OutputStageWDF to re-adapt T2's
+    /// WDF tree when the active amplifier path changes after a crossfade
+    /// completes (Neve Zout ≈ 11 Ohm vs JE-990 Zout ≈ 44 Ohm).
+    ///
+    /// The operation is lightweight: it updates the AdaptedRSource port
+    /// resistance, propagates through the two series adaptors in the
+    /// source branch, and recalculates the 4-port root junction scattering
+    /// matrix.  No reactive element state is disturbed.
+    ///
+    /// @param Zs  New source impedance [Ohm]
+    void setSourceImpedance(double Zs)
+    {
+        const float Zs_f = static_cast<float>(Zs);
+        source_.setSourceImpedance(Zs_f);
+
+        // Propagate the changed port resistance up through the source branch
+        sSourceInner_.setPortImpedances(source_.getPortResistance(),
+                                        rdcPri_.getPortResistance());
+        sSourceOuter_.setPortImpedances(sSourceInner_.getAdaptedImpedance(),
+                                        lleak_.getPortResistance());
+
+        // Update root junction with new source branch impedance
+        pRoot_.setPortImpedance(0, sSourceOuter_.getAdaptedImpedance());
+        pRoot_.recalculateScattering();
+    }
+
     // ─── Impedance adaptation ────────────────────────────────────────────────
 
     /// Update the nonlinear leaf's port resistance in the root junction.

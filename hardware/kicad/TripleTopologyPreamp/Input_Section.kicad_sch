@@ -1,0 +1,46 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "d3000001-inpt-sect-0003-000000000003")
+	(paper "A4")
+	(title_block
+		(title "Input Section — Phantom, Pad, T1 (JT-115K-E)")
+		(date "2026-03-24")
+		(rev "1.0")
+		(comment 1 "XLR → Phantom 48V (6.81K×2) → Pad -20dB (649R×2) → JT-115K-E → Signal Rail")
+		(comment 2 "Termination: R_term=13.7K, C_term=680pF, R_30K=30.1K")
+	)
+	(lib_symbols)
+
+	(hierarchical_label "MIC_IN_HOT"
+		(shape input)
+		(at 25.4 50.8 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e3000001-inpt-sect-0003-000000000001")
+	)
+	(hierarchical_label "MIC_IN_COLD"
+		(shape input)
+		(at 25.4 63.5 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e3000002-inpt-sect-0003-000000000002")
+	)
+	(hierarchical_label "SIGNAL_RAIL"
+		(shape output)
+		(at 228.6 50.8 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e3000003-inpt-sect-0003-000000000003")
+	)
+	(hierarchical_label "+48V"
+		(shape input)
+		(at 25.4 101.6 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e3000004-inpt-sect-0003-000000000004")
+	)
+
+	(text "INPUT SECTION\n\nSignal flow:\n1. J1 XLR pins 2,3 → R_ph1/R_ph2 (6.81K 0.1%) → +48V phantom (SW_48V)\n2. → R_pad1/R_pad2 (649R) via SW_PAD (DPST) → bypass when OFF\n3. → T1 JT-115K-E primary (HOT pin 1, COLD pin 3)\n4. T1 secondary: S_HOT (pin 4) → Signal Rail\n5. Termination: R_term(13.7K) + C_term(680pF) + R_30K(30.1K) across secondary\n\nUse symbol JT-115K-E from TripleTopoCustom library"
+		(at 25.4 25.4 0)
+		(effects (font (size 1.524 1.524)) (justify left))
+		(uuid "f3000001-inpt-text-0003-000000000001")
+	)
+)

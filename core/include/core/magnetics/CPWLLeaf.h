@@ -24,7 +24,7 @@
 //
 // Performance: ~80 ns for 3 CPWL leaves with ADAA (0.4% of 44.1 kHz budget)
 //
-// Reference: CPWL+HSIM paper; Parker/Valimaki 2017; Polimi thesis;
+// Reference: CPWL paper; Parker/Valimaki 2017; Polimi thesis;
 //            EUSIPCO-2017 'Canonical PWL in WD Domain'
 // =============================================================================
 

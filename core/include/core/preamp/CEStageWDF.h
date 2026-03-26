@@ -114,12 +114,27 @@ public:
 
         // ── Miller capacitor filter ──────────────────────────────────────────
         // Modeled as a first-order lowpass on the collector output.
-        // fc = 1 / (2*pi * Rc * Cmiller), alpha = 1 / (1 + 2*pi*fc*Ts)
+        // fc = 1 / (2*pi * Rc * Cmiller)
+        //
+        // BUG FIX (Sprint 3 polish): The original formula was
+        //   millerAlpha_ = 1.0f / (1.0f + omega)
+        // which gives the COMPLEMENT of the correct LP coefficient.
+        // With Rc=15k and Cmiller=100pF, fc should be ~106 kHz (transparent
+        // at audio frequencies), but the inverted formula yielded an effective
+        // cutoff of ~460 Hz at 44.1 kHz, causing the observed -13 dB rolloff
+        // at 10 kHz on the Neve path.
+        //
+        // Correct bilinear one-pole LP coefficient:
+        //   alpha = omega / (1 + omega),  where omega = 2*pi*fc*Ts
+        //
+        // This gives alpha ~ 0.94 at 44.1k (near unity, as expected for a
+        // 106 kHz pole), instead of 0.062 (severe LPF).
         hasMillerCap_ = (config.C_miller > 0.0f);
         if (hasMillerCap_)
         {
             const float fc = 1.0f / (kTwoPif * config.R_collector * config.C_miller);
-            millerAlpha_ = 1.0f / (1.0f + kTwoPif * fc * Ts_);
+            const float omega = kTwoPif * fc * Ts_;
+            millerAlpha_ = omega / (1.0f + omega);
         }
 
         // ── Emitter bypass cap filter ────────────────────────────────────────

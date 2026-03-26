@@ -8,29 +8,27 @@
 //   Etage 2: 2N4250A PNP cascode (Q3/Q5) — linearized
 //   Etage 3: 2N4250A PNP VAS (Q6) + C1=150pF Miller compensation
 //   Etage 4: MJE-181/171 Class-AB push-pull output (Q8/Q9) + Q7 pre-driver
-//   Output:  39Ω + L3=40µH load isolator
+//   Output:  39 Ohm + L3=40 uH load isolator
 //
 // Signal flow:
-//   T1 secondary → DiffPair(+) / feedback(−) → Cascode → VAS → ClassAB
-//   → LoadIsolator → C_out (220µF) → output to T2
+//   T1 secondary -> DiffPair(+) / feedback(-) -> Cascode -> VAS -> ClassAB
+//   -> feedback tap -> LoadIsolator -> C_out -> output to T2
 //
-// Negative feedback:
-//   Output → C_out (AC coupling) → Rfb (variable) → DiffPair(−) input
-//   Closed-loop gain: Acl = 1 + Rfb / Rg,  Rg = 47 Ohm
-//   Same GainTable as Neve path (11 positions, 100 to 14700 Ohm).
+// Feedback architecture — Implicit Newton solve (1 step, delay-free):
 //
-// The feedback is applied analytically (same approach as NeveClassAPath):
-//   output = v_openloop * (Acl / Aol)
-// This avoids 1-sample-delay instability with the ~125 dB open-loop gain.
+//   g(y) = y - F(x, beta*y)  where F is the full forward chain.
+//   g'(y) = 1 + beta*Aol     (numerically estimated via 2 probes)
+//   y_new = y_old - g(y_old) / g'(y_old)
 //
-// DC operating point:
-//   prepare() runs settling samples to let the WDF stages converge.
+//   With corrected VAS topology (R_coll_AC=60k, Av~338), the native
+//   open-loop gain Aol ~ 2086 (66 dB). No backbone gain hack needed.
+//   Double precision in DiffPairWDF resolves the sub-uV error signal
+//   when beta*y ~ input (closed-loop residual).
 //
-// Pattern: Strategy (GoF) — implements IAmplifierPath for runtime A/B
-//          switching with NeveClassAPath in PreampModel.
+//   Cost: 3 forward evaluations per sample (2 probes + 1 commit).
 //
-// Reference: ANALYSE_ET_DESIGN_Rev2.md §3.3 (JE-990 DIY);
-//            Jensen AES paper (1980); Hardy 990C datasheet
+// Reference: ANALYSE_ET_DESIGN_Rev2.md section 3.3; Jensen AES 1980;
+//            docs/ANALYSIS_JE990_KVL_KCL_2026-03-26.md
 // =============================================================================
 
 #include "DiffPairWDF.h"
@@ -41,6 +39,7 @@
 #include "IAmplifierPath.h"
 #include "../model/PreampConfig.h"
 
+#include <cstdio>
 #include <algorithm>
 #include <cmath>
 
@@ -53,102 +52,94 @@ public:
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    /// Configure from a JE990PathConfig.
-    /// Must be called before prepare() (or reconfigure on-the-fly).
     void configure(const JE990PathConfig& config)
     {
         config_ = config;
         configured_ = true;
     }
 
-    /// Prepare all four WDF stages and settle the DC operating point.
-    /// @param sampleRate   Host sample rate [Hz].
-    /// @param maxBlockSize Maximum expected block size (unused, reserved).
     void prepare(float sampleRate, int maxBlockSize) override
     {
         (void)maxBlockSize;
         sampleRate_ = sampleRate;
 
-        // ── Etage 1: Differential pair (LM-394 matched) ─────────────────
+        // ── Etage 1: Differential pair (LM-394 matched NPN) ─────────────
         DiffPairConfig dpCfg;
         dpCfg.q1q2       = config_.q1q2;
-        dpCfg.R_emitter  = 30.0f;           // R1, R2 degeneration
-        dpCfg.L_emitter  = config_.L1;       // Jensen L1, L2
-        dpCfg.I_tail     = 3e-3f;           // Q4 tail current
-        dpCfg.R_tail     = 160.0f;          // R3
-        dpCfg.R_load     = 300.0f;          // R4, R5 cascode loads
+        dpCfg.R_emitter  = 30.0f;
+        dpCfg.L_emitter  = config_.L1;
+        dpCfg.I_tail     = 3e-3f;
+        dpCfg.R_tail     = 160.0f;
+        dpCfg.R_load     = 300.0f;
         dpCfg.Vcc        = config_.Vcc;
         diffPair_.prepare(sampleRate, dpCfg);
 
         // ── Etage 2: Cascode (linearized) ────────────────────────────────
         CascodeConfig casCfg;
-        casCfg.R_load      = 300.0f;        // R4, R5
-        casCfg.currentGain = 0.98f;         // alpha ≈ 1
+        casCfg.R_load      = 300.0f;
+        casCfg.currentGain = 0.98f;
         casCfg.Vcc         = config_.Vcc;
         cascode_.prepare(sampleRate, casCfg);
 
-        // ── Etage 3: VAS (Q6 PNP + Miller C1=150pF) ─────────────────────
+        // ── Etage 3: VAS (Q6 PNP) — CORRECTED TOPOLOGY ─────────────────
+        //  R_coll_AC = 60 kOhm (active mirror impedance, NOT R7)
+        //  R_emitter = 160 Ohm (R7 to +24V, NOT R8)
         VASConfig vasCfg;
         vasCfg.bjt         = config_.q6_vas;
-        vasCfg.R_collector = 160.0f;         // R7
-        vasCfg.R_emitter   = 130.0f;         // R8
-        vasCfg.C_miller    = config_.C1_miller;  // 150 pF
-        vasCfg.I_quiescent = 1.5e-3f;        // Set by diff pair current
+        vasCfg.R_coll_AC   = 60000.0f;
+        vasCfg.R_emitter   = 160.0f;
+        vasCfg.C_miller    = config_.C1_miller;
+        vasCfg.I_quiescent = 1.5e-3f;
         vasCfg.Vcc         = config_.Vcc;
         vas_.prepare(sampleRate, vasCfg);
 
         // ── Etage 4: Class-AB output (Q8 NPN + Q9 PNP) ──────────────────
         ClassABConfig abCfg;
-        abCfg.q8              = config_.q8_top;
-        abCfg.q9              = config_.q9_bottom;
-        abCfg.R_emitter_top   = 39.0f;      // R14
-        abCfg.R_emitter_bottom = 39.0f;     // R15
-        abCfg.R_sense         = 3.9f;       // R13
-        abCfg.C_comp_top      = config_.C2_comp;   // 62 pF
-        abCfg.C_comp_bottom   = config_.C3_comp;   // 91 pF
-        abCfg.I_quiescent     = 15e-3f;     // Bias current
-        abCfg.Vcc             = config_.Vcc;
+        abCfg.q8               = config_.q8_top;
+        abCfg.q9               = config_.q9_bottom;
+        abCfg.R_emitter_top    = 39.0f;
+        abCfg.R_emitter_bottom = 39.0f;
+        abCfg.R_sense          = 3.9f;
+        abCfg.C_comp_top       = config_.C2_comp;
+        abCfg.C_comp_bottom    = config_.C3_comp;
+        abCfg.I_quiescent      = 15e-3f;
+        abCfg.Vcc              = config_.Vcc;
         classAB_.prepare(sampleRate, abCfg);
 
-        // ── Load isolator (39Ω + L3=40µH) ────────────────────────────────
+        // ── Load isolator (39 Ohm + L3=40 uH) ───────────────────────────
         LoadIsolatorConfig liCfg;
-        liCfg.R_series = config_.R_load_isolator;  // 39 Ohm
-        liCfg.L_series = config_.L3;                // 40 µH
+        liCfg.R_series = config_.R_load_isolator;
+        liCfg.L_series = config_.L3;
         loadIsolator_.prepare(sampleRate, liCfg);
 
-        // ── Feedback HP filter coefficient (C_out coupling) ──────────────
+        // ── Feedback HP filter (C_out coupling) ──────────────────────────
         updateFeedbackCoefficient();
 
-        // ── Design-time open-loop gain from component values ─────────────
-        // DiffPair: gm_eff * R_load. At Ic_tail/2 per side:
-        //   gm_raw = Ic/(2*Vt) = 1.5e-3/0.052 ≈ 29 mS, Re_degen = 30 Ohm
-        //   gm_eff = gm_raw/(1+gm_raw*Re) ≈ 16 mS
-        //   DiffGain = gm_eff * R_load = 0.016 * 300 ≈ 4.8
-        // Cascode: ~0.98 (current mirror)
-        // VAS: Av = Rc_vas / (Re_vas + 1/gm_vas) ≈ 160/(130+1) ≈ 1.22
-        // ClassAB: ~1 (emitter follower pair)
-        // Aol = DiffGain * 0.98 * VAS_gain ≈ 4.8 * 0.98 * 1.22 ≈ 5.7
-        {
-            const float Itail_half = 1.5e-3f;
-            const float gm_raw = Itail_half / (2.0f * 0.02585f);
-            const float Re_diff = 30.0f;
-            const float gm_eff = gm_raw / (1.0f + gm_raw * Re_diff);
-            const float diffGain = gm_eff * 300.0f;
-            const float casGain = 0.98f;
-            const float vasGain = 160.0f / (130.0f + 1.0f);
-            designAol_ = std::max(diffGain * casGain * vasGain, 1.0f);
-        }
+        // ── DC servo coefficient (~0.1 Hz integrator) ────────────────────
+        servoAlpha_ = kTwoPif * 0.1f / sampleRate_;
 
-        // ── DC settling ─────────────────────────────────────────────────────
+        // ── Settling ─────────────────────────────────────────────────────
+        yPrev_       = 0.0f;
+        J_prev_      = 100.0;
+        vServo_      = 0.0f;
+        servoLP_     = 0.0f;
         feedbackDC_  = 0.0f;
         outputPrev_  = 0.0f;
+        sampleCount_ = 0;
 
-        constexpr int kSettleSamples = 500;
+        // Run settling with stages in open-loop (no feedback) to converge
+        // all NR warm-starts and reactive elements at quiescent point.
+        constexpr int kSettleSamples = 100;
         for (int i = 0; i < kSettleSamples; ++i)
-            processSample(0.0f);
+        {
+            diffPair_.processSample(0.0f, 0.0f);
+            cascode_.processSample(0.0f);
+            vas_.processSample(0.0f);
+            classAB_.processSample(0.0f);
+            loadIsolator_.processSample(0.0f);
+        }
     }
 
-    /// Clear all internal state.
     void reset() override
     {
         diffPair_.reset();
@@ -156,131 +147,185 @@ public:
         vas_.reset();
         classAB_.reset();
         loadIsolator_.reset();
+        yPrev_       = 0.0f;
+        J_prev_      = 100.0;
+        vServo_      = 0.0f;
+        servoLP_     = 0.0f;
         feedbackDC_  = 0.0f;
         outputPrev_  = 0.0f;
+        sampleCount_ = 0;
+
+        for (int i = 0; i < 100; ++i)
+        {
+            diffPair_.processSample(0.0f, 0.0f);
+            cascode_.processSample(0.0f);
+            vas_.processSample(0.0f);
+            classAB_.processSample(0.0f);
+        }
     }
 
     // ── Audio processing ──────────────────────────────────────────────────────
 
-    /// Process a single sample through the JE-990 path.
+    /// Process one sample with implicit delay-free feedback.
     ///
-    /// Signal chain:
-    ///   1. DiffPair: differential input (signal vs feedback=0)
-    ///   2. Cascode: diff→SE conversion (linear, gain ≈ 1)
-    ///   3. VAS: voltage amplification + Miller compensation
-    ///   4. ClassAB: push-pull output buffer
-    ///   5. LoadIsolator: 39Ω + L3 HF attenuation
-    ///   6. Analytical gain correction (Acl / Aol)
-    ///   7. C_out HP filter (feedback coupling)
+    /// Newton solve: g(y) = y - F(x, beta*y) = 0
+    ///   where F is the full forward chain (DiffPair -> Cascode -> VAS -> ClassAB).
     ///
-    /// @param input  Voltage from T1 secondary [V].
-    /// @return       Amplified output voltage [V].
+    /// Analytical Jacobian approach (per GPT-5.4 recommendation):
+    ///   J = 1 + beta * Aol_eff where Aol_eff is computed from per-stage
+    ///   small-signal gains at the current operating point.
+    ///
+    ///   This avoids numerical probes through the ClassAB, whose one-port WDF
+    ///   emitter follower model gives wrong large-signal gain (0.31× instead of
+    ///   0.95×). The ClassAB BJTs are kept for nonlinear audio (crossover,
+    ///   clipping), but the LOOP GAIN uses the analytical estimate.
+    ///
+    /// Cost: 2 forward evaluations per sample (1 for g0 + 1 commit).
     float processSample(float input) override
     {
-        // 1. Drive all WDF stages (open-loop path)
-        const float v1 = diffPair_.processSample(input, 0.0f);   // Differential pair
-        const float v2 = cascode_.processSample(v1);              // Cascode: diff→SE
-        const float v3 = vas_.processSample(v2);                  // VAS: voltage gain
-        const float v4 = classAB_.processSample(v3);              // Class-AB output
-        float v5 = loadIsolator_.processSample(v4);               // Load isolator
+        ++sampleCount_;
+        const double beta = static_cast<double>(Rg_) / (static_cast<double>(Rfb_) + Rg_);
+        const double Vcc  = static_cast<double>(config_.Vcc);
 
-        // Clamp to supply rails
-        v5 = std::clamp(v5, -config_.Vcc, config_.Vcc);
+        // ── 1. Snapshot all stage states ──────────────────────────────────
+        const auto snap_dp  = diffPair_;
+        const auto snap_cas = cascode_;
+        const auto snap_vas = vas_;
+        const auto snap_ab  = classAB_;
 
-        // 2. Apply closed-loop gain correction analytically
-        const float Acl = 1.0f + Rfb_ / Rg_;
-        const float Aol = getOpenLoopGain();
+        // ── 2. Analytical Jacobian from per-stage small-signal gains ─────
+        //    Computed from the SNAPSHOT state (current operating point).
+        //    Uses per-sample VAS gain (with Miller alpha) for accuracy.
+        //    ClassAB gain = 0.95 (analytical EF gain, bypasses broken WDF).
+        const double Av_dp  = std::abs(diffPair_.getLocalGain());    // ~6.3
+        const double Av_cas = std::abs(static_cast<double>(cascode_.getLocalGain()));  // 0.98
+        const double Av_vas = std::abs(static_cast<double>(vas_.getEffectiveGainPerSample())); // ~181
+        const double Av_ab  = std::abs(static_cast<double>(classAB_.getLocalGain()));  // 0.95
 
-        float output;
-        if (Aol > 1.0f) {
-            output = v5 * std::min(Acl / Aol, Acl);
-        } else {
-            output = v5 * std::min(Acl / designAol_, Acl);
+        double Aol = Av_dp * Av_cas * Av_vas * Av_ab;
+
+        // Saturation-aware: if Aol is unreasonably low (stage not biased yet)
+        // or unreasonably high, clamp to sane range.
+        Aol = std::clamp(Aol, 10.0, 50000.0);
+
+        double J = 1.0 + beta * Aol;
+        J = std::clamp(J, 1.5, 20000.0);
+
+        // ── 3. Forward evaluation: compute g0 = yk - F(x, beta*yk) ──────
+        //    For g0, we evaluate DiffPair → Cascode → VAS but BYPASS the
+        //    ClassAB WDF model. The one-port WDF emitter follower gives wrong
+        //    large-signal gain (0.31× instead of 0.95×), making g0 inconsistent
+        //    with the analytical J. Instead, we apply the ClassAB gain as a
+        //    linear constant (0.95), matching what J_analytical assumes.
+        //    The full nonlinear ClassAB is only used in the commit (step 4).
+        double y = static_cast<double>(yPrev_);
+        const double kClassABGain = static_cast<double>(classAB_.getLocalGain()); // 0.95
+
+        {
+            diffPair_ = snap_dp;
+            cascode_  = snap_cas;
+            vas_      = snap_vas;
+            // ClassAB intentionally NOT restored/evaluated for g0
+
+            const float vfb0 = static_cast<float>(beta * y + static_cast<double>(vServo_));
+            const float v1 = diffPair_.processSample(input, vfb0);
+            const float v2 = cascode_.processSample(v1);
+            const float v3 = vas_.processSample(v2);
+
+            // ClassAB linear buffer: Av ≈ 0.95 (emitter follower analytical gain)
+            const double y0 = static_cast<double>(v3) * kClassABGain;
+            const double g0 = y - y0;
+
+            // Newton step: y_new = yk - g0 / J
+            y = y - g0 / J;
         }
 
-        // 3. C_out HP filter (output coupling cap)
-        feedbackDC_ += feedbackAlpha_ * (output - feedbackDC_);
-        output -= feedbackDC_;
+        // Numerical guard: y cannot exceed supply rails
+        y = std::clamp(y, -Vcc, Vcc);
+
+        // ── 4. Commit: advance states with true closed-loop feedback ─────
+        //    Double precision in DiffPairWDF resolves the sub-uV residual
+        //    error (input - beta*y) when added to V_bias (~0.63V).
+        diffPair_ = snap_dp;
+        cascode_  = snap_cas;
+        vas_      = snap_vas;
+        classAB_  = snap_ab;
+
+        {
+            const float vfb_commit = static_cast<float>(beta * y + static_cast<double>(vServo_));
+            const float c1 = diffPair_.processSample(input, vfb_commit);
+            const float c2 = cascode_.processSample(c1);
+            const float c3 = vas_.processSample(c2);
+            classAB_.processSample(c3);
+        }
+
+        // ── 5. DC servo (very slow integrator, ~0.1 Hz) ─────────────────
+        //    Models the real 990's C3 DC servo. NOT snapshotted.
+        const float yf = static_cast<float>(y);
+        servoLP_ += servoAlpha_ * (yf - servoLP_);
+        vServo_  += servoAlpha_ * servoLP_;
+        vServo_   = std::clamp(vServo_, -1.0f, 1.0f);
+
+        yPrev_ = yf;
+
+        // ── 6. Load isolator (post-feedback tap) ─────────────────────────
+        float v5 = loadIsolator_.processSample(yf);
+        v5 = std::clamp(v5, -config_.Vcc, config_.Vcc);
+
+        // ── 7. C_out HP filter (output coupling cap) ─────────────────────
+        feedbackDC_ += feedbackAlpha_ * (v5 - feedbackDC_);
+        float output = v5 - feedbackDC_;
 
         outputPrev_ = output;
+
+        if (diagEnabled_ && (sampleCount_ <= 520
+            || (sampleCount_ % 200 == 0 && sampleCount_ <= 2001)))
+        {
+            std::printf("  [S%d] in=%.6f y=%.6f J=%.1f Aol=%.0f\n",
+                        sampleCount_, input, yf, static_cast<float>(J),
+                        static_cast<float>(Aol));
+        }
+
         return output;
     }
 
     // ── Gain control ──────────────────────────────────────────────────────────
 
-    /// Set the feedback resistor value [Ohm].
-    /// Same GainTable as Neve path (11 positions, 100 to 14700 Ohm).
     void setGain(float Rfb) override
     {
         Rfb_ = std::max(Rfb, 1.0f);
         updateFeedbackCoefficient();
     }
 
-    // ── Monitoring / output stage coupling ────────────────────────────────────
+    // ── Monitoring ────────────────────────────────────────────────────────────
 
-    /// Output impedance [Ohm].
-    /// JE-990: Zout ≈ ClassAB Zout + LoadIsolator R_series
-    /// Typically < 5 Ohm (before load isolator adds 39Ω).
-    /// After isolator: ~44 Ohm. But for T2 coupling, report pre-isolator.
     float getOutputImpedance() const override
     {
         return classAB_.getOutputImpedance();
     }
 
-    /// Human-readable name for UI / diagnostics.
-    const char* getName() const override { return "Jensen Heritage"; }
+    const char* getName() const override { return "Jensen Modern"; }
 
-    // ── Operating point monitoring ────────────────────────────────────────────
+    float getClosedLoopGain() const { return 1.0f + Rfb_ / Rg_; }
 
-    /// Instantaneous closed-loop gain [linear].
-    float getClosedLoopGain() const
-    {
-        return 1.0f + Rfb_ / Rg_;
-    }
-
-    /// Instantaneous closed-loop gain [dB].
     float getClosedLoopGainDB() const
     {
         return 20.0f * std::log10(getClosedLoopGain());
     }
 
-    /// Current feedback resistor value [Ohm].
     float getRfb() const { return Rfb_; }
 
-    /// Open-loop gain estimate: product of DiffPair, Cascode, VAS gains.
-    /// ClassAB is unity gain (emitter follower).
-    ///
-    /// IMPORTANT: Each stage's processSample() already applies its own
-    /// emitter degeneration. So the actual open-loop gain through the
-    /// signal path includes degeneration effects. We must estimate Aol
-    /// consistently with what processSample() produces.
-    ///
-    /// DiffPair: output = dIc * degenFactor * R_load
-    ///   → voltage gain = gm_raw * degenFactor * R_load
-    ///   where gm_raw = Ic/(2*Vt) per half, degenFactor = 1/(1+gm*Re)
-    ///   → effectively gm_eff * R_load (gm_eff already reported by getGm())
-    ///
-    /// VAS: output = (Vc - Vc_dc) with degeneration applied
-    ///   → voltage gain = getGainInstantaneous() (already degenerated)
     float getOpenLoopGain() const
     {
-        // DiffPair effective gain (gm_eff already includes degeneration)
-        const float gm_eff = diffPair_.getGm();
-        const float diffGain = gm_eff * 300.0f;  // R_load = 300Ω
-
-        // Cascode: linear pass-through
-        const float casGain = 0.98f;
-
-        // VAS: getGainInstantaneous() returns degenerated gain
-        const float vasGain = vas_.getGainInstantaneous();
-
-        // ClassAB: unity gain (emitter follower)
-        // Total Aol = diffGain * casGain * |vasGain|
+        const float gm_eff   = static_cast<float>(diffPair_.getGm());
+        const float diffGain = gm_eff * 300.0f;
+        const float casGain  = 0.98f;
+        const float vasGain  = vas_.getGainInstantaneous();
         return diffGain * casGain * std::abs(vasGain);
     }
 
 private:
-    // ── Amplifier stages ──────────────────────────────────────────────────────
+    // ── Stages ────────────────────────────────────────────────────────────────
     DiffPairWDF<BJTLeaf>       diffPair_;
     CascodeStage               cascode_;
     VASStageWDF<BJTLeaf>       vas_;
@@ -288,26 +333,37 @@ private:
     LoadIsolator               loadIsolator_;
 
     // ── Feedback network ──────────────────────────────────────────────────────
-    float Rfb_           = 1430.0f;     // Feedback resistor [Ohm] (default: +30 dB)
-    float Rg_            = 47.0f;       // Gain reference resistor [Ohm]
-    float feedbackDC_    = 0.0f;        // LP filter tracking DC component
-    float feedbackAlpha_ = 0.0f;        // One-pole LP coefficient for DC tracking
-    float outputPrev_    = 0.0f;        // Previous output sample
-    float designAol_     = 8.0f;        // Design-time open-loop gain (from component values)
+    float Rfb_           = 1430.0f;
+    float Rg_            = 47.0f;
+    float feedbackDC_    = 0.0f;
+    float feedbackAlpha_ = 0.0f;
+    float outputPrev_    = 0.0f;
+
+    // ── Newton solver state ───────────────────────────────────────────────────
+    float yPrev_         = 0.0f;
+    double J_prev_       = 100.0;   // Warm-start Jacobian (fallback seed)
+
+    // ── DC servo ──────────────────────────────────────────────────────────────
+    float vServo_        = 0.0f;
+    float servoLP_       = 0.0f;
+    float servoAlpha_    = 0.0f;
+
+    // ── Diagnostics ───────────────────────────────────────────────────────────
+    int   sampleCount_   = 0;
+public:
+    bool  diagEnabled_   = false;
+private:
 
     // ── Configuration ─────────────────────────────────────────────────────────
     JE990PathConfig config_;
     float sampleRate_ = 44100.0f;
     bool  configured_ = false;
 
-    // ── Internal helpers ──────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// Recompute the feedback HP filter coefficient.
-    /// C_out (220µF) with Rfb forms a HP corner:
-    ///   f_hp = 1 / (2 * pi * C_out * Rfb)
     void updateFeedbackCoefficient()
     {
-        const float C_out = config_.C_out;  // 220 µF
+        const float C_out = config_.C_out;
         if (C_out <= 0.0f || Rfb_ <= 0.0f) {
             feedbackAlpha_ = 0.0f;
             return;

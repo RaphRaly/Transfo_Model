@@ -120,10 +120,14 @@ public:
     /// @return           Single-ended voltage for VAS input [V]
     float processSample(float diffInput)
     {
-        // Linear transfer: Vout = diffInput * alpha
-        // The cascode is unity-gain for current; the voltage transfer
-        // is set by currentGain (alpha = Ic / Ie, typically ~0.98).
-        outputVoltage_ = diffInput * config_.currentGain;
+        // Linear transfer: Vout = -diffInput * alpha
+        // The cascode is unity-gain for current; the voltage at the
+        // cascode collector is INVERTED relative to the input current:
+        //   increased Ic from diff pair → larger drop across R4/R5 →
+        //   LOWER collector voltage. This physical inversion, combined
+        //   with the VAS CE inversion, gives a net non-inverting forward
+        //   path required for stable negative feedback in the JE-990.
+        outputVoltage_ = -diffInput * config_.currentGain;
 
         return outputVoltage_;
     }
@@ -150,6 +154,10 @@ public:
     {
         return outputImpedance_;
     }
+
+    /// Signed local small-signal gain: −currentGain (inverting).
+    /// Physical inversion from current→voltage through R4/R5.
+    float getLocalGain() const { return -config_.currentGain; }
 
     /// Access the current configuration.
     const CascodeConfig& getConfig() const { return config_; }

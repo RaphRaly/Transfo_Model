@@ -48,6 +48,11 @@ public:
   double derivativeD(double He) const {
     return static_cast<const Derived *>(this)->derivativeDImpl(He);
   }
+
+  // Second derivative L''(x) — used by analytical Jacobian (replaces FD)
+  double secondDerivativeD(double He) const {
+    return static_cast<const Derived *>(this)->secondDerivativeDImpl(He);
+  }
 };
 
 // ─── LangevinPade — Pade [3/3] approximation of the Langevin function ──────
@@ -83,10 +88,19 @@ public:
   }
 
   // L'(x) = d/dx [ x·(15+x²) / (45+6x²) ]
-  //       = (675 + 90x² - x⁴) / (45 + 6x²)² · (1/3)
-  // Simplified: (15·(45+6x²) + x²·(45+6x²) - 12x²·(15+x²)) / (45+6x²)²
-  //           = (675 + 90x² + 45x² + 6x⁴ - 180x² - 12x⁴) / (45+6x²)²
-  //           = (675 - 45x² - 6x⁴) / (45+6x²)²
+  //
+  // Quotient rule: d/dx [N/D] = (N'·D - N·D') / D²
+  //   N = x·(15 + x²) = 15x + x³       → N' = 15 + 3x²
+  //   D = 45 + 6x²                       → D' = 12x
+  //
+  //   N'·D = (15 + 3x²)(45 + 6x²) = 675 + 90x² + 135x² + 18x⁴
+  //        = 675 + 225x² + 18x⁴
+  //   N·D' = (15x + x³)(12x) = 180x² + 12x⁴
+  //
+  //   Numerator = 675 + 225x² + 18x⁴ - 180x² - 12x⁴
+  //             = 675 + 45x² + 6x⁴
+  //
+  // L'(x) = (675 + 45x² + 6x⁴) / (45 + 6x²)²  — always ≥ 0
   float derivativeImpl(float x) const {
     const float ax = std::abs(x);
 
@@ -130,6 +144,27 @@ public:
     const double sh = std::sinh(x);
     return 1.0 / (x * x) - 1.0 / (sh * sh);
   }
+
+  // L''(x) = -2/x³ + 2·cosh(x)/sinh³(x)
+  // Series at origin: L''(x) = -2x/15 + 8x³/189 - ...
+  // Replaces finite-difference in the analytical Jacobian, eliminating
+  // catastrophic cancellation at small x where 1/x² ≈ 1/sinh²(x).
+  double secondDerivativeDImpl(double x) const {
+    const double ax = std::abs(x);
+
+    if (ax < 1e-3) {
+      // Taylor series: accurate to O(x⁵)
+      const double x2 = x * x;
+      return x * (-2.0 / 15.0 + 8.0 * x2 / 189.0);
+    }
+
+    if (ax > 20.0)
+      return 0.0;
+
+    const double sh = std::sinh(x);
+    const double ch = std::cosh(x);
+    return -2.0 / (x * x * x) + 2.0 * ch / (sh * sh * sh);
+  }
 };
 
 // ─── CPWLAnhysteretic — Piecewise constant derivative ──────────────────────
@@ -160,6 +195,9 @@ public:
   }
   double derivativeDImpl(double x) const {
     return static_cast<double>(derivativeImpl(static_cast<float>(x)));
+  }
+  double secondDerivativeDImpl(double /*x*/) const {
+    return 0.0;  // Piecewise linear → L''(x) = 0
   }
 
   void setBreakpoint(float bp, float inner, float outer) {

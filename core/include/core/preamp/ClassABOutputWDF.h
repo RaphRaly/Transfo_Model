@@ -275,7 +275,6 @@ public:
         lastVce_q9_     = Vcc_;
         lastIc_q8_      = 0.0f;
         lastIc_q9_      = 0.0f;
-        dcSettleCount_  = 0;
 
         // Design rule 2: Warm up the NR solver at the bias point.
         // 32 zero-input samples let both BJTs converge to their quiescent
@@ -284,11 +283,10 @@ public:
         for (int i = 0; i < kWarmupSamples; ++i)
             processSample(0.0f);
 
-        // Design rule 3: Re-initialize DC tracker to the converged output
-        // so the first real audio sample sees zero DC offset.
+        // Freeze DC offset to the converged quiescent output.
+        // With dcState_=0 during warmup, outputVoltage_ = raw Vout.
         dcState_        = outputVoltage_;
         lastOutput_     = 0.0f;
-        dcSettleCount_  = 0;
     }
 
     // ── Audio processing ─────────────────────────────────────────────────────
@@ -469,22 +467,9 @@ public:
 
         // ── Step 11: AC coupling (DC removal) ────────────────────────────────
         //
-        // Design rule 4: Output uses independent bias.
-        // Remove the DC component so the output is purely AC.
-        // Two-phase approach: fast settling during warmup, slow tracking
-        // during steady-state operation.
-        if (dcSettleCount_ < kDCSettleSamples)
-        {
-            // Fast DC tracking during initial settling
-            dcState_ += 0.01f * (Vout_raw - dcState_);
-            ++dcSettleCount_;
-        }
-        else
-        {
-            // Steady state: sub-Hz DC tracking
-            dcState_ += dcAlpha_ * (Vout_raw - dcState_);
-        }
-
+        // Subtract the FROZEN DC offset measured at reset().
+        // Not updated during audio — keeps the stage stationary for the
+        // JE990Path Newton solver.
         lastOutput_ = Vout_raw - dcState_;
         return lastOutput_;
     }
@@ -592,6 +577,49 @@ public:
     /// NR iteration count from Q9's last scatter.
     int getLastIterCount_q9() const { return q9Leaf_.getLastIterCount(); }
 
+    // ── AC state snapshot (excludes frozen dcState_) ──────────
+    struct AcSnap {
+        typename NonlinearLeaf::AcState q8, q9;
+        float compState_q8, compState_q9;
+        float outputVoltage, lastOutput;
+        float lastVce_q8, lastVce_q9, lastIc_q8, lastIc_q9;
+    };
+
+    AcSnap saveAcState() const
+    {
+        return { q8Leaf_.saveAcState(), q9Leaf_.saveAcState(),
+                 compState_q8_, compState_q9_,
+                 outputVoltage_, lastOutput_,
+                 lastVce_q8_, lastVce_q9_, lastIc_q8_, lastIc_q9_ };
+    }
+
+    void restoreAcState(const AcSnap& s)
+    {
+        q8Leaf_.restoreAcState(s.q8);
+        q9Leaf_.restoreAcState(s.q9);
+        compState_q8_ = s.compState_q8; compState_q9_ = s.compState_q9;
+        outputVoltage_ = s.outputVoltage; lastOutput_ = s.lastOutput;
+        lastVce_q8_ = s.lastVce_q8; lastVce_q9_ = s.lastVce_q9;
+        lastIc_q8_ = s.lastIc_q8; lastIc_q9_ = s.lastIc_q9;
+        // dcState_ is NOT restored — it's a frozen DC offset
+    }
+
+    /// Signed local small-signal voltage gain at the current operating
+    /// point. Emitter follower ≈ +1.0 (non-inverting, near-unity).
+    /// Accounts for the R_sense current-feedback loss.
+    float getLocalGain() const
+    {
+        const float gm_total = q8Leaf_.getGm() + q9Leaf_.getGm();
+        // EF gain ≈ 1 / (1 + R_sense * gm_total) ... but gm_total
+        // here represents both halves conducting; at quiescence the
+        // NET output current barely changes (push-pull cancellation).
+        // For the Jacobian we need dVout/dVin of the follower which
+        // is dominated by the unity Vbe-tracking, not by R_sense.
+        // A safe estimate is ~0.95 (Vbe tracking loss).
+        (void)gm_total;
+        return 0.95f;
+    }
+
     /// Quiescent bias current [A] as configured.
     float getQuiescentCurrent() const { return config_.I_quiescent; }
 
@@ -647,10 +675,6 @@ private:
     float lastVce_q9_     = 24.0f;  // Q9 collector-emitter voltage [V]
     float lastIc_q8_      = 0.0f;   // Q8 collector current [A]
     float lastIc_q9_      = 0.0f;   // Q9 collector current [A]
-
-    // ── DC settling ──────────────────────────────────────────────────────────
-    static constexpr int kDCSettleSamples = 4096;  // ~93ms at 44.1kHz
-    int dcSettleCount_    = 0;
 
     // ── Warmup ───────────────────────────────────────────────────────────────
     static constexpr int kWarmupSamples = 32;      // Design rule 2

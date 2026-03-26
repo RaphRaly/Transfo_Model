@@ -1,0 +1,58 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "d7000001-swch-outp-0007-000000000007")
+	(paper "A4")
+	(title_block
+		(title "Switching & Output — Relays + T2 (JT-11ELCF)")
+		(date "2026-03-24")
+		(rev "1.0")
+		(comment 1 "K1+K2 (G6S-2) relay switching A/B/C → T2 (JT-11ELCF) → XLR Out")
+		(comment 2 "SW_ABC: 3-pos rotary. K1 OFF=A, K1 ON+K2 OFF=B, K1 ON+K2 ON=C")
+	)
+	(lib_symbols)
+
+	(hierarchical_label "OUTPUT_A"
+		(shape input)
+		(at 25.4 50.8 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e7000001-swch-outp-0007-000000000001")
+	)
+	(hierarchical_label "OUTPUT_B"
+		(shape input)
+		(at 25.4 76.2 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e7000002-swch-outp-0007-000000000002")
+	)
+	(hierarchical_label "OUTPUT_C"
+		(shape input)
+		(at 25.4 101.6 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e7000003-swch-outp-0007-000000000003")
+	)
+	(hierarchical_label "XLR_OUT_HOT"
+		(shape output)
+		(at 228.6 50.8 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e7000004-swch-outp-0007-000000000004")
+	)
+	(hierarchical_label "XLR_OUT_COLD"
+		(shape output)
+		(at 228.6 63.5 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e7000005-swch-outp-0007-000000000005")
+	)
+	(hierarchical_label "SW_ABC"
+		(shape input)
+		(at 25.4 139.7 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e7000006-swch-outp-0007-000000000006")
+	)
+
+	(text "SWITCHING & OUTPUT — FINAL SCHEMATIC\n\nRELAY LOGIC (from FROZEN_SPEC.md):\n\n  Output_A ──► K1:NC    (selected when K1 OFF = position A)\n  K2:COM ────► K1:NO    (selected when K1 ON)\n  Output_B ──► K2:NC    (selected when K2 OFF = position B)\n  Output_C ──► K2:NO    (selected when K2 ON = position C)\n  K1:COM ────────────────► T2 primary HOT\n\n  K1, K2 = Omron G6S-2-DC24 (DPDT relay)\n  D_fly1, D_fly2 = 1N4148 (flyback protection)\n  Q_relay1, Q_relay2 = BC184C (relay drivers)\n  R_relay1, R_relay2 = 1K (base resistors)\n\nSW_ABC (3-position rotary):\n  Pos 1 (A): K1=OFF, K2=OFF\n  Pos 2 (B): K1=ON, K2=OFF\n  Pos 3 (C): K1=ON, K2=ON\n\nOUTPUT TRANSFORMER:\n  T2 = JT-11ELCF (1:1)\n  Primary: from relay K1:COM\n  Secondary: → J3 XLR pin 2 (HOT), pin 3 (COLD)\n  Shield: → GND\n\nUse JT-11ELCF symbol from TripleTopoCustom library"
+		(at 25.4 25.4 0)
+		(effects (font (size 1.524 1.524)) (justify left))
+		(uuid "f7000001-swch-text-0007-000000000001")
+	)
+)

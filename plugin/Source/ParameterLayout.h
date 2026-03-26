@@ -29,6 +29,12 @@ namespace ParamID
     static const juce::String PreampRatio   = "preampRatio";    // int 0-1 (1:5/1:10)
     static const juce::String PreampPhase   = "preampPhase";    // bool
     static const juce::String PreampEnabled = "preampEnabled";  // bool (bypass preamp)
+
+    // Harrison Console Mic Pre controls
+    static const juce::String HarrisonMicGain = "harrisonMicGain";   // float 0-1 (continuous pot)
+    static const juce::String HarrisonPad     = "harrisonPad";       // bool (20dB PAD)
+    static const juce::String HarrisonPhase   = "harrisonPhase";     // bool (phase reverse)
+    static const juce::String HarrisonSourceZ = "harrisonSourceZ";   // float 50-600 Ohm
 }
 
 // ─── Create parameter layout ────────────────────────────────────────────────
@@ -78,10 +84,10 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::NormalisableRange<float>(0.0f, 5.0f, 0.1f), 2.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // Engine: Preamp (default) or Legacy transformer-only mode
+    // Engine: Preamp (default), Legacy transformer-only, or Harrison Console
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Circuit, 1), "Engine",
-        juce::StringArray{"O.D.T Balanced Preamp", "Legacy (Transformer)"},
+        juce::StringArray{"O.D.T Balanced Preamp", "Legacy (Transformer)", "Harrison Console"},
         0));
 
     // ── Preamp parameters (Sprint 7) ──────────────────────────────────────
@@ -112,6 +118,27 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     // Preamp Enable/Bypass
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID(ParamID::PreampEnabled, 1), "Preamp", false));  // off by default
+
+    // ── Harrison Console Mic Pre parameters ─────────────────────────────
+
+    // Mic Gain (continuous pot, 0=min, 1=max)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID(ParamID::HarrisonMicGain, 1), "Mic Gain",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+
+    // 20dB PAD
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID(ParamID::HarrisonPad, 1), "Harrison PAD", false));
+
+    // Phase Reverse
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID(ParamID::HarrisonPhase, 1), "Harrison Phase", false));
+
+    // Source Impedance (Ohm)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID(ParamID::HarrisonSourceZ, 1), "Source Z",
+        juce::NormalisableRange<float>(50.0f, 600.0f, 1.0f), 150.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Ohm")));
 
     return { params.begin(), params.end() };
 }

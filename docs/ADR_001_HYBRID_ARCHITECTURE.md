@@ -55,7 +55,7 @@ Two competing architectures exist:
 |-----------|--------|---------------|-------------------|
 | Risk | Low | High | Medium |
 | Effort | 2-3 weeks | 4-6 weeks | 4-6 weeks |
-| 3-leg model | Preserved (dormant) | Full | Lost |
+| 3-leg model | Preserved (intentionally set aside) | Full | Lost |
 | LC support | Yes (post-filter) | Needs extension | Native |
 | Dynamic Lm | Yes (HP coupling) | Yes (port Z) | Yes (tree port) |
 | Test coverage | Incremental | Major rewrite | Major rewrite |
@@ -88,7 +88,7 @@ JSON key renamed from `K_geo_H` to `K_geo_m` (backward-compatible loading).
 
 ## Consequences
 
-- HSIM code remains in the codebase but dormant (no deletion)
+- HSIM code is intentionally set aside — commit/rollback interfaces retained for future compatibility
 - Sprint 2-3 can proceed without blocking on HSIM repair
 - Architecture B components (DynamicParallelAdaptor, WDFResonanceFilter) are developed as standalone modules
 - Future HSIM repair is an independent workstream

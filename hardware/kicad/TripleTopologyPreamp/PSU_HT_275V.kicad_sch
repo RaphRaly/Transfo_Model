@@ -1,0 +1,40 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "d2000001-psu-ht00-0002-000000000002")
+	(paper "A4")
+	(title_block
+		(title "PSU HT +275V & Heater 12.6V DC")
+		(date "2026-03-24")
+		(rev "1.0")
+		(comment 1 "Antek AN-0T220 (220VAC) → Bridge → RC-RC filter → B+ ~275V")
+		(comment 2 "Heater: LM317 from +24V → 12.6V DC, 2 tubes series, 150mA")
+	)
+	(lib_symbols)
+
+	(hierarchical_label "B+"
+		(shape output)
+		(at 228.6 50.8 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e2000001-psu-ht00-0002-000000000001")
+	)
+	(hierarchical_label "HEATER_12V6"
+		(shape output)
+		(at 228.6 101.6 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e2000002-psu-ht00-0002-000000000002")
+	)
+	(hierarchical_label "GND_HT"
+		(shape bidirectional)
+		(at 228.6 76.2 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e2000003-psu-ht00-0002-000000000003")
+	)
+
+	(text "PSU HT — HIGH VOLTAGE SECTION\n\n1. TR_HT: Antek AN-0T220 (220VAC secondary, 15VA)\n2. BR2: W04G bridge (1A/400V)\n3. RC filter: C_HT1(47µ/400V) → R_HT1(3.3K/3W) → C_HT2(100µ/400V) → R_HT2(1.5K/2W) → C_HT3(100µ/400V)\n4. Bleeders: 470K/2W across each cap\n5. B+ ≈ 270-290V DC\n\nHEATER SECTION\n\n1. Source: +24V regulated rail\n2. LM317T → 12.6V DC (R_adj3=240R, R_adj3b=2.21K + trim 500R)\n3. V1 heater (pins 4-5) → V2 heater (pins 4-5) → GND (series, 150mA)"
+		(at 25.4 25.4 0)
+		(effects (font (size 1.524 1.524)) (justify left))
+		(uuid "f2000001-psu-ht-text-000000000001")
+	)
+)

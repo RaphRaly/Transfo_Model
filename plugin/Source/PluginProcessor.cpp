@@ -28,6 +28,12 @@ PluginProcessor::PluginProcessor()
     preampRatioParam_   = apvts_.getRawParameterValue(ParamID::PreampRatio);
     preampPhaseParam_   = apvts_.getRawParameterValue(ParamID::PreampPhase);
     preampEnabledParam_ = apvts_.getRawParameterValue(ParamID::PreampEnabled);
+
+    // Harrison parameter pointers
+    harrisonMicGainParam_ = apvts_.getRawParameterValue(ParamID::HarrisonMicGain);
+    harrisonPadParam_     = apvts_.getRawParameterValue(ParamID::HarrisonPad);
+    harrisonPhaseParam_   = apvts_.getRawParameterValue(ParamID::HarrisonPhase);
+    harrisonSourceZParam_ = apvts_.getRawParameterValue(ParamID::HarrisonSourceZ);
 }
 
 PluginProcessor::~PluginProcessor() = default;
@@ -63,13 +69,28 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // Prepare preamp models (Sprint 7)
     {
         auto preampCfg = PreampConfig::DualTopology();
-        // Use 10kOhm bridging load for T2 (workaround for WDF low-impedance bug)
-        preampCfg.t2Config.loadImpedance = 10000.0f;
+        // T2 now uses spec 600 Ohm load (DynamicParallelAdaptor numerical
+        // stability fix eliminates the previous low-impedance bug).
         for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
         {
             preampModel_[ch].setConfig(preampCfg);
             preampModel_[ch].prepareToPlay(sr, samplesPerBlock);
         }
+    }
+
+    // Prepare Harrison Console Mic Pre
+    {
+        auto jensenCfg = Presets::getByIndex(0);  // Jensen JT-115K-E
+        for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
+        {
+            harrisonTransformer_[ch].setConfig(jensenCfg);
+            harrisonTransformer_[ch].setProcessingMode(ProcessingMode::Realtime);
+            harrisonTransformer_[ch].prepareToPlay(sr, samplesPerBlock);
+
+            harrisonMicPre_[ch].setTransformer(&harrisonTransformer_[ch]);
+            harrisonMicPre_[ch].prepareToPlay(sr, samplesPerBlock);
+        }
+        harrisonDryBuffer_.resize(static_cast<size_t>(samplesPerBlock), 0.0f);
     }
 
     // A2.2: Report latency to host
@@ -83,6 +104,8 @@ void PluginProcessor::releaseResources()
         realtimeModel_[ch].reset();
         physicalModel_[ch].reset();
         preampModel_[ch].reset();
+        harrisonTransformer_[ch].reset();
+        harrisonMicPre_[ch].reset();
     }
 }
 
@@ -112,16 +135,17 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float inputGainDb  = inputGainParam_->load();
     const float outputGainDb = outputGainParam_->load();
     const float mix          = mixParam_->load();
-    const bool  useLegacy    = (static_cast<int>(circuitParam_->load()) == 1);
+    const int   circuitIndex = static_cast<int>(circuitParam_->load());
+    // 0 = O.D.T Balanced Preamp, 1 = Legacy (Transformer), 2 = Harrison Console
 
-    // A2.2: Preamp mode has zero latency — update when switching engines
-    if (!useLegacy && lastModeIndex_ != -1)
+    // A2.2: Non-legacy modes have zero latency — update when switching engines
+    if (circuitIndex != 1 && lastModeIndex_ != -1)
     {
         lastModeIndex_ = -1;
         setLatencySamples(0);
     }
 
-    if (useLegacy)
+    if (circuitIndex == 1)
     {
         // ── Legacy mode: old TransformerModel engine ──────────────────────
         const int presetIndex = static_cast<int>(presetParam_->load());
@@ -187,7 +211,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             }
         }
     }
-    else
+    else if (circuitIndex == 0)
     {
         // ── Preamp mode: PreampModel is the main engine ──────────────────
         const int preampGainPos = static_cast<int>(preampGainParam_->load());
@@ -213,6 +237,51 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             // Safety: clamp NaN/Inf/denormals to zero (A2.1)
             for (int s = 0; s < numSamples; ++s)
             {
+                if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
+                    data[s] = 0.0f;
+            }
+        }
+    }
+    else
+    {
+        // ── Harrison Console Mic Pre ────────────────────────────────────
+        const float micGain  = harrisonMicGainParam_->load();
+        const bool  hPad     = (harrisonPadParam_->load() > 0.5f);
+        const bool  hPhase   = (harrisonPhaseParam_->load() > 0.5f);
+        const float sourceZ  = harrisonSourceZParam_->load();
+
+        const float inputGainLin  = std::pow(10.0f, inputGainDb / 20.0f);
+        const float outputGainLin = std::pow(10.0f, outputGainDb / 20.0f);
+
+        for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
+        {
+            harrisonMicPre_[ch].setMicGain(micGain);
+            harrisonMicPre_[ch].setPadEnabled(hPad);
+            harrisonMicPre_[ch].setPhaseReverse(hPhase);
+            harrisonMicPre_[ch].setSourceImpedance(sourceZ);
+
+            auto* data = buffer.getWritePointer(ch);
+
+            // Save dry signal for mix
+            const auto sz = static_cast<size_t>(numSamples);
+            if (harrisonDryBuffer_.size() < sz)
+                harrisonDryBuffer_.resize(sz);
+            std::copy(data, data + numSamples, harrisonDryBuffer_.data());
+
+            // Apply input gain
+            for (int s = 0; s < numSamples; ++s)
+                data[s] *= inputGainLin;
+
+            // Harrison signal chain: input scaling → transformer → gain stage
+            harrisonMicPre_[ch].processBlock(data, numSamples);
+
+            // Apply output gain and dry/wet mix
+            for (int s = 0; s < numSamples; ++s)
+            {
+                data[s] = mix * (data[s] * outputGainLin)
+                        + (1.0f - mix) * harrisonDryBuffer_[static_cast<size_t>(s)];
+
+                // Safety: clamp NaN/Inf/denormals to zero (A2.1)
                 if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
                     data[s] = 0.0f;
             }

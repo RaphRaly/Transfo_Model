@@ -1,0 +1,538 @@
+(kicad_symbol_lib
+  (version 20231120)
+  (generator "custom_triple_topo")
+  (generator_version "1.0")
+
+  ;; ============================================================
+  ;; JT-115K-E — Jensen Input Transformer (1:10 / 1:5)
+  ;; ============================================================
+  (symbol "JT-115K-E"
+    (pin_names (offset 1.016))
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "T"
+      (at 0 8.89 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "JT-115K-E"
+      (at 0 -8.89 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Datasheet" "https://www.jensen-transformers.com/mic-input/"
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Description" "Jensen Mic Input Transformer 1:10/1:5, MuMetal shield"
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (symbol "JT-115K-E_0_1"
+      ;; Primary winding (left side)
+      (arc (start -2.54 -5.08) (mid -3.81 -3.81) (end -2.54 -2.54)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start -2.54 -2.54) (mid -3.81 -1.27) (end -2.54 0)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start -2.54 0) (mid -3.81 1.27) (end -2.54 2.54)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start -2.54 2.54) (mid -3.81 3.81) (end -2.54 5.08)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Secondary winding (right side)
+      (arc (start 2.54 5.08) (mid 3.81 3.81) (end 2.54 2.54)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start 2.54 2.54) (mid 3.81 1.27) (end 2.54 0)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start 2.54 0) (mid 3.81 -1.27) (end 2.54 -2.54)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start 2.54 -2.54) (mid 3.81 -3.81) (end 2.54 -5.08)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Core lines
+      (polyline
+        (pts (xy -0.762 -6.35) (xy -0.762 6.35))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 0.762 -6.35) (xy 0.762 6.35))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Polarity dots
+      (circle (center -2.54 5.588) (radius 0.254)
+        (stroke (width 0.254) (type default))
+        (fill (type outline))
+      )
+      (circle (center 2.54 5.588) (radius 0.254)
+        (stroke (width 0.254) (type default))
+        (fill (type outline))
+      )
+    )
+    (symbol "JT-115K-E_1_1"
+      ;; Primary pins
+      (pin passive line
+        (at -7.62 5.08 0)
+        (length 5.08)
+        (name "P_HOT" (effects (font (size 1.016 1.016))))
+        (number "1" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at -7.62 0 0)
+        (length 5.08)
+        (name "P_CT" (effects (font (size 1.016 1.016))))
+        (number "2" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at -7.62 -5.08 0)
+        (length 5.08)
+        (name "P_COLD" (effects (font (size 1.016 1.016))))
+        (number "3" (effects (font (size 1.016 1.016))))
+      )
+      ;; Secondary pins
+      (pin passive line
+        (at 7.62 5.08 180)
+        (length 5.08)
+        (name "S_HOT" (effects (font (size 1.016 1.016))))
+        (number "4" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 7.62 0 180)
+        (length 5.08)
+        (name "S_CT" (effects (font (size 1.016 1.016))))
+        (number "5" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 7.62 -5.08 180)
+        (length 5.08)
+        (name "S_COLD" (effects (font (size 1.016 1.016))))
+        (number "6" (effects (font (size 1.016 1.016))))
+      )
+      ;; Shield
+      (pin passive line
+        (at 0 -8.89 90)
+        (length 2.54)
+        (name "SHIELD" (effects (font (size 1.016 1.016))))
+        (number "7" (effects (font (size 1.016 1.016))))
+      )
+    )
+  )
+
+  ;; ============================================================
+  ;; JT-11ELCF — Jensen Output Transformer (1:1)
+  ;; ============================================================
+  (symbol "JT-11ELCF"
+    (pin_names (offset 1.016))
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "T"
+      (at 0 6.35 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "JT-11ELCF"
+      (at 0 -6.35 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Datasheet" "https://www.jensen-transformers.com/line-output/"
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Description" "Jensen Line Output Transformer 1:1, 600 ohm"
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (symbol "JT-11ELCF_0_1"
+      ;; Primary winding
+      (arc (start -2.54 -3.81) (mid -3.81 -2.54) (end -2.54 -1.27)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start -2.54 -1.27) (mid -3.81 0) (end -2.54 1.27)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start -2.54 1.27) (mid -3.81 2.54) (end -2.54 3.81)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Secondary winding
+      (arc (start 2.54 3.81) (mid 3.81 2.54) (end 2.54 1.27)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start 2.54 1.27) (mid 3.81 0) (end 2.54 -1.27)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (arc (start 2.54 -1.27) (mid 3.81 -2.54) (end 2.54 -3.81)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Core lines
+      (polyline
+        (pts (xy -0.762 -5.08) (xy -0.762 5.08))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 0.762 -5.08) (xy 0.762 5.08))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Polarity dots
+      (circle (center -2.54 4.318) (radius 0.254)
+        (stroke (width 0.254) (type default))
+        (fill (type outline))
+      )
+      (circle (center 2.54 4.318) (radius 0.254)
+        (stroke (width 0.254) (type default))
+        (fill (type outline))
+      )
+    )
+    (symbol "JT-11ELCF_1_1"
+      (pin passive line
+        (at -7.62 3.81 0)
+        (length 5.08)
+        (name "P_HOT" (effects (font (size 1.016 1.016))))
+        (number "1" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at -7.62 -3.81 0)
+        (length 5.08)
+        (name "P_COLD" (effects (font (size 1.016 1.016))))
+        (number "2" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 7.62 3.81 180)
+        (length 5.08)
+        (name "S_HOT" (effects (font (size 1.016 1.016))))
+        (number "3" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 7.62 -3.81 180)
+        (length 5.08)
+        (name "S_COLD" (effects (font (size 1.016 1.016))))
+        (number "4" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 0 -6.35 90)
+        (length 2.54)
+        (name "SHIELD" (effects (font (size 1.016 1.016))))
+        (number "5" (effects (font (size 1.016 1.016))))
+      )
+    )
+  )
+
+  ;; ============================================================
+  ;; ECC83 — Dual Triode (one section, instantiate twice per tube)
+  ;; ============================================================
+  (symbol "ECC83_Triode"
+    (pin_names (offset 0))
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "V"
+      (at -1.27 6.35 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "ECC83"
+      (at -1.27 -6.35 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" "Valve:Valve_Noval_P"
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Datasheet" ""
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Description" "ECC83/12AX7 dual triode, one section"
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    ;; Unit A (pins 1,2,3)
+    (symbol "ECC83_Triode_1_1"
+      ;; Anode (plate)
+      (polyline
+        (pts (xy 0 5.08) (xy 0 2.54))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -1.27 2.54) (xy 1.27 2.54))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Grid (dashed)
+      (polyline
+        (pts (xy -2.54 0) (xy -1.524 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -1.016 0) (xy -0.508 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 0 0) (xy 0.508 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 1.016 0) (xy 1.524 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Grid connection line
+      (polyline
+        (pts (xy -3.81 0) (xy -2.54 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Cathode
+      (polyline
+        (pts (xy -1.27 -2.54) (xy 1.27 -2.54))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 0 -2.54) (xy 0 -5.08))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Envelope circle
+      (circle (center 0 0) (radius 4.572)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Pins
+      (pin passive line
+        (at 0 7.62 270)
+        (length 2.54)
+        (name "A" (effects (font (size 1.016 1.016))))
+        (number "1" (effects (font (size 1.016 1.016))))
+      )
+      (pin input line
+        (at -6.35 0 0)
+        (length 2.54)
+        (name "G" (effects (font (size 1.016 1.016))))
+        (number "2" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 0 -7.62 90)
+        (length 2.54)
+        (name "K" (effects (font (size 1.016 1.016))))
+        (number "3" (effects (font (size 1.016 1.016))))
+      )
+    )
+    ;; Unit B (pins 6,7,8) — second triode section
+    (symbol "ECC83_Triode_2_1"
+      ;; Same drawing as unit A
+      (polyline
+        (pts (xy 0 5.08) (xy 0 2.54))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -1.27 2.54) (xy 1.27 2.54))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -2.54 0) (xy -1.524 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -1.016 0) (xy -0.508 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 0 0) (xy 0.508 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 1.016 0) (xy 1.524 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -3.81 0) (xy -2.54 0))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -1.27 -2.54) (xy 1.27 -2.54))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 0 -2.54) (xy 0 -5.08))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (circle (center 0 0) (radius 4.572)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (pin passive line
+        (at 0 7.62 270)
+        (length 2.54)
+        (name "A" (effects (font (size 1.016 1.016))))
+        (number "6" (effects (font (size 1.016 1.016))))
+      )
+      (pin input line
+        (at -6.35 0 0)
+        (length 2.54)
+        (name "G" (effects (font (size 1.016 1.016))))
+        (number "7" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 0 -7.62 90)
+        (length 2.54)
+        (name "K" (effects (font (size 1.016 1.016))))
+        (number "8" (effects (font (size 1.016 1.016))))
+      )
+    )
+  )
+
+  ;; ============================================================
+  ;; AS394H — Matched NPN Transistor Pair (LM394 replacement)
+  ;; ============================================================
+  (symbol "AS394H"
+    (pin_names (offset 1.016))
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "Q"
+      (at 0 7.62 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "AS394H"
+      (at 0 -7.62 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Datasheet" ""
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Description" "ALFA RPAR AS394H super-matched NPN pair, LM394 replacement"
+      (at 0 0 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (symbol "AS394H_0_1"
+      ;; Q1 NPN (left)
+      (polyline
+        (pts (xy -2.54 2.54) (xy -2.54 -2.54))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -2.54 1.27) (xy -5.08 3.81))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy -2.54 -1.27) (xy -5.08 -3.81))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Q2 NPN (right)
+      (polyline
+        (pts (xy 2.54 2.54) (xy 2.54 -2.54))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 2.54 1.27) (xy 5.08 3.81))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      (polyline
+        (pts (xy 2.54 -1.27) (xy 5.08 -3.81))
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+      ;; Substrate box
+      (rectangle (start -6.35 5.08) (end 6.35 -5.08)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+    )
+    (symbol "AS394H_1_1"
+      (pin passive line
+        (at -5.08 7.62 270)
+        (length 3.81)
+        (name "C1" (effects (font (size 1.016 1.016))))
+        (number "1" (effects (font (size 1.016 1.016))))
+      )
+      (pin input line
+        (at -8.89 0 0)
+        (length 6.35)
+        (name "B1" (effects (font (size 1.016 1.016))))
+        (number "2" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at -5.08 -7.62 90)
+        (length 3.81)
+        (name "E1" (effects (font (size 1.016 1.016))))
+        (number "3" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 5.08 7.62 270)
+        (length 3.81)
+        (name "C2" (effects (font (size 1.016 1.016))))
+        (number "4" (effects (font (size 1.016 1.016))))
+      )
+      (pin input line
+        (at 8.89 0 180)
+        (length 6.35)
+        (name "B2" (effects (font (size 1.016 1.016))))
+        (number "5" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 5.08 -7.62 90)
+        (length 3.81)
+        (name "E2" (effects (font (size 1.016 1.016))))
+        (number "6" (effects (font (size 1.016 1.016))))
+      )
+      (pin passive line
+        (at 0 -7.62 90)
+        (length 2.54)
+        (name "SUB" (effects (font (size 1.016 1.016))))
+        (number "7" (effects (font (size 1.016 1.016))))
+      )
+    )
+  )
+)

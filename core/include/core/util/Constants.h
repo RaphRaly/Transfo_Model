@@ -27,7 +27,7 @@ constexpr float  kTwoPif       = 2.0f * kPif;
 constexpr float  kEpsilonF     = 1e-7f;       // Float near-zero threshold
 constexpr double kEpsilonD     = 1e-12;        // Double near-zero threshold
 constexpr float  kADAAEpsilon  = 1e-5f;        // ADAA fallback threshold |dx|
-constexpr int    kMaxNRIter    = 20;            // Max Newton-Raphson iterations (HSIM)
+constexpr int    kMaxNRIter    = 20;            // Max Newton-Raphson iterations (WDF nonlinear leaves)
 constexpr int    kDefaultAdaptationInterval = 16; // Z adaptation interval (samples)
 
 // ─── Audio Constants ────────────────────────────────────────────────────────
@@ -45,5 +45,20 @@ constexpr double kDBvRefVrms   = 1.0;            // 0 dBv = 1.0 Vrms
 
 inline float dBtoLinear(float dB) { return std::pow(10.0f, dB / 20.0f); }
 inline float linearTodB(float lin) { return 20.0f * std::log10(lin + kEpsilonF); }
+
+/// Differentiable soft saturation: maps (-inf,+inf) to (-limit, +limit).
+/// Replaces std::clamp inside implicit Newton solves where the Jacobian
+/// must remain non-zero (hard clamp has zero derivative at the rails).
+inline float softSat(float x, float limit)
+{
+    return limit * std::tanh(x / limit);
+}
+
+/// Derivative of softSat: d/dx [L * tanh(x/L)] = 1 - tanh^2(x/L).
+inline float softSatDeriv(float x, float limit)
+{
+    const float t = std::tanh(x / limit);
+    return 1.0f - t * t;
+}
 
 } // namespace transfo

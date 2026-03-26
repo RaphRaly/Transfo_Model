@@ -24,7 +24,7 @@
 // First-order accurate with a half-sample delay — sufficient for audio
 // frequencies well below Nyquist.
 //
-// HSIM-compatible: supports commit/rollback for iterative WDF solvers.
+// Supports commit/rollback for iterative WDF solvers (HSIM intentionally set aside — see ADR-001).
 //
 // K1 and K2 are identified in Phase 2 of the identification pipeline.
 //
@@ -123,14 +123,14 @@ public:
         return dH_eddy_dB + dH_exc_dB;
     }
 
-    // ─── HSIM state management ─────────────────────────────────────────────
+    // ─── State management (HSIM intentionally set aside — see ADR-001) ─────
     // commitState: lock in the current B as the new B_prev for next sample.
     void commitState(double B_committed)
     {
         B_prev_committed_ = B_committed;
     }
 
-    // savePrevState / restorePrevState: snapshot for HSIM rollback.
+    // savePrevState / restorePrevState: snapshot for iterative rollback (retained for future use).
     void savePrevState()
     {
         B_prev_backup_ = B_prev_committed_;
@@ -168,7 +168,7 @@ private:
     double sampleRate_ = 44100.0;
     bool   enabled_ = false;
 
-    // HSIM double-buffered state
+    // Double-buffered state (retained for iterative WDF compatibility — HSIM set aside, see ADR-001)
     double B_prev_committed_    = 0.0; // B[k-1] confirmed
     double B_prev_backup_       = 0.0; // Snapshot for rollback
 

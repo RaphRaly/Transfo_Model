@@ -16,9 +16,17 @@
 #include "LCResonanceParams.h"
 #include "TransformerGeometry.h"
 #include "../magnetics/JAParameterSet.h"
+#include <cmath>
 #include <string>
 
 namespace transfo {
+
+// ─── Calibration Mode ─────────────────────────────────────────────────────────
+// Physical : hScale derived from Ampere's law at a reference frequency.
+//            Produces physically correct H field for datasheet validation.
+// Artistic : hScale = a × 5 (original behavior). Deliberately overdrives the
+//            virtual core for musical coloration at normal audio levels.
+enum class CalibrationMode { Artistic, Physical };
 
 struct TransformerConfig
 {
@@ -45,6 +53,21 @@ struct TransformerConfig
 
     TransformerGeometry geometry;                     // K_geo for nonlinear Lm [v4]
     LCResonanceParams   lcParams;                    // LC parasitic resonance [v4]
+
+    // ── Calibration ──────────────────────────────────────────────────────────
+    CalibrationMode calibrationMode = CalibrationMode::Artistic;
+    float calibrationFreqHz = 1000.0f;  // Reference frequency for Physical mode [Hz]
+
+    // ── Derive N_primary from K_geo and core geometry ────────────────────────
+    // K_geo = N² · A_e / l_e  →  N = sqrt(K_geo · l_e / A_e)
+    // This is an effective N consistent with the fitted K_geo, not necessarily
+    // the physical turns count (K_geo can differ 5-50x from geometric estimate).
+    float estimateNprimary() const {
+        const float l_e = core.effectiveLength();
+        const float A_e = core.effectiveArea();
+        if (A_e <= 0.0f || l_e <= 0.0f) return 100.0f;
+        return std::sqrt(geometry.K_geo * l_e / A_e);
+    }
 
     // ── Factory: Jensen JT-115K-E ───────────────────────────────────────────
     // Line input transformer. Ratio 1:10. Mu-metal core.

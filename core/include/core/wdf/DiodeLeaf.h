@@ -105,7 +105,7 @@ public:
         return static_cast<float>(std::clamp(1.0 / gd, 1.0, 1e8));
     }
 
-    // ── State management (HSIM interface) ───────────────────────────────────
+    // ── State management (HSIM intentionally set aside — see ADR-001) ──────
     void commitState()  { /* Diode is memoryless — nothing to commit */ }
     void rollbackState() { /* Nothing to rollback */ }
 

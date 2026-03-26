@@ -23,6 +23,7 @@
 #include "../../core/include/core/model/ToleranceModel.h"
 #include "../../core/include/core/model/TransformerModel.h"
 #include "../../core/include/core/preamp/PreampModel.h"
+#include "../../core/include/core/harrison/HarrisonMicPre.h"
 #include "ParameterLayout.h"
 
 class PluginProcessor : public juce::AudioProcessor {
@@ -132,6 +133,20 @@ private:
   std::atomic<float> *preampRatioParam_ = nullptr;
   std::atomic<float> *preampPhaseParam_ = nullptr;
   std::atomic<float> *preampEnabledParam_ = nullptr;
+
+  // Harrison Console Mic Pre (one per channel, stereo)
+  transfo::TransformerModel<transfo::CPWLLeaf> harrisonTransformer_[kMaxChannels];
+  Harrison::MicPre::HarrisonMicPre<transfo::TransformerModel<transfo::CPWLLeaf>>
+      harrisonMicPre_[kMaxChannels];
+
+  // Cached Harrison parameter pointers
+  std::atomic<float> *harrisonMicGainParam_ = nullptr;
+  std::atomic<float> *harrisonPadParam_     = nullptr;
+  std::atomic<float> *harrisonPhaseParam_   = nullptr;
+  std::atomic<float> *harrisonSourceZParam_ = nullptr;
+
+  // Dry buffer for Harrison mix processing
+  std::vector<float> harrisonDryBuffer_;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };

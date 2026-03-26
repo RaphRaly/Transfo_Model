@@ -57,6 +57,13 @@ public:
         Z_port_ = params.rbe(1e-3f);
     }
 
+    /// Override port resistance for stages that operate at different quiescent
+    /// currents. The default rbe(1mA) works for DiffPair (1.5mA) and VAS (1.5mA)
+    /// but creates a 15× mismatch for ClassAB (15mA). A mismatched Z_port
+    /// severely attenuates the per-sample WDF response, reducing the effective
+    /// gain of the stage as seen by the Newton probe.
+    void setPortResistance(float Z) { Z_port_ = std::max(Z, 1.0f); }
+
     void prepare(float sampleRate)
     {
         sampleRate_ = sampleRate;
@@ -79,12 +86,12 @@ public:
     ///   3. Update companion outputs (Ic, gm)
     float scatterImpl(float a)
     {
-        const float Vbe = companion_.solve(a, Z_port_);
+        const double Vbe = companion_.solve(a, Z_port_);
         // DO NOT update Z_port_ here — keep it fixed per Werner/Bernardini standard.
         // Adapting Z_port to track rbe creates a positive feedback loop: when Ic→0,
         // Z_port→∞, making the incident wave tiny, keeping Ic≈0 (startup lockup).
         // The port resistance is a fixed design parameter set once in configure().
-        return 2.0f * Vbe - a;
+        return static_cast<float>(2.0 * Vbe - static_cast<double>(a));
     }
 
     /// Fixed port resistance set at configuration time.
@@ -97,7 +104,7 @@ public:
         return Z_port_;
     }
 
-    // ── State management (HSIM interface) ───────────────────────────────────
+    // ── State management (HSIM intentionally set aside — see ADR-001) ──────
     void commitState()   { /* BJT is memoryless in Ebers-Moll — nothing to commit */ }
     void rollbackState() { /* Nothing to rollback */ }
 
@@ -107,7 +114,7 @@ public:
     /// This is the main output of the BJT used by the enclosing circuit:
     ///   - In CE stage: Ic flows through the collector load resistor
     ///   - In EF stage: Ic = Ie (emitter current ≈ load current)
-    float getCollectorCurrent() const { return companion_.getCollectorCurrent(); }
+    double getCollectorCurrent() const { return companion_.getCollectorCurrent(); }
 
     /// Collector voltage can be computed externally:
     /// Vc = Vcc - Ic * Rc_load (for NPN CE) or Vc = -Vcc + Ic * Rc_load (PNP CE)
@@ -115,28 +122,51 @@ public:
     // ── Operating point monitoring ──────────────────────────────────────────
 
     /// Base-emitter voltage [V] (positive for NPN forward-active, neg for PNP)
-    float getVbe() const { return companion_.getVbe(); }
+    double getVbe() const { return companion_.getVbe(); }
 
     /// Collector current [A]
-    float getIc() const { return companion_.getCollectorCurrent(); }
+    double getIc() const { return companion_.getCollectorCurrent(); }
 
     /// Base current [A]
-    float getIb() const { return companion_.getBaseCurrent(); }
+    double getIb() const { return companion_.getBaseCurrent(); }
 
     /// Transconductance gm = |Ic| / Vt [S]
-    float getGm() const { return companion_.getTransconductance(); }
+    double getGm() const { return companion_.getTransconductance(); }
 
     /// Small-signal base-emitter resistance rbe [Ohm]
-    float getSmallSignalRbe() const { return companion_.getCompanionResistance(); }
+    double getSmallSignalRbe() const { return companion_.getCompanionResistance(); }
 
     /// Small-signal output resistance rce = Vaf / |Ic| [Ohm]
-    float getSmallSignalRce() const { return companion_.getOutputResistance(); }
+    double getSmallSignalRce() const { return companion_.getOutputResistance(); }
 
     /// NR iteration count from last scatter
     int getLastIterCount() const { return companion_.getLastIterCount(); }
 
     /// Access underlying parameters
     const BJTParams& getParams() const { return params_; }
+
+    // ── AC state snapshot (for Newton probes) ────────────────────────────
+    struct AcState {
+        float a_incident, b_reflected;
+        double Vbe_prev, Ic_last, Ib_last, gm;
+        int   lastIterCount;
+    };
+
+    AcState saveAcState() const
+    {
+        return { a_incident_, b_reflected_,
+                 companion_.getVbe(), companion_.getCollectorCurrent(),
+                 companion_.getBaseCurrent(), companion_.getTransconductance(),
+                 companion_.getLastIterCount() };
+    }
+
+    void restoreAcState(const AcState& s)
+    {
+        a_incident_  = s.a_incident;
+        b_reflected_ = s.b_reflected;
+        companion_.restoreState(s.Vbe_prev, s.Ic_last, s.Ib_last, s.gm,
+                                s.lastIterCount);
+    }
 
 private:
     BJTParams params_;

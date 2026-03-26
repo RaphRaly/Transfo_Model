@@ -1,0 +1,40 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "d4000001-nev-chma-0004-000000000004")
+	(paper "A4")
+	(title_block
+		(title "Chemin A — Neve Heritage (3 BJT Class-A)")
+		(date "2026-03-24")
+		(rev "1.0")
+		(comment 1 "BC184C (CE) → BC214C (CE) → BD139 (EF) → C_outA → R_serA → Output A")
+		(comment 2 "Gain: 1 + Rfb/47R = +10 to +50 dB (Pole A of SW1)")
+	)
+	(lib_symbols)
+
+	(hierarchical_label "SIGNAL_IN"
+		(shape input)
+		(at 25.4 63.5 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e4000001-nev-chma-0004-000000000001")
+	)
+	(hierarchical_label "OUTPUT_A"
+		(shape output)
+		(at 228.6 63.5 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e4000002-nev-chma-0004-000000000002")
+	)
+	(hierarchical_label "GAIN_FB_A"
+		(shape input)
+		(at 25.4 127.0 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e4000003-nev-chma-0004-000000000003")
+	)
+
+	(text "CHEMIN A — NEVE HERITAGE\n\nTopology: 3-transistor Class-A with global feedback\n\nQ1A (BC184C NPN): Common-emitter, Rc=R8A(10K), bias R6A/R7A(100K/100K)\nQ2A (BC214C PNP): Common-emitter, Re=R11A(7.5K), Rc=R12A(6.8K)\nQ3A (BD139 NPN):  Emitter-follower, R_biasA(390R/1W) to -24V\n\nFeedback: Q3A emitter → C6A(470µF) → SW1 Pole A (Rfb) → Q1A emitter\nGain ref: R9A = 47R (0.1%)\nMiller comp: C5A = 100pF NP0\n\nOutput: Q3A emitter → C_outA(220µF bipol + 4.7µF film) → R_serA(10R) → OUTPUT_A\n\nBias points (expected):\n  Vc1 ≈ +14V, Vb1 ≈ 0V, Ve1 ≈ -0.6V\n  Vc2 ≈ -10.5V\n  Vb3 = Vc2 ≈ -10.5V, Ve3 ≈ -11.2V\n  Ic3 = (Ve3+24)/390 ≈ 33mA"
+		(at 25.4 25.4 0)
+		(effects (font (size 1.524 1.524)) (justify left))
+		(uuid "f4000001-nev-text-0004-000000000001")
+	)
+)

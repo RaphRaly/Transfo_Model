@@ -83,11 +83,6 @@ target_sources(TransformerModel
         # wdf/
         core/include/core/wdf/WDOnePort.h
         core/include/core/wdf/AdaptedElements.h
-        core/include/core/wdf/TopologicalJunction.h
-        core/include/core/wdf/MEJunction.h
-        core/include/core/wdf/ConvergenceGuard.h
-        core/include/core/wdf/HSIMDiagnostics.h
-        core/include/core/wdf/HSIMSolver.h
         core/include/core/wdf/WDFSeriesAdaptor.h
         core/include/core/wdf/DynamicParallelAdaptor.h
         core/include/core/wdf/WDFResonanceFilter.h

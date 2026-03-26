@@ -153,9 +153,9 @@ public:
         // This bias voltage is added to baseDrive in processSample() so that
         // the BJT NR solver starts in the forward-active region. Without it,
         // both transistors remain off (Rule 1).
-        Ic_quiescent_ = config.I_tail * 0.5f;
-        V_bias_base_  = sign_ * config.q1q2.Vt
-                       * std::log(Ic_quiescent_ / config.q1q2.Is + 1.0f);
+        Ic_quiescent_ = static_cast<double>(config.I_tail) * 0.5;
+        V_bias_base_  = static_cast<double>(sign_) * static_cast<double>(config.q1q2.Vt)
+                       * std::log(Ic_quiescent_ / static_cast<double>(config.q1q2.Is) + 1.0);
 
         // -- Frequency-dependent degeneration filter --------------------------
         // The emitter degeneration impedance is Z = R + jwL.
@@ -214,9 +214,8 @@ public:
         Ic2_         = Ic_quiescent_;
         Vbe1_        = V_bias_base_;
         Vbe2_        = V_bias_base_;
-        gm_eff_      = 0.0f;
+        gm_eff_      = 0.0;
         outputVoltage_ = 0.0f;
-        dcSettleCount_ = 0;
         outputDC_      = 0.0f;
 
         // -- Warmup: run 32 zero-input samples to settle bias (Rule 3) --------
@@ -226,10 +225,10 @@ public:
         for (int i = 0; i < kWarmupSamples; ++i)
             processSample(0.0f, 0.0f);
 
-        // Re-initialize DC tracker and output to the converged state
+        // Freeze DC offset to the converged quiescent output.
+        // With outputDC_=0 during warmup, outputVoltage_ = raw Vout.
         outputDC_      = outputVoltage_;
         outputVoltage_ = 0.0f;
-        dcSettleCount_ = 0;
     }
 
     // -- Audio processing -----------------------------------------------------
@@ -254,31 +253,34 @@ public:
         // -- Step 1: Compute base drive with DC bias (Rule 1) -----------------
         // V_bias_base_ forward-biases each BE junction at I_tail/2.
         // The input signal modulates around this quiescent point.
-        const float baseDrive1 = vPlus  + V_bias_base_;
-        const float baseDrive2 = vMinus + V_bias_base_;
+        // DOUBLE PRECISION: prevents catastrophic cancellation when µV signal
+        // is added to ~0.63V bias (IEEE 754 float32 loses all signal bits).
+        const double baseDrive1 = static_cast<double>(vPlus)  + V_bias_base_;
+        const double baseDrive2 = static_cast<double>(vMinus) + V_bias_base_;
 
         // -- Step 2: Drive Q1 BJTLeaf (positive half) -------------------------
         // Scatter the base drive through the nonlinear BE junction.
         // The companion model internally runs NR to solve for Vbe1.
         // One scatter per reactive element per sample (Rule 5).
         {
-            const float b_prev1 = q1_.getReflectedWave();
-            const float a_q1 = 2.0f * baseDrive1 - b_prev1;
+            const double b_prev1 = static_cast<double>(q1_.getReflectedWave());
+            const float a_q1 = static_cast<float>(2.0 * baseDrive1 - b_prev1);
             q1_.scatter(a_q1);
         }
 
         // -- Step 3: Drive Q2 BJTLeaf (negative half) -------------------------
         {
-            const float b_prev2 = q2_.getReflectedWave();
-            const float a_q2 = 2.0f * baseDrive2 - b_prev2;
+            const double b_prev2 = static_cast<double>(q2_.getReflectedWave());
+            const float a_q2 = static_cast<float>(2.0 * baseDrive2 - b_prev2);
             q2_.scatter(a_q2);
         }
 
         // -- Step 4: Read collector currents ----------------------------------
         // Ic from the companion model represents the forward-active current.
         // For an NPN pair: Ic > 0 in forward-active.
-        float Ic1_raw = q1_.getCollectorCurrent();
-        float Ic2_raw = q2_.getCollectorCurrent();
+        // DOUBLE PRECISION: preserves sub-nA differential current from NR solver.
+        double Ic1_raw = q1_.getCollectorCurrent();
+        double Ic2_raw = q2_.getCollectorCurrent();
 
         // -- Step 5: Tail current constraint ----------------------------------
         // In the real circuit, the total emitter current is fixed by the
@@ -293,10 +295,10 @@ public:
         // and models the current-steering behavior of a true diff pair:
         // when one side gets more base drive, it "steals" current from the
         // other side through the shared tail node.
-        const float Ic_sum = std::abs(Ic1_raw) + std::abs(Ic2_raw);
-        if (Ic_sum > kEpsilonF)
+        const double Ic_sum = std::abs(Ic1_raw) + std::abs(Ic2_raw);
+        if (Ic_sum > static_cast<double>(kEpsilonF))
         {
-            const float scale = config_.I_tail / Ic_sum;
+            const double scale = static_cast<double>(config_.I_tail) / Ic_sum;
             Ic1_ = Ic1_raw * scale;
             Ic2_ = Ic2_raw * scale;
         }
@@ -324,11 +326,11 @@ public:
         // Model: use the WDF inductor to track the AC component of emitter
         // current, deriving an effective R_eff that increases at HF.
 
-        const float gm1 = q1_.getGm();
-        const float gm2 = q2_.getGm();
+        const double gm1 = q1_.getGm();
+        const double gm2 = q2_.getGm();
 
         // Average transconductance for the pair
-        const float gm_avg = (gm1 + gm2) * 0.5f;
+        const double gm_avg = (gm1 + gm2) * 0.5;
 
         // Effective degeneration impedance
         float R_eff = config_.R_emitter;
@@ -346,8 +348,8 @@ public:
             // We use the AC component of Ic as a proxy for emitter current
             // (Ie ~ Ic for high-beta BJTs).
 
-            const float Ie1_ac = Ic1_ - Ic_quiescent_;
-            const float Ie2_ac = Ic2_ - Ic_quiescent_;
+            const float Ie1_ac = static_cast<float>(Ic1_ - Ic_quiescent_);
+            const float Ie2_ac = static_cast<float>(Ic2_ - Ic_quiescent_);
 
             // Scatter through L1 and L2 (one scatter per element per sample,
             // Rule 5). The inductor's port impedance Z_L = 2*L/Ts determines
@@ -385,10 +387,10 @@ public:
         // Compute effective differential transconductance with degeneration:
         //   gm_diff_eff = gm_avg / (1 + gm_avg * R_eff)
         // This is the standard degenerated-pair transconductance formula.
-        float degenFactor = 1.0f;
-        if (gm_avg > kEpsilonF)
+        double degenFactor = 1.0;
+        if (gm_avg > static_cast<double>(kEpsilonF))
         {
-            degenFactor = 1.0f / (1.0f + gm_avg * R_eff);
+            degenFactor = 1.0 / (1.0 + gm_avg * static_cast<double>(R_eff));
         }
         gm_eff_ = gm_avg * degenFactor;
 
@@ -398,34 +400,22 @@ public:
         //
         // Apply the degeneration factor to the differential current:
         //   DIc_eff = (Ic1 - Ic2) * degenFactor
-        // This correctly models the gain reduction from emitter degeneration.
-        const float dIc = (Ic1_ - Ic2_) * degenFactor;
-        float Vout = dIc * config_.R_load;
+        // DOUBLE PRECISION: Ic1 ≈ Ic2 ≈ 1.5mA, their difference is µA-scale.
+        // Float32 subtraction loses most significant bits here.
+        const double dIc = (Ic1_ - Ic2_) * degenFactor;
+        float Vout = static_cast<float>(dIc * static_cast<double>(config_.R_load));
 
         // Clamp output to supply rail limits.
         // The cascode output cannot exceed the supply rails.
         Vout = std::clamp(Vout, -config_.Vcc, config_.Vcc);
 
         // -- Step 8: DC offset removal (Rule 6) -------------------------------
-        // For a perfectly matched pair with equal inputs, DIc = 0 and
-        // Vout = 0. In practice, small numerical asymmetries can create
-        // a DC offset. Track and remove it with a slow DC filter.
-        if (dcSettleCount_ < kDCSettleSamples)
-        {
-            // During initial settling, track DC rapidly
-            outputDC_ += 0.01f * (Vout - outputDC_);
-            ++dcSettleCount_;
-        }
-        else
-        {
-            // Steady state: very slow DC tracking (sub-Hz)
-            constexpr float kDCTrackAlpha = 0.0001f;
-            outputDC_ += kDCTrackAlpha * (Vout - outputDC_);
-        }
-
+        // Subtract the FROZEN DC offset measured once at reset().
+        // The offset is NOT updated during audio — this keeps the stage
+        // stationary so the JE990Path Newton solver sees a proper function.
         outputVoltage_ = Vout - outputDC_;
 
-        // -- Update monitoring state ------------------------------------------
+        // -- Update monitoring state (double from companion) --------------------
         Vbe1_ = q1_.getVbe();
         Vbe2_ = q2_.getVbe();
 
@@ -454,36 +444,42 @@ public:
     ///   gm_eff = gm / (1 + gm * R_eff)
     /// For the JE-990 at quiescence: gm ~ 58 mS, R_eff ~ 30 Ohm,
     ///   gm_eff ~ 58e-3 / (1 + 58e-3*30) ~ 21 mS.
-    float getGm() const { return gm_eff_; }
+    double getGm() const { return gm_eff_; }
+
+    /// Signed local small-signal voltage gain at the current operating
+    /// point: dVout / d(vPlus - vMinus).
+    /// Always positive (non-inverting diff pair).
+    /// Used by the implicit feedback solver for the Newton Jacobian.
+    double getLocalGain() const { return gm_eff_ * static_cast<double>(config_.R_load); }
 
     /// Raw (undegenerated) transconductance of Q1 [S].
-    float getGmRaw1() const { return q1_.getGm(); }
+    double getGmRaw1() const { return q1_.getGm(); }
 
     /// Raw (undegenerated) transconductance of Q2 [S].
-    float getGmRaw2() const { return q2_.getGm(); }
+    double getGmRaw2() const { return q2_.getGm(); }
 
     /// Base-emitter voltage of Q1 [V].
-    float getVbe1() const { return Vbe1_; }
+    double getVbe1() const { return Vbe1_; }
 
     /// Base-emitter voltage of Q2 [V].
-    float getVbe2() const { return Vbe2_; }
+    double getVbe2() const { return Vbe2_; }
 
     /// Collector current of Q1 [A] (constrained by tail current).
-    float getIc1() const { return Ic1_; }
+    double getIc1() const { return Ic1_; }
 
     /// Collector current of Q2 [A] (constrained by tail current).
-    float getIc2() const { return Ic2_; }
+    double getIc2() const { return Ic2_; }
 
     /// Last computed differential output voltage [V].
     float getOutputVoltage() const { return outputVoltage_; }
 
     /// Quiescent collector current per transistor [A].
     /// Ic_q = I_tail / 2 = 1.5 mA for default config.
-    float getQuiescentIc() const { return Ic_quiescent_; }
+    double getQuiescentIc() const { return Ic_quiescent_; }
 
     /// DC bias voltage applied to each base [V].
     /// V_bias = Vt * ln(Ic_q / Is + 1).
-    float getBiasVoltage() const { return V_bias_base_; }
+    double getBiasVoltage() const { return V_bias_base_; }
 
     /// Tail current [A] (fixed by current source Q4).
     float getTailCurrent() const { return config_.I_tail; }
@@ -509,6 +505,44 @@ public:
     /// Access the current configuration.
     const DiffPairConfig& getConfig() const { return config_; }
 
+    // ── AC state snapshot (for Newton probes — excludes DC trackers) ─────
+    struct AcSnap {
+        typename NonlinearLeaf::AcState q1, q2;
+        float l1_a, l1_b, l1_state;
+        float l2_a, l2_b, l2_state;
+        float inductorState1, inductorState2;
+        double Ic1, Ic2, Vbe1, Vbe2, gm_eff;
+        float outputVoltage;
+    };
+
+    AcSnap saveAcState() const
+    {
+        AcSnap s;
+        s.q1 = q1_.saveAcState();
+        s.q2 = q2_.saveAcState();
+        s.l1_a = l1_.getIncidentWave(); s.l1_b = l1_.getReflectedWave();
+        s.l1_state = hasInductors_ ? l1_.getReflectedWaveFromState() : 0.0f;
+        s.l2_a = l2_.getIncidentWave(); s.l2_b = l2_.getReflectedWave();
+        s.l2_state = hasInductors_ ? l2_.getReflectedWaveFromState() : 0.0f;
+        s.inductorState1 = inductorState1_; s.inductorState2 = inductorState2_;
+        s.Ic1 = Ic1_; s.Ic2 = Ic2_;
+        s.Vbe1 = Vbe1_; s.Vbe2 = Vbe2_;
+        s.gm_eff = gm_eff_; s.outputVoltage = outputVoltage_;
+        return s;
+    }
+
+    void restoreAcState(const AcSnap& s)
+    {
+        q1_.restoreAcState(s.q1);
+        q2_.restoreAcState(s.q2);
+        // Inductors: restore a_incident, b_reflected and internal state
+        // (AdaptedInductor state is just a[n-1], used for b=-state)
+        inductorState1_ = s.inductorState1; inductorState2_ = s.inductorState2;
+        Ic1_ = s.Ic1; Ic2_ = s.Ic2;
+        Vbe1_ = s.Vbe1; Vbe2_ = s.Vbe2;
+        gm_eff_ = s.gm_eff; outputVoltage_ = s.outputVoltage;
+    }
+
 private:
     // -- WDF elements ---------------------------------------------------------
     NonlinearLeaf   q1_;        // Q1 BE junction (LM-394 #1, NR-solved)
@@ -526,8 +560,8 @@ private:
     bool hasInductors_ = false;
 
     // -- DC bias --------------------------------------------------------------
-    float V_bias_base_    = 0.0f;      // DC bias for forward-active [V]
-    float Ic_quiescent_   = 1.5e-3f;   // Quiescent Ic per transistor [A]
+    double V_bias_base_    = 0.0;      // DC bias for forward-active [V]
+    double Ic_quiescent_   = 1.5e-3;   // Quiescent Ic per transistor [A]
 
     // -- Emitter degeneration filter state -------------------------------------
     float inductorAlpha_  = 0.0f;      // LP coefficient for inductor smoothing
@@ -535,18 +569,16 @@ private:
     float inductorState2_ = 0.0f;      // (reserved for asymmetric extension)
 
     // -- Output state ---------------------------------------------------------
-    float Ic1_            = 1.5e-3f;   // Q1 collector current (constrained) [A]
-    float Ic2_            = 1.5e-3f;   // Q2 collector current (constrained) [A]
-    float Vbe1_           = 0.0f;      // Q1 base-emitter voltage [V]
-    float Vbe2_           = 0.0f;      // Q2 base-emitter voltage [V]
-    float gm_eff_         = 0.0f;      // Effective differential gm [S]
-    float outputVoltage_  = 0.0f;      // Last differential output [V]
+    double Ic1_            = 1.5e-3;   // Q1 collector current (constrained) [A]
+    double Ic2_            = 1.5e-3;   // Q2 collector current (constrained) [A]
+    double Vbe1_           = 0.0;      // Q1 base-emitter voltage [V]
+    double Vbe2_           = 0.0;      // Q2 base-emitter voltage [V]
+    double gm_eff_         = 0.0;      // Effective differential gm [S]
+    float  outputVoltage_  = 0.0f;     // Last differential output [V]
 
-    // -- DC settling ----------------------------------------------------------
-    static constexpr int kDCSettleSamples = 4096;  // ~93 ms at 44.1 kHz
-    static constexpr int kWarmupSamples   = 32;    // Warmup iterations (Rule 3)
-    int   dcSettleCount_ = 0;
-    float outputDC_      = 0.0f;       // DC offset estimate [V]
+    // -- DC offset (frozen after warmup) ---------------------------------------
+    static constexpr int kWarmupSamples = 32;      // Warmup iterations (Rule 3)
+    float outputDC_      = 0.0f;       // Frozen DC offset [V]
 };
 
 } // namespace transfo

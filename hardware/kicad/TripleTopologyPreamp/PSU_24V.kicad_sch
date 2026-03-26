@@ -1,0 +1,43 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "d1000001-psu-24vv-0001-000000000001")
+	(paper "A4")
+	(title_block
+		(title "PSU ±24V — Main Power Supply")
+		(date "2026-03-24")
+		(rev "1.0")
+		(comment 1 "Toroidal 50VA 2×18VAC → Bridge → LM317/LM337 → ±24V regulated")
+		(comment 2 "See FROZEN_SPEC.md for all component values")
+	)
+	(lib_symbols)
+
+
+	(hierarchical_label "+24V"
+		(shape output)
+		(at 228.6 50.8 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e1000001-psu-24vv-0001-000000000001")
+	)
+
+	(hierarchical_label "-24V"
+		(shape output)
+		(at 228.6 101.6 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e1000002-psu-24vv-0001-000000000002")
+	)
+
+	(hierarchical_label "GND"
+		(shape bidirectional)
+		(at 228.6 76.2 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e1000003-psu-24vv-0001-000000000003")
+	)
+
+	(text "PSU ±24V — Component Placement Guide\n\nSchematic flow (left to right):\n\n1. TR_main secondary (2×18VAC) enters from left\n2. BR1 bridge rectifier → raw ±25.5V DC\n3. C_main1/C_main2 (4700µF) → smooth DC\n4. LM317T (+24V) / LM337T (-24V) regulators\n   R_adj=240R, R_adj_b=4.32K, trim=500R\n   Vout = 1.25 × (1 + R_adj_b/R_adj) = 24.0V\n5. C_main3/C_main4 (4700µF) → post-reg filter\n6. Output: +24V, -24V, GND"
+		(at 25.4 25.4 0)
+		(effects (font (size 1.524 1.524)) (justify left))
+		(uuid "f1000001-psu-text-0001-000000000001")
+	)
+)

@@ -28,13 +28,16 @@ Guitar output transformer presets (Fender Deluxe, Vox AC30) use a static load im
 
 **Planned:** v4+ (speaker impedance curve model as reactive load)
 
-## 4. HSIM Solver Status
-The HSIM solver is functional but not used in the production path.
+## 4. HSIM Solver — Intentionally Set Aside
+The HSIM (Hybrid Scattering-Impedance Method) solver is **intentionally set aside** — not merely dormant.
 
-- Current convergence issues with complex topologies (spectral radius > 1)
-- The direct J-A path (cascade) is used instead for production audio
+- Delay-free algebraic loop in MEJunction causes divergence (spectral radius > 1)
+- Absolute convergence criterion fails on both large and small signals
+- Epsilon relaxation (up to 64x) renders solutions physically meaningless
+- MEJunction scattering matrices lack passivity proof
+- The cascade approach (J-A → HP → LC) captures the audibly important behaviors without these issues
 
-**Status:** Dormant. Repair planned for v4+.
+**Decision:** Deliberately shelved (see ADR-001). The cascade + modular extensions (dynamic Lm, LC resonance) was chosen as the production architecture. HSIM repair is a potential v4+ workstream but is not planned or scheduled. The commit/rollback interfaces in core classes are retained for future compatibility, not because HSIM is expected to return soon.
 
 ## 5. Minor Loop Closure (Zirka 2012)
 The J-A model's energy derivation uses coenergy rather than energy.

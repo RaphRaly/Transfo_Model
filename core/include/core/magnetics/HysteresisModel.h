@@ -8,9 +8,9 @@
 //
 // Key improvements over Phase 1:
 //   - Template on anhysteretic function (LangevinPade or CPWLAnhysteretic)
-//   - Double-buffering: M_committed_ / M_tentative_ for HSIM rollback
+//   - Double-buffering: M_committed_ / M_tentative_ for iterative WDF rollback
 //   - Extrapolative warm-start: M_pred = 2*M_c - M_prev_c [v2]
-//   - commitState() / rollbackState() for HSIM iteration compatibility
+//   - commitState() / rollbackState() for iterative WDF compatibility (HSIM set aside, see ADR-001)
 //   - getInstantaneousSusceptibility() for adaptive Z in WDF
 //
 // Solver: Newton-Raphson with trapezoidal integration (configurable max iter).
@@ -53,10 +53,15 @@ public:
         M_tentative_      = 0.0;
         M_prev_committed_ = 0.0;
         H_prev_           = 0.0;
-        dMdH_prev_        = 0.0;
         delta_            = 1;
         lastIterCount_    = 0;
         lastConverged_    = true;
+
+        // Fix 1: Initialize dMdH_prev_ to the linear-region susceptibility
+        // χ_eff at the demagnetized origin (H=0, M=0).  Without this,
+        // dMdH_prev_=0 halves the first trapezoidal step and causes NR
+        // divergence at sample 2 in Physical mode (small H).
+        dMdH_prev_ = computeRHS(0.0, 0.0, 1);
     }
 
     // ─── Core computation: dM/dH (J-A ODE) ─────────────────────────────────
@@ -109,11 +114,12 @@ public:
         const double Man = params_.Ms * anhyst_.evaluateD(x);
         const double dManHeff = (params_.Ms / params_.a) * anhyst_.derivativeD(x);
 
-        // d²Man/dHeff² via FD on the anhysteretic derivative (avoids Langevin 3rd deriv)
-        const double dx = 1e-6;
-        const double dMan_p = (params_.Ms / params_.a) * anhyst_.derivativeD(x + dx);
-        const double dMan_m = (params_.Ms / params_.a) * anhyst_.derivativeD(x - dx);
-        const double d2ManHeff2 = (dMan_p - dMan_m) / (2.0 * dx * params_.a);
+        // d²Man/dHeff² — analytical second derivative (Fix 3).
+        // Replaces finite-difference which suffered catastrophic cancellation
+        // at small x where L'(x) = 1/x² - 1/sinh²(x) ≈ 1/3 - x²/15.
+        // The FD noise corrupted the Jacobian, causing NR failure at low H.
+        const double d2ManHeff2 = (params_.Ms / (params_.a * params_.a))
+                                * anhyst_.secondDerivativeD(x);
 
         const double diff = Man - M;
 
@@ -234,22 +240,42 @@ public:
             }
         }
 
-        // ── V2.2: Bisection fallback on NR failure ──────────────────────────
+        // ── V2.5: Local-bracket bisection fallback ─────────────────────────
+        // Fix 2: Bracket around the predictor instead of ±1.1·Ms.
+        // The old global bracket (resolution ≈ 4700 after 8 steps) produced
+        // midpoint artifacts like M=2363 when the true root was near 37.
+        // Local bracket + adaptive expansion + 20 iterations gives sub-1 A/m
+        // resolution near the correct root.
         if (!lastConverged_)
         {
             lastConvMode_ = ConvMode::Bisection;
             const double Ms_d = static_cast<double>(params_.Ms);
-            double M_lo = -1.1 * Ms_d;
-            double M_hi =  1.1 * Ms_d;
 
-            // Evaluate g at bounds to bracket
             auto gFunc = [&](double M_try) -> double {
                 const double dMdH_try = computeRHS(M_try, H_new, newDelta);
                 return M_try - M_committed_ - 0.5 * (dMdH_try + dMdH_prev_) * dH;
             };
 
+            // Start with a local bracket around the linear predictor
+            const double M_pred = M_committed_ + dMdH_prev_ * dH;
+            double span = std::max(64.0, 4.0 * std::abs(dMdH_prev_ * dH));
+            double M_lo = std::max(-1.1 * Ms_d, M_pred - span);
+            double M_hi = std::min( 1.1 * Ms_d, M_pred + span);
+
+            // Expand bracket until we have a sign change (max 6 doublings)
             double g_lo = gFunc(M_lo);
-            for (int bi = 0; bi < 8; ++bi)
+            double g_hi = gFunc(M_hi);
+            for (int e = 0; e < 6 && g_lo * g_hi > 0.0; ++e)
+            {
+                span *= 2.0;
+                M_lo = std::max(-1.1 * Ms_d, M_pred - span);
+                M_hi = std::min( 1.1 * Ms_d, M_pred + span);
+                g_lo = gFunc(M_lo);
+                g_hi = gFunc(M_hi);
+            }
+
+            // 20 bisection iterations → resolution ≈ span / 2^20
+            for (int bi = 0; bi < 20; ++bi)
             {
                 double M_mid = 0.5 * (M_lo + M_hi);
                 double g_mid = gFunc(M_mid);
@@ -264,7 +290,7 @@ public:
             }
             M_est = 0.5 * (M_lo + M_hi);
             lastConverged_ = true;
-            lastIterCount_ += 8;
+            lastIterCount_ += 20;
         }
 
         // Safety clamp
@@ -284,7 +310,7 @@ public:
         M_tentative_ = M_predicted;
     }
 
-    // ─── State management for HSIM ──────────────────────────────────────────
+    // ─── State management (HSIM intentionally set aside — see ADR-001) ─────
     void commitState()
     {
         const double H_old = H_prev_;   // Save before overwriting
@@ -362,7 +388,7 @@ private:
 
     // Double-buffering state (chowdsp_wdf pattern)
     double M_committed_      = 0.0;    // M[k-1] confirmed
-    double M_tentative_      = 0.0;    // M during HSIM iterations
+    double M_tentative_      = 0.0;    // M during iterative WDF solving (retained for future use)
     double M_prev_committed_ = 0.0;    // M[k-2] for extrapolative warm-start [v2]
     double H_prev_           = 0.0;    // H[k-1]
     double H_tentative_      = 0.0;    // H during current iteration

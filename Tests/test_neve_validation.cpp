@@ -49,6 +49,7 @@
 #include "../core/include/core/magnetics/JilesAthertonLeaf.h"
 #include "../core/include/core/magnetics/AnhystereticFunctions.h"
 #include "../core/include/core/util/Constants.h"
+#include "test_common.h"
 
 #include <iostream>
 #include <vector>
@@ -59,104 +60,13 @@
 #include <numeric>
 #include <string>
 
-static constexpr double PI = 3.14159265358979323846;
-
-// ---- Test framework ---------------------------------------------------------
-
-static int g_pass = 0;
-static int g_fail = 0;
-
-void CHECK(bool cond, const char* msg)
-{
-    if (cond)
-    {
-        std::cout << "  PASS: " << msg << std::endl;
-        g_pass++;
-    }
-    else
-    {
-        std::cout << "  *** FAIL: " << msg << " ***" << std::endl;
-        g_fail++;
-    }
-}
+using namespace test;
 
 // ---- Type aliases -----------------------------------------------------------
 
 using RealtimeModel = transfo::TransformerModel<transfo::CPWLLeaf>;
 
-// =============================================================================
-// Goertzel Algorithm — compute magnitude of a single frequency bin
-// =============================================================================
-// Returns the RMS amplitude of the signal at the target frequency.
-// This is much more efficient than a full DFT when we only need a few bins.
-
-static double goertzelMagnitude(const float* signal, int numSamples,
-                                 double targetFreq, double sampleRate)
-{
-    // Goertzel algorithm: computes the DFT magnitude at a single frequency
-    const double k = targetFreq / sampleRate * static_cast<double>(numSamples);
-    const double omega = 2.0 * PI * k / static_cast<double>(numSamples);
-    const double coeff = 2.0 * std::cos(omega);
-
-    double s0 = 0.0, s1 = 0.0, s2 = 0.0;
-
-    for (int i = 0; i < numSamples; ++i)
-    {
-        s0 = static_cast<double>(signal[i]) + coeff * s1 - s2;
-        s2 = s1;
-        s1 = s0;
-    }
-
-    // Power at the frequency bin
-    double power = s1 * s1 + s2 * s2 - coeff * s1 * s2;
-
-    // Convert to RMS amplitude: magnitude / (N/2)
-    double magnitude = std::sqrt(power) / (static_cast<double>(numSamples) / 2.0);
-
-    return magnitude;
-}
-
-// =============================================================================
-// computeTHD — Total Harmonic Distortion via Goertzel
-// =============================================================================
-// Computes THD as: THD(%) = sqrt(H2^2 + H3^2 + ... + HN^2) / H1 * 100
-//
-// Parameters:
-//   signal          : audio buffer to analyze
-//   numSamples      : buffer length
-//   fundamentalFreq : fundamental frequency in Hz
-//   sampleRate      : sample rate in Hz
-//   numHarmonics    : number of harmonics to include (2..N means harmonics 2 through N)
-
-static double computeTHD(const float* signal, int numSamples,
-                          double fundamentalFreq, double sampleRate,
-                          int numHarmonics = 8)
-{
-    // Fundamental amplitude (H1)
-    double h1 = goertzelMagnitude(signal, numSamples, fundamentalFreq, sampleRate);
-
-    if (h1 < 1e-12)
-        return 0.0; // Signal too weak to measure
-
-    // Sum of squared harmonic amplitudes
-    double sumHarmonicsSq = 0.0;
-
-    for (int n = 2; n <= numHarmonics; ++n)
-    {
-        double harmonicFreq = fundamentalFreq * static_cast<double>(n);
-
-        // Skip harmonics above Nyquist
-        if (harmonicFreq >= sampleRate / 2.0)
-            break;
-
-        double hn = goertzelMagnitude(signal, numSamples, harmonicFreq, sampleRate);
-        sumHarmonicsSq += hn * hn;
-    }
-
-    // THD in percent
-    double thd = std::sqrt(sumHarmonicsSq) / h1 * 100.0;
-    return thd;
-}
+// goertzelMagnitude and computeTHD are provided by test_common.h (namespace test)
 
 // =============================================================================
 // simulateTransformer — Run a TransformerModel and return the measurement buffer
@@ -228,15 +138,7 @@ static std::vector<float> simulateTransformer(transfo::TransformerConfig cfg,
     return output;
 }
 
-// ---- Helper: RMS of a buffer ------------------------------------------------
-
-static double rms(const float* data, int n)
-{
-    double sum = 0.0;
-    for (int i = 0; i < n; ++i)
-        sum += static_cast<double>(data[i]) * data[i];
-    return std::sqrt(sum / std::max(n, 1));
-}
+// rms() is provided by test_common.h (namespace test)
 
 // =============================================================================
 // 1. THD Validation Tests — Neve 10468 (Marinair T1444 specs)
@@ -254,76 +156,78 @@ void test1_thd_neve_10468()
     // 1a. THD @ 40 Hz, near max input (-10 dBFS ≈ +8 dBu)
     //
     // Physical spec (Marinair T1444): THD < 0.1% @ 40 Hz at max input (+10 dB)
-    // Relaxed model threshold:        THD < 8.0%
+    // Relaxed model threshold:        THD < 2.0% (20x relaxed)
     //
     // At -10 dBFS, H_peak ≈ 126 A/m (L(1.6) ≈ 0.46 — moderate saturation).
     // The J-A model overestimates THD vs the physical transformer due to
     // simplified direct bypass and no eddy current losses.
+    // Previous threshold of 8.0% (80x relaxed) was too loose to catch errors.
     // -------------------------------------------------------------------------
     {
         auto output = simulateTransformer(cfg, 40.0f, -10.0f, sampleRate, N);
         double thd = computeTHD(output.data(), N, 40.0, sampleRate, 8);
 
         std::cout << "    Neve 10468 THD @ 40 Hz, -10 dBFS (~+8 dBu): " << thd << "%" << std::endl;
-        std::cout << "    (Physical spec: < 0.1%, model threshold: < 8.0%)" << std::endl;
+        std::cout << "    (Physical spec: < 0.1%, model threshold: < 2.0%)" << std::endl;
 
-        std::string msg = "Neve 10468 THD @ 40 Hz < 8.0% (relaxed from physical 0.1%), measured="
+        std::string msg = "Neve 10468 THD @ 40 Hz < 2.0% (20x relaxed from physical 0.1%), measured="
                           + std::to_string(thd) + "%";
-        CHECK(thd < 8.0, msg.c_str());
+        CHECK(thd < 2.0, msg.c_str());
     }
 
     // -------------------------------------------------------------------------
     // 1b. THD @ 500 Hz, nominal level (-20 dBFS ≈ 0 dBu)
     //
     // Physical spec (Marinair T1444): THD < 0.01%
-    // Relaxed model threshold:        THD < 1.0%
+    // Relaxed model threshold:        THD < 0.5% (50x relaxed)
+    // Previous threshold of 1.0% (100x relaxed) was too loose.
     // -------------------------------------------------------------------------
     {
         auto output = simulateTransformer(cfg, 500.0f, -20.0f, sampleRate, N);
         double thd = computeTHD(output.data(), N, 500.0, sampleRate, 8);
 
         std::cout << "    Neve 10468 THD @ 500 Hz, -20 dBFS (~0 dBu): " << thd << "%" << std::endl;
-        std::cout << "    (Physical spec: < 0.01%, model threshold: < 1.0%)" << std::endl;
+        std::cout << "    (Physical spec: < 0.01%, model threshold: < 0.5%)" << std::endl;
 
-        std::string msg = "Neve 10468 THD @ 500 Hz < 1.0% (relaxed from physical 0.01%), measured="
+        std::string msg = "Neve 10468 THD @ 500 Hz < 0.5% (50x relaxed from physical 0.01%), measured="
                           + std::to_string(thd) + "%";
-        CHECK(thd < 1.0, msg.c_str());
+        CHECK(thd < 0.5, msg.c_str());
     }
 
     // -------------------------------------------------------------------------
     // 1c. THD @ 1 kHz, nominal level (-20 dBFS ≈ 0 dBu)
     //
     // Physical spec (Marinair T1444): THD < 0.01%
-    // Relaxed model threshold:        THD < 1.0%
+    // Relaxed model threshold:        THD < 0.5% (50x relaxed)
     // -------------------------------------------------------------------------
     {
         auto output = simulateTransformer(cfg, 1000.0f, -20.0f, sampleRate, N);
         double thd = computeTHD(output.data(), N, 1000.0, sampleRate, 8);
 
         std::cout << "    Neve 10468 THD @ 1 kHz, -20 dBFS (~0 dBu): " << thd << "%" << std::endl;
-        std::cout << "    (Physical spec: < 0.01%, model threshold: < 1.0%)" << std::endl;
+        std::cout << "    (Physical spec: < 0.01%, model threshold: < 0.5%)" << std::endl;
 
-        std::string msg = "Neve 10468 THD @ 1 kHz < 1.0% (relaxed from physical 0.01%), measured="
+        std::string msg = "Neve 10468 THD @ 1 kHz < 0.5% (50x relaxed from physical 0.01%), measured="
                           + std::to_string(thd) + "%";
-        CHECK(thd < 1.0, msg.c_str());
+        CHECK(thd < 0.5, msg.c_str());
     }
 
     // -------------------------------------------------------------------------
     // 1d. THD @ 10 kHz, nominal level (-20 dBFS ≈ 0 dBu)
     //
     // Physical spec (Marinair T1444): THD < 0.01%
-    // Relaxed model threshold:        THD < 1.0%
+    // Relaxed model threshold:        THD < 0.5% (50x relaxed)
     // -------------------------------------------------------------------------
     {
         auto output = simulateTransformer(cfg, 10000.0f, -20.0f, sampleRate, N);
         double thd = computeTHD(output.data(), N, 10000.0, sampleRate, 8);
 
         std::cout << "    Neve 10468 THD @ 10 kHz, -20 dBFS (~0 dBu): " << thd << "%" << std::endl;
-        std::cout << "    (Physical spec: < 0.01%, model threshold: < 1.0%)" << std::endl;
+        std::cout << "    (Physical spec: < 0.01%, model threshold: < 0.5%)" << std::endl;
 
-        std::string msg = "Neve 10468 THD @ 10 kHz < 1.0% (relaxed from physical 0.01%), measured="
+        std::string msg = "Neve 10468 THD @ 10 kHz < 0.5% (50x relaxed from physical 0.01%), measured="
                           + std::to_string(thd) + "%";
-        CHECK(thd < 1.0, msg.c_str());
+        CHECK(thd < 0.5, msg.c_str());
     }
 }
 
@@ -375,8 +279,10 @@ void test2_frequency_response_neve_10468()
     std::cout << "    Reference (1 kHz) RMS: " << refRmsDb << " dBFS" << std::endl;
 
     // Physical spec: ±0.3 dB
-    // Relaxed model threshold: ±3.0 dB (accounting for filter approximations)
-    const double toleranceDb = 3.0;
+    // Relaxed model threshold: ±1.5 dB (5x relaxed — catches gross errors
+    // while accommodating filter approximations. The old ±3.0 dB was 10x
+    // relaxed and would accept severely broken frequency response.)
+    const double toleranceDb = 1.5;
 
     for (const auto& pt : points)
     {
@@ -385,8 +291,7 @@ void test2_frequency_response_neve_10468()
                   << ((deviation >= 0) ? "+" : "") << deviation << " dB vs 1kHz)" << std::endl;
 
         std::string msg = "FR @ " + std::to_string(static_cast<int>(pt.freq))
-                          + " Hz within +/-" + std::to_string(toleranceDb)
-                          + " dB of 1kHz (physical spec: +/-0.3 dB), deviation="
+                          + " Hz within +/-1.5 dB of 1kHz (physical spec: +/-0.3 dB), deviation="
                           + std::to_string(deviation) + " dB";
         CHECK(std::abs(deviation) < toleranceDb, msg.c_str());
     }
@@ -548,9 +453,5 @@ int main()
     test3_comparative();
     test4_progressive_saturation();
 
-    std::cout << "\n================================================================" << std::endl;
-    std::cout << "  Results: " << g_pass << " passed, " << g_fail << " failed" << std::endl;
-    std::cout << "================================================================" << std::endl;
-
-    return (g_fail > 0) ? 1 : 0;
+    return test::printSummary("Neve THD Validation");
 }

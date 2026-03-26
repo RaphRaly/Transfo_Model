@@ -1,0 +1,23 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "cc027c88-71b4-4e48-afab-6ecf2b8a3196")
+	(paper "A3")
+	(title_block
+		(title "Triple-Topology Microphone Preamplifier")
+		(date "2026-03-24")
+		(rev "1.0")
+	)
+	(lib_symbols)
+	(text "TRIPLE-TOPOLOGY MICROPHONE PREAMPLIFIER\nJT-115K-E -> [Neve | JE-990 | ECC83 Tube] -> JT-11ELCF\n\nRoot Sheet - Add hierarchical sheets for each sub-circuit.\nSee FROZEN_SPEC.md for all component values."
+		(at 25.4 25.4 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+			)
+			(justify left)
+		)
+		(uuid "c0000001-0000-0000-0000-000000000001")
+	)
+)

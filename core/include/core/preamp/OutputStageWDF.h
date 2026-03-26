@@ -22,8 +22,9 @@
 //     Chemin A (Neve):   Zout_A ≈ 11 Ohm (EF stage + 10 Ohm series)
 //     Chemin B (JE-990): Zout_B ≈ 44 Ohm (ClassAB + 39 Ohm isolator)
 //   During crossfade, Zout_eff = gA^2 * Zout_A + gB^2 * Zout_B (power-weighted).
-//   T2's WDF tree is NOT re-adapted at runtime (too expensive); the source
-//   impedance from config is used at prepare() time.
+//   When a crossfade completes, T2's WDF source impedance is dynamically
+//   re-adapted via setSourceImpedance() if the effective Z changed by >10%.
+//   This is lightweight (updates port resistance + root junction scattering).
 //
 // Template parameter: NonlinearLeaf type for T2 (CPWLLeaf for realtime,
 // JilesAthertonLeaf for physical mode).
@@ -90,6 +91,9 @@ public:
         }
         t2HpState_ = 0.0f;
 
+        // Cache initial source impedance for dynamic update detection
+        lastSourceZ_ = getEffectiveSourceZ();
+
         lastOutput_ = 0.0f;
     }
 
@@ -111,12 +115,21 @@ public:
     float processSample(float sampleA, float sampleB)
     {
         // 1. Crossfade between the two paths
+        const bool wasTransitioning = crossfade_.isTransitioning();
         const float mixed = crossfade_.processSample(sampleA, sampleB);
+        const bool justCompleted = wasTransitioning && !crossfade_.isTransitioning();
 
-        // 2. Drive through T2 output transformer (full WDF model)
+        // 2. If transition just completed, update T2 source impedance
+        //    so the WDF tree reflects the new dominant path's output Z.
+        if (justCompleted)
+        {
+            updateT2SourceImpedance();
+        }
+
+        // 3. Drive through T2 output transformer (full WDF model)
         float out = t2_.processSample(mixed);
 
-        // 3. Store for monitoring
+        // 4. Store for monitoring
         lastOutput_ = out;
         return out;
     }
@@ -196,6 +209,25 @@ public:
     TransformerCircuitWDF<NonlinearLeaf>& getTransformer() { return t2_; }
 
 private:
+    // ── Dynamic source impedance update ──────────────────────────────────────
+
+    /// Reconfigure T2's WDF source impedance if the effective source Z
+    /// has changed significantly (>10%) after a crossfade completes.
+    /// This is a lightweight operation — it updates the AdaptedRSource
+    /// port resistance and re-scatters the root junction, without touching
+    /// any reactive element states.
+    void updateT2SourceImpedance()
+    {
+        const float Zs_new = getEffectiveSourceZ();
+        // Only reconfigure if impedance changed significantly (>10%)
+        if (std::abs(Zs_new - lastSourceZ_) > lastSourceZ_ * 0.1f)
+        {
+            // Update the T2 transformer's source impedance
+            t2_.setSourceImpedance(static_cast<double>(Zs_new));
+            lastSourceZ_ = Zs_new;
+        }
+    }
+
     // ── Components ────────────────────────────────────────────────────────────
     ABCrossfade                          crossfade_;
     TransformerCircuitWDF<NonlinearLeaf> t2_;
@@ -216,6 +248,7 @@ private:
     // ── State ─────────────────────────────────────────────────────────────────
     float sampleRate_ = 44100.0f;
     float lastOutput_ = 0.0f;
+    float lastSourceZ_ = 11.0f;   // Cached effective source Z for change detection
 };
 
 } // namespace transfo

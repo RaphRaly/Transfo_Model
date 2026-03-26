@@ -261,7 +261,7 @@ public:
     return static_cast<float>(std::clamp(Z_m, 1e-3, 1e12));
   }
 
-  // ─── State management (HSIM interface) ──────────────────────────────────
+  // ─── State management (HSIM intentionally set aside — see ADR-001) ──────
   void commitState() {
     hystModel_.commitState();
     dynLosses_.commitState(B_tentative_);
@@ -320,7 +320,7 @@ private:
   double Gamma_ = 0.1;        // Magnetic path length [m]
   double Lambda_ = 1e-4;      // Cross-section area [m^2]
   double sampleRate_ = 44100.0;
-  double B_tentative_ = 0.0;  // B during current HSIM iteration (for BHScope)
+  double B_tentative_ = 0.0;  // B during current iterative solving (for BHScope)
   double alpha1_ = 1.0;       // Cached coefficient: Gamma / (Lambda * mu0)
   double alpha2_ = 0.0;       // Cached coefficient: related to alpha feedback
 
@@ -328,7 +328,7 @@ private:
   double B_prev_e_ = 0.0;     // B[n-1] committed
   double V_prev_e_ = 0.0;     // V[n-1] committed (port voltage)
   double H_prev_e_ = 0.0;     // H[n-1] for warm-start
-  // Tentative values (for HSIM rollback)
+  // Tentative values (for iterative rollback — retained for future use)
   double B_tentative_e_ = 0.0;
   double V_tentative_e_ = 0.0;
   double H_tentative_e_ = 0.0;

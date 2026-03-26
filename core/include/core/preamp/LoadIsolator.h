@@ -34,6 +34,7 @@
 //            ANALYSE_ET_DESIGN_Rev2.md Annexe B (Dual Topology output)
 // =============================================================================
 
+#include "../util/Constants.h"
 #include <cmath>
 
 namespace transfo {
@@ -72,16 +73,17 @@ public:
 
         // Cutoff frequency: f_c = R / (2*pi*L)
         // For 39 Ohm / 40 uH: f_c ~ 155.2 kHz
-        fc_ = config_.R_series / (2.0f * kPi * config_.L_series);
+        fc_ = config_.R_series / (2.0f * kPif * config_.L_series);
 
         // First-order LP coefficient:
-        //   alpha = 1 / (1 + 2*pi*fc*Ts)
-        //         = 1 / (1 + R*Ts/L)
+        //   omega = 2*pi*fc*Ts
+        //   alpha = omega / (1 + omega)
         //
-        // At low sample rates (e.g. 44.1 kHz), fc >> Nyquist, so alpha ~ 1
-        // and the filter is essentially transparent (correct physical behavior:
-        // the isolator only matters well above audio band).
-        alpha_ = 1.0f / (1.0f + 2.0f * kPi * fc_ * Ts);
+        // At low sample rates (e.g. 44.1 kHz), fc >> Nyquist, so omega >> 1,
+        // alpha ~ 1, and the filter is essentially transparent (correct
+        // physical behavior: the isolator only matters above audio band).
+        const float omega = 2.0f * kPif * fc_ * Ts;
+        alpha_ = omega / (1.0f + omega);
 
         reset();
     }
@@ -143,8 +145,6 @@ public:
     const LoadIsolatorConfig& getConfig() const { return config_; }
 
 private:
-    static constexpr float kPi = 3.14159265358979323846f;
-
     // ── Configuration ────────────────────────────────────────────────────────
     LoadIsolatorConfig config_;
     float sampleRate_ = 44100.0f;

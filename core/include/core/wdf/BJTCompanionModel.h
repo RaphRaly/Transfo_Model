@@ -41,7 +41,7 @@ public:
     void configure(const BJTParams& params)
     {
         params_ = params;
-        sign_ = params.polaritySign();
+        sign_ = static_cast<double>(params.polaritySign());
     }
 
     /// NR iteration: solve for Vbe given WDF incident wave a and port impedance Z.
@@ -57,12 +57,12 @@ public:
     /// For PNP: sign = -1, so Vbe is negative in forward-active.
     ///
     /// Returns the converged Vbe.
-    float solve(float a, float Z)
+    double solve(float a, float Z)
     {
         const double Is = static_cast<double>(params_.Is);
         const double Bf = static_cast<double>(params_.Bf);
         const double Vt = static_cast<double>(params_.Vt);
-        const double s  = static_cast<double>(sign_);
+        const double s  = sign_;
         const double Zd = static_cast<double>(Z);
         const double a_d = static_cast<double>(a);
 
@@ -103,16 +103,16 @@ public:
             }
         }
 
-        Vbe_prev_ = static_cast<float>(Vbe);
+        Vbe_prev_ = Vbe;
         lastIterCount_ = iter;
 
         // Update operating point (clamp must match NR loop to avoid exp overflow)
         const double sVbe = sign_ * Vbe_prev_;
         const double expVbe = std::exp(std::clamp(sVbe, -2.0, 1.5)
                                        / static_cast<double>(params_.Vt));
-        Ib_last_ = static_cast<float>(sign_ * Is / Bf * (expVbe - 1.0));
-        Ic_last_ = static_cast<float>(params_.Bf * Ib_last_);
-        gm_ = std::abs(Ic_last_) / params_.Vt;
+        Ib_last_ = sign_ * Is / Bf * (expVbe - 1.0);
+        Ic_last_ = static_cast<double>(params_.Bf) * Ib_last_;
+        gm_ = std::abs(Ic_last_) / static_cast<double>(params_.Vt);
 
         return Vbe_prev_;
     }
@@ -121,23 +121,23 @@ public:
 
     /// Small-signal resistance at the BE junction (linearized).
     /// rbe = Bf * Vt / Ic = Vt / Ib
-    float getCompanionResistance() const
+    double getCompanionResistance() const
     {
-        const float Ib_abs = std::abs(Ib_last_) + 1e-15f;
-        return std::clamp(params_.Vt / Ib_abs, 1.0f, 1e8f);
+        const double Ib_abs = std::abs(Ib_last_) + 1e-15;
+        return std::clamp(static_cast<double>(params_.Vt) / Ib_abs, 1.0, 1e8);
     }
 
     /// Collector current at the current operating point [A].
-    float getCollectorCurrent() const { return Ic_last_; }
+    double getCollectorCurrent() const { return Ic_last_; }
 
     /// Base current at the current operating point [A].
-    float getBaseCurrent() const { return Ib_last_; }
+    double getBaseCurrent() const { return Ib_last_; }
 
     /// Transconductance gm = |Ic| / Vt [S]
-    float getTransconductance() const { return gm_; }
+    double getTransconductance() const { return gm_; }
 
     /// Last converged Vbe [V]
-    float getVbe() const { return Vbe_prev_; }
+    double getVbe() const { return Vbe_prev_; }
 
     /// Number of NR iterations in the last solve() call.
     int getLastIterCount() const { return lastIterCount_; }
@@ -145,27 +145,37 @@ public:
     // ── Early effect (output impedance) ─────────────────────────────────────
 
     /// Small-signal output resistance rce = Vaf / |Ic| [Ohm]
-    float getOutputResistance() const
+    double getOutputResistance() const
     {
-        return params_.Vaf / (std::abs(Ic_last_) + 1e-15f);
+        return static_cast<double>(params_.Vaf) / (std::abs(Ic_last_) + 1e-15);
     }
 
     void reset()
     {
-        Vbe_prev_ = sign_ > 0 ? 0.6f : -0.6f;  // Typical Vbe for forward-active
-        Ic_last_  = 0.0f;
-        Ib_last_  = 0.0f;
-        gm_       = 0.0f;
+        Vbe_prev_ = sign_ > 0.0 ? 0.6 : -0.6;  // Typical Vbe for forward-active
+        Ic_last_  = 0.0;
+        Ib_last_  = 0.0;
+        gm_       = 0.0;
+    }
+
+    /// Restore AC-fast state (for Newton probe snapshot/restore).
+    void restoreState(double Vbe, double Ic, double Ib, double gm, int iter)
+    {
+        Vbe_prev_      = Vbe;
+        Ic_last_       = Ic;
+        Ib_last_       = Ib;
+        gm_            = gm;
+        lastIterCount_ = iter;
     }
 
 private:
     BJTParams params_;
-    float sign_          = 1.0f;    // +1 NPN, -1 PNP
-    float Vbe_prev_      = 0.6f;   // NR warm-start
-    float Ic_last_       = 0.0f;
-    float Ib_last_       = 0.0f;
-    float gm_            = 0.0f;
-    int   lastIterCount_ = 0;
+    double sign_          = 1.0;    // +1 NPN, -1 PNP
+    double Vbe_prev_      = 0.6;   // NR warm-start
+    double Ic_last_       = 0.0;
+    double Ib_last_       = 0.0;
+    double gm_            = 0.0;
+    int    lastIterCount_ = 0;
 };
 
 } // namespace transfo

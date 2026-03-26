@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "TripleTopoCustom")(type "KiCad")(uri "${KIPRJMOD}/libs/TripleTopoCustom.kicad_sym")(options "")(descr "Custom symbols: Jensen transformers, ECC83 triode, AS394H matched pair"))
+)

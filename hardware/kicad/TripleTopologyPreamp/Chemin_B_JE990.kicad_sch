@@ -1,0 +1,40 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "d5000001-j990-chmb-0005-000000000005")
+	(paper "A3")
+	(title_block
+		(title "Chemin B — JE-990 DIY (8 BJT Class-AB)")
+		(date "2026-03-24")
+		(rev "1.0")
+		(comment 1 "AS394H diff → 2N4250A cascode → VAS → MJE181/171 push-pull output")
+		(comment 2 "Jensen design (1980). L1/L2=22µH emitter inductors. C1B=150pF Miller.")
+	)
+	(lib_symbols)
+
+	(hierarchical_label "SIGNAL_IN"
+		(shape input)
+		(at 25.4 76.2 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e5000001-j990-chmb-0005-000000000001")
+	)
+	(hierarchical_label "OUTPUT_B"
+		(shape output)
+		(at 355.6 76.2 0)
+		(effects (font (size 1.27 1.27)) (justify left))
+		(uuid "e5000002-j990-chmb-0005-000000000002")
+	)
+	(hierarchical_label "GAIN_FB_B"
+		(shape input)
+		(at 25.4 152.4 180)
+		(effects (font (size 1.27 1.27)) (justify right))
+		(uuid "e5000003-j990-chmb-0005-000000000003")
+	)
+
+	(text "CHEMIN B — JE-990 DIY (Deane Jensen, 1980)\n\nSTAGE 1: Differential Input\n  Q1B/Q2B (AS394H matched NPN pair)\n  R1B/R2B = 30R emitter degeneration\n  L1B/L2B = 22µH emitter inductors (Jensen innovation)\n  Q4B (2N3904) tail current source, R3B = 160R\n\nSTAGE 2: Active Load / Cascode\n  Q3B (2N4250A PNP) active load Q1\n  Q5B (2N4250A PNP) active load Q2\n  CR3 (1N4148) bias reference\n  R4B/R5B = 300R collector loads\n\nSTAGE 3: VAS\n  Q6B (2N4250A PNP) voltage amplifier\n  C1B = 150pF Miller compensation (CRITICAL)\n  R7B = 160R, R8B = 130R\n\nSTAGE 4: Output Push-Pull Class-AB\n  Q8B (MJE181 NPN) + Q9B (MJE171 PNP)\n  Q7B (2N3904) PNP pre-driver\n  R13B = 3.9R current sense\n  R14B/R15B = 39R output degeneration\n  C2B = 62pF, C3B_comp = 91pF HF compensation\n  CR1-CR12 (1N4148) protection + bias\n\nOUTPUT:\n  Load Isolator: R_loadB(39R/1W) wound with L3B(40T #30)\n  C_outB(220µF bipol + 4.7µF film) → OUTPUT_B\n\nFEEDBACK:\n  Output → SW1 Pole B (Rfb) → (-) input\n  Rg_B = 47R (0.1%) to GND\n  Gain = 1 + Rfb/47"
+		(at 25.4 25.4 0)
+		(effects (font (size 1.524 1.524)) (justify left))
+		(uuid "f5000001-j990-text-0005-000000000001")
+	)
+)

@@ -3,7 +3,7 @@
 // =============================================================================
 // TransformerModel — Top-level audio transformer simulation engine.
 //
-// Orchestrates all components: HSIMSolver, OversamplingEngine, ToleranceModel.
+// Orchestrates all components: TransformerCircuitWDF, OversamplingEngine, ToleranceModel.
 // This is the class that the plugin layer calls for audio processing.
 //
 // Two processing modes [v3]:
@@ -27,7 +27,6 @@
 #include "../util/Constants.h"
 #include "../util/SPSCQueue.h"
 #include "../util/SmoothedValue.h"
-#include "../wdf/HSIMSolver.h"
 #include "../wdf/TransformerCircuitWDF.h"
 #include "../wdf/WDFResonanceFilter.h"
 #include "ToleranceModel.h"
@@ -71,11 +70,6 @@ public:
       // Physical: OS 2x or 4x (P1.1: configurable via setOversamplingFactor)
       const int osFact = osFactor_;
       oversampler_.prepare(sampleRate, maxBlockSize, osFact);
-      hsim_.prepareToPlay(oversampler_.getOversampledRate(),
-                          maxBlockSize * osFact);
-    } else {
-      // Realtime: no OS, ADAA coefficients precomputed in CPWLLeaf
-      hsim_.prepareToPlay(sampleRate, maxBlockSize);
     }
 
     // Smoothed parameters
@@ -131,12 +125,12 @@ public:
 
   MonitorData getMonitorData() const {
     MonitorData data;
-    data.lastIterCount = hsim_.getLastIterationCount();
-    data.lastConverged = hsim_.getLastConverged();
-    data.convergenceFailures = hsim_.getConvergenceGuard().getFailureCount();
-#ifndef NDEBUG
-    data.spectralRadius = hsim_.getDiagnostics().getLastSpectralRadius();
-#endif
+    // HSIM solver is intentionally set aside (see ADR-001) — return defaults.
+    // The struct fields remain for GUI compatibility.
+    data.lastIterCount = 0;
+    data.lastConverged = true;
+    data.spectralRadius = 0.0f;
+    data.convergenceFailures = 0;
     return data;
   }
 
@@ -163,9 +157,13 @@ public:
   float getLmSmoothed() const { return lmSmoothed_; }
 
   // ─── Access ─────────────────────────────────────────────────────────────
-  HSIMSolver<NonlinearLeaf> &getHSIM() { return hsim_; }
   const TransformerConfig &getConfig() const { return config_; }
   ProcessingMode getProcessingMode() const { return processingMode_; }
+
+  // ─── Debug accessors (Sprint 2 diagnostic) ─────────────────────────────
+  float getHScale() const { return hScale_; }
+  float getBNorm() const { return bNorm_; }
+  float getHpAlpha() const { return hpAlpha_; }
 
   // ─── Unified WDF circuit control ──────────────────────────────────────
   void setUseWdfCircuit(bool on) { useWdfCircuit_ = on; }
@@ -173,7 +171,6 @@ public:
   TransformerCircuitWDF<NonlinearLeaf>& getWdfCircuit() { return wdfCircuit_; }
 
   void reset() {
-    hsim_.reset();
     oversampler_.reset();
     bhQueue_.reset();
     directHyst_.reset();
@@ -190,7 +187,6 @@ public:
 
 private:
   TransformerConfig config_;
-  HSIMSolver<NonlinearLeaf> hsim_;
   OversamplingEngine oversampler_;
   ProcessingMode processingMode_ = ProcessingMode::Realtime;
 
@@ -206,7 +202,7 @@ private:
   int bhDownsampleCounter_ = 0;
   std::vector<float> dryBuffer_;  // Pre-allocated buffer for dry signal (Physical mode)
 
-  // ─── Direct J-A processing (bypasses broken HSIM topology) ──────────────
+  // ─── Direct J-A processing (cascade fallback path) ─────────────────────
   HysteresisModel<LangevinPade> directHyst_;
   DynamicLosses directDynLosses_;  // Bertotti dynamic losses for direct path
   float hScale_ = 100.0f;  // Input → H field scaling
@@ -230,7 +226,7 @@ private:
   // When enabled, replaces the cascade HP→J-A→LC with a single
   // physically-correct WDF tree.  Controlled by useWdfCircuit_.
   TransformerCircuitWDF<NonlinearLeaf> wdfCircuit_;
-  bool useWdfCircuit_ = false;  // Feature flag — true to use unified WDF
+  bool useWdfCircuit_ = false;  // Feature flag — false = cascade (stable), true = WDF
 
   // ─── V2.4: Bertotti dynamic loss → LC Q coupling ──────────────────────
   int bertottiUpdateCounter_ = 0;
@@ -296,8 +292,17 @@ private:
         // Unified WDF circuit: all physics in one tree
         wet = wdfCircuit_.processSample(x);
 
-        // BH scope data from the nonlinear leaf
+        // P1.2: Track peak saturation from WDF nonlinear leaf
         if (!linearMode_) {
+          if constexpr (!std::is_same_v<NonlinearLeaf, CPWLLeaf>) {
+            const double M_wdf = wdfCircuit_.getNonlinearLeaf()
+                                     .getHysteresisModel().getMagnetization();
+            float satR = static_cast<float>(std::abs(M_wdf)
+                         / (static_cast<double>(config_.material.Ms) + 1e-30));
+            if (satR > peakSaturation_) peakSaturation_ = satR;
+          }
+
+          // BH scope data from the nonlinear leaf
           if (++bhDownsampleCounter_ >= 32) {
             bhDownsampleCounter_ = 0;
             auto& leaf = wdfCircuit_.getNonlinearLeaf();
@@ -319,14 +324,20 @@ private:
         const float H_applied = x * hScale_;
         double H_eff = static_cast<double>(H_applied);
 
-        // Bertotti dynamic extension: damped χ-scaling for self-consistent dBdt
-        if (directDynLosses_.isEnabled()) {
+        // Bertotti dynamic extension: damped χ-scaling for self-consistent dBdt.
+        // Skipped in Physical calibration mode: the cascade's lumped H_eff
+        // subtraction causes the K2·√|dBdt| term to dominate at the very small
+        // H levels produced by physics-based hScale, flipping H_eff sign and
+        // creating massive artifacts.  Physical mode targets datasheet validation
+        // at f_ref where dynamic losses are negligible for mu-metal.
+        if (directDynLosses_.isEnabled()
+            && config_.calibrationMode != CalibrationMode::Physical) {
           const double M_c = directHyst_.getMagnetization();
           const double chi = std::max(0.0, directHyst_.getInstantaneousSusceptibility());
           const double B_pred = kMu0 * (H_eff + M_c);
           const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
           const double G = directDynLosses_.getK1() * directDynLosses_.getSampleRate() * kMu0 * chi;
-          const double dBdt = dBdt_raw / (1.0 + G);
+          const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
           H_eff -= kCascadeEddyFactor * directDynLosses_.computeHfromDBdt(dBdt);
         }
 
@@ -356,6 +367,7 @@ private:
         directDynLosses_.commitState(static_cast<double>(B));
 
         wet = B * bNorm_;
+
 
         // A1.1: HP filter applied to flux output (after J-A)
         {
@@ -429,8 +441,17 @@ private:
         // Unified WDF circuit: all physics in one tree
         wet = wdfCircuit_.processSample(x);
 
-        // BH scope data from the nonlinear leaf (less frequent for oversampled)
+        // P1.2: Track peak saturation from WDF nonlinear leaf (Physical path)
         if (!linearMode_) {
+          if constexpr (!std::is_same_v<NonlinearLeaf, CPWLLeaf>) {
+            const double M_wdf = wdfCircuit_.getNonlinearLeaf()
+                                     .getHysteresisModel().getMagnetization();
+            float satR = static_cast<float>(std::abs(M_wdf)
+                         / (static_cast<double>(config_.material.Ms) + 1e-30));
+            if (satR > peakSaturation_) peakSaturation_ = satR;
+          }
+
+          // BH scope data from the nonlinear leaf (less frequent for oversampled)
           if (++bhDownsampleCounter_ >= 128) {
             bhDownsampleCounter_ = 0;
             auto& leaf = wdfCircuit_.getNonlinearLeaf();
@@ -449,13 +470,14 @@ private:
         const float H_applied = x * hScale_;
         double H_eff = static_cast<double>(H_applied);
 
-        if (directDynLosses_.isEnabled()) {
+        if (directDynLosses_.isEnabled()
+            && config_.calibrationMode != CalibrationMode::Physical) {
           const double M_c = directHyst_.getMagnetization();
           const double chi = std::max(0.0, directHyst_.getInstantaneousSusceptibility());
           const double B_pred = kMu0 * (H_eff + M_c);
           const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
           const double G = directDynLosses_.getK1() * directDynLosses_.getSampleRate() * kMu0 * chi;
-          const double dBdt = dBdt_raw / (1.0 + G);
+          const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
           H_eff -= kCascadeEddyFactor * directDynLosses_.computeHfromDBdt(dBdt);
         }
 
@@ -544,28 +566,7 @@ private:
 
   // ─── Configure the WDF circuit from TransformerConfig ───────────────────
   void configureCircuit() {
-    // Configure nonlinear leaves (kept for future HSIM topology fix)
-    for (int i = 0; i < hsim_.getNumNonlinearLeaves(); ++i) {
-      auto &leaf = hsim_.getNonlinearLeaf(i);
-
-      if constexpr (std::is_same_v<NonlinearLeaf,
-                                   JilesAthertonLeaf<LangevinPade>> ||
-                    std::is_same_v<NonlinearLeaf,
-                                   JilesAthertonLeaf<CPWLAnhysteretic>>) {
-        leaf.configure(config_.core.effectiveLength(),
-                       config_.core.effectiveArea(), config_.material,
-                       sampleRate_);
-      }
-    }
-
-    // Configure ME junctions with turns ratio (kept for future HSIM topology fix)
-    for (int i = 0; i < hsim_.getNumMEJunctions(); ++i) {
-      int turns = (i == 0) ? config_.windings.turnsRatio_N1
-                           : config_.windings.turnsRatio_N2;
-      hsim_.getMEJunction(i).configure(turns, sampleRate_);
-    }
-
-    // ─── Direct J-A model (bypasses HSIM) ──────────────────────────────────
+    // ─── Direct J-A model (cascade fallback path) ──────────────────────────
     float procRate = (processingMode_ == ProcessingMode::Physical)
                          ? sampleRate_ * static_cast<float>(osFactor_)
                          : sampleRate_;
@@ -580,9 +581,34 @@ private:
     directDynLosses_.setSampleRate(static_cast<double>(procRate));
     directDynLosses_.reset();
 
-    // Scaling: map ±1.0 digital audio to H field around saturation knee
-    // 'a' parameter controls the B-H curve knee location
-    hScale_ = config_.material.a * 5.0f;
+    // Scaling: digital amplitude → H field [A/m]
+    if (config_.calibrationMode == CalibrationMode::Physical) {
+      // Physics-based: Ampere's law at reference frequency f_ref.
+      //   I_m = V / (2πf · Lm)     magnetizing current from primary voltage
+      //   H   = N · I_m / l_e      Ampere's law in magnetic circuit
+      //   ⇒ hScale = N / (2πf_ref · Lm · l_e)   [A/m per V_peak]
+      //
+      // N is derived from K_geo = N²·A_e/l_e (fitted geometric constant).
+      // This is frequency-dependent (H ∝ 1/f), so the cascade can only be
+      // exact at f_ref. THD at other frequencies will be approximate.
+      // The HP filter partially compensates by rolling off LF output.
+      const float N_pri = (config_.windings.N_primary > 0)
+          ? static_cast<float>(config_.windings.N_primary)
+          : config_.estimateNprimary();
+      const float l_e  = config_.core.effectiveLength();
+      const float Lm   = config_.windings.Lp_primary;
+      const float f_ref = config_.calibrationFreqHz;
+
+      if (Lm > 0.0f && l_e > 0.0f && f_ref > 0.0f) {
+        hScale_ = N_pri / (kTwoPif * f_ref * Lm * l_e);
+      } else {
+        hScale_ = config_.material.a * 5.0f;  // Fallback
+      }
+    } else {
+      // Artistic mode: deliberate overdrive for musical coloration.
+      // 'a' parameter controls the B-H curve knee location.
+      hScale_ = config_.material.a * 5.0f;
+    }
 
     // Normalize output: unity gain in linear region
     // Langevin L(x) ≈ x/3 for small x, so χ₀_raw = Ms·c/(3·a)
@@ -658,8 +684,12 @@ private:
       const float turnsRatio = config_.windings.turnsRatio();
       const bool hasShield = config_.windings.hasFaradayShield;
       const float Ct = lc.computeCtotalCorrected(turnsRatio, hasShield);
+      // Total series resistance: source + Rdc_primary + Rdc_secondary (referred to primary).
+      // Rdc_secondary creates insertion loss: Rload / (Rload + Rdc_total).
+      // JT-11ELCF: 600/(600+80) = 0.882 = -1.09 dB (datasheet: -1.1 dB).
       const float Rs_lc = config_.windings.sourceImpedance
-                        + config_.windings.Rdc_primary;
+                        + config_.windings.Rdc_primary
+                        + config_.Rdc_sec_reflected();
       const float Rload_lc = config_.loadImpedance;
 
       if (lc.Lleak > 1e-9f && Ct > 1e-15f) {
