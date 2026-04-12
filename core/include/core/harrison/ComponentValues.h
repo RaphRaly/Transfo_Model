@@ -26,11 +26,6 @@ namespace MicPre {
     // ---- PHANTOM POWER DECOUPLING (out of signal path) ----
     constexpr float C101 = 10.0e-9f;        // 0.01 uF
 
-    // ---- TRANSFORMER ----
-    // N = turns ratio -- to calibrate per JE-115-K-E configuration.
-    // Conservative default. Adjust after measurement or datasheet.
-    constexpr float TRANSFORMER_TURNS_RATIO = 5.0f;
-
     // ---- U20 GAIN STAGE ----
     constexpr float R105 = 150000.0f;       // 150K -- N_H -> Pin 2 (DC bias, 0A ideal)
     constexpr float R106 = 100.0f;          // 100R -- Pin 6 -> N_MIN (Rf in non-inv)

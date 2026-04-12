@@ -1,7 +1,7 @@
 #pragma once
 
 // =============================================================================
-// OutputStageWDF — WDF output stage for the dual-topology preamp.
+// OutputStage — WDF output stage for the dual-topology preamp.
 //
 // Combines the two amplifier paths (Chemin A: Neve, Chemin B: JE-990) via
 // equal-power crossfade and drives the JT-11ELCF output transformer (T2).
@@ -36,7 +36,7 @@
 // =============================================================================
 
 #include "ABCrossfade.h"
-#include "../wdf/TransformerCircuitWDF.h"
+#include "../model/TransformerModel.h"
 #include "../magnetics/CPWLLeaf.h"
 #include "../model/TransformerConfig.h"
 
@@ -46,10 +46,10 @@
 namespace transfo {
 
 template <typename NonlinearLeaf = CPWLLeaf>
-class OutputStageWDF
+class OutputStage
 {
 public:
-    OutputStageWDF() = default;
+    OutputStage() = default;
 
     // ── Preparation ───────────────────────────────────────────────────────────
 
@@ -65,31 +65,23 @@ public:
         // Prepare crossfade engine
         crossfade_.prepare(sampleRate, fadeTimeMs);
 
-        // Prepare T2 transformer WDF tree
-        t2_.prepare(static_cast<double>(sampleRate), t2Config);
+        // Prepare T2 transformer (full cascade model: J-A + Bertotti + Lm + LC)
+        t2_.setConfig(t2Config);
+        t2_.prepareToPlay(sampleRate, 1);
         t2_.reset();
 
         // Cache T2 winding resistance for output impedance calculation
         Rdc_pri_ = t2Config.windings.Rdc_primary;
         Rdc_sec_ = t2Config.windings.Rdc_secondary;
 
-        // ── Analytical T2 insertion gain ───────────────────────────────────
-        // T2 is 1:1 bifilar: V_out = V_in * Rload / (Rsource + Rdc_pri + Rdc_sec + Rload)
-        const float Rsrc = t2Config.windings.sourceImpedance;
-        const float Rload = t2Config.loadImpedance;
-        const float Rtotal = Rsrc + Rdc_pri_ + Rdc_sec_ + Rload;
-        t2InsertionGain_ = (Rtotal > 0.0f) ? Rload / Rtotal : 1.0f;
-
-        // HP filter for DC blocking (from Lm)
-        const float Lp = t2Config.windings.Lp_primary;
-        if (Lp > 0.0f && Rsrc > 0.0f) {
-            const float fc = Rsrc / (kTwoPif * Lp);
-            const float omega = kTwoPif * fc / sampleRate;
-            t2HpAlpha_ = omega / (1.0f + omega);
-        } else {
-            t2HpAlpha_ = 0.0001f;
+        // T2 insertion gain: n * Rload / (Rs*n² + Rdc_pri*n² + Rdc_sec + Rload)
+        {
+            const float n = t2Config.windings.turnsRatio();
+            const float Rsrc = t2Config.windings.sourceImpedance;
+            const float Rload = t2Config.loadImpedance;
+            const float Rtotal = Rsrc * n * n + Rdc_pri_ * n * n + Rdc_sec_ + Rload;
+            t2InsertionGain_ = (Rtotal > 0.0f) ? n * Rload / Rtotal : n;
         }
-        t2HpState_ = 0.0f;
 
         // Cache initial source impedance for dynamic update detection
         lastSourceZ_ = getEffectiveSourceZ();
@@ -103,7 +95,6 @@ public:
         crossfade_.reset();
         t2_.reset();
         lastOutput_ = 0.0f;
-        t2HpState_ = 0.0f;
     }
 
     // ── Audio processing ──────────────────────────────────────────────────────
@@ -126,8 +117,10 @@ public:
             updateT2SourceImpedance();
         }
 
-        // 3. Drive through T2 output transformer (full WDF model)
-        float out = t2_.processSample(mixed);
+        // 3. Drive through T2 output transformer (full cascade model)
+        // TransformerModel returns unity-gain-normalized; multiply by insertion gain.
+        // T2 is 1:1: insertionGain = Rload / (Rsource + Rdc_pri + Rdc_sec + Rload)
+        float out = t2_.processSample(mixed) * t2InsertionGain_;
 
         // 4. Store for monitoring
         lastOutput_ = out;
@@ -180,11 +173,10 @@ public:
 
     // ── Monitoring ────────────────────────────────────────────────────────────
 
-    /// Magnetizing current from the T2 nonlinear leaf [A].
-    /// Reads Kirchhoff current at the Lm port of the WDF tree.
+    /// Magnetizing current [A]. In cascade mode, approximation from J-A state.
     float getT2MagnetizingCurrent() const
     {
-        return t2_.getNonlinearLeaf().getKirchhoffI();
+        return t2_.getMagnetizingCurrent();
     }
 
     /// Last output sample absolute value [V]. Quick level check.
@@ -204,9 +196,9 @@ public:
     /// Current crossfade position (0 = Neve, 1 = JE-990).
     float getPathPosition() const { return crossfade_.getPosition(); }
 
-    /// Access the underlying T2 TransformerCircuitWDF for advanced diagnostics.
-    const TransformerCircuitWDF<NonlinearLeaf>& getTransformer() const { return t2_; }
-    TransformerCircuitWDF<NonlinearLeaf>& getTransformer() { return t2_; }
+    /// Access the underlying T2 TransformerModel for advanced diagnostics.
+    const TransformerModel<NonlinearLeaf>& getTransformerModel() const { return t2_; }
+    TransformerModel<NonlinearLeaf>& getTransformerModel() { return t2_; }
 
 private:
     // ── Dynamic source impedance update ──────────────────────────────────────
@@ -222,15 +214,15 @@ private:
         // Only reconfigure if impedance changed significantly (>10%)
         if (std::abs(Zs_new - lastSourceZ_) > lastSourceZ_ * 0.1f)
         {
-            // Update the T2 transformer's source impedance
-            t2_.setSourceImpedance(static_cast<double>(Zs_new));
+            // Update the T2 transformer's source impedance (cascade + LC)
+            t2_.setSourceImpedance(Zs_new);
             lastSourceZ_ = Zs_new;
         }
     }
 
     // ── Components ────────────────────────────────────────────────────────────
-    ABCrossfade                          crossfade_;
-    TransformerCircuitWDF<NonlinearLeaf> t2_;
+    ABCrossfade                  crossfade_;
+    TransformerModel<NonlinearLeaf> t2_;
 
     // ── Source impedances per path ────────────────────────────────────────────
     float ZoutA_ = 11.0f;    // Neve EF stage + 10 Ohm series [Ohm]
@@ -240,10 +232,8 @@ private:
     float Rdc_pri_ = 40.0f;  // Primary DC resistance [Ohm]
     float Rdc_sec_ = 40.0f;  // Secondary DC resistance [Ohm]
 
-    // ── Analytical T2 model ─────────────────────────────────────────────────
-    float t2InsertionGain_ = 0.85f;  // Rload / (Rs + Rdc_pri + Rdc_sec + Rload)
-    float t2HpState_       = 0.0f;   // HP filter state
-    float t2HpAlpha_       = 0.0001f; // HP filter coefficient
+    // ── Insertion gain: n * Rload / (Rsource + Rdc_pri + Rdc_sec + Rload) ────
+    float t2InsertionGain_ = 0.85f;
 
     // ── State ─────────────────────────────────────────────────────────────────
     float sampleRate_ = 44100.0f;

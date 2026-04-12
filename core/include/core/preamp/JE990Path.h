@@ -1,8 +1,13 @@
 #pragma once
 
 // =============================================================================
-// JE990Path — Complete JE-990 discrete op-amp amplifier path (Chemin B).
+// [ARCHIVED] JE990Path — JE-990 discrete op-amp amplifier path (Chemin B).
 //
+// STATUS: ARCHIVED (2026-04-03). On hold pending Sprint 4 BJT tuning
+//         (N2N4250A, MJE181/171) and H2/H3 harmonic fix.
+//         Code compiles and standalone tests work. Disabled in PreampModel.
+//
+// ORIGINAL:
 // Eight-transistor topology modeled with Wave Digital Filters:
 //   Etage 1: LM-394 differential pair (Q1/Q2) + tail current Q4
 //   Etage 2: 2N4250A PNP cascode (Q3/Q5) — linearized
@@ -116,7 +121,9 @@ public:
         updateFeedbackCoefficient();
 
         // ── DC servo coefficient (~0.1 Hz integrator) ────────────────────
-        servoAlpha_ = kTwoPif * 0.1f / sampleRate_;
+        // Prewarp for sample-rate invariance
+        const float fc_servo_w = prewarpHz(0.1f, sampleRate_);
+        servoAlpha_ = kTwoPif * fc_servo_w / sampleRate_;
 
         // ── Settling ─────────────────────────────────────────────────────
         yPrev_       = 0.0f;
@@ -175,12 +182,12 @@ public:
     ///   J = 1 + beta * Aol_eff where Aol_eff is computed from per-stage
     ///   small-signal gains at the current operating point.
     ///
-    ///   This avoids numerical probes through the ClassAB, whose one-port WDF
-    ///   emitter follower model gives wrong large-signal gain (0.31× instead of
-    ///   0.95×). The ClassAB BJTs are kept for nonlinear audio (crossover,
-    ///   clipping), but the LOOP GAIN uses the analytical estimate.
+    ///   The Jacobian is analytical (from per-stage small-signal gains at the
+    ///   snapshot operating point), avoiding numerical probes.
     ///
-    /// Cost: 2 forward evaluations per sample (1 for g0 + 1 commit).
+    /// Cost: up to 3 forward evaluations per sample (2 Newton iterations
+    ///   with full nonlinear ClassAB + 1 commit pass). Early exit if the
+    ///   Newton residual converges within tolerance.
     float processSample(float input) override
     {
         ++sampleCount_;
@@ -196,11 +203,11 @@ public:
         // ── 2. Analytical Jacobian from per-stage small-signal gains ─────
         //    Computed from the SNAPSHOT state (current operating point).
         //    Uses per-sample VAS gain (with Miller alpha) for accuracy.
-        //    ClassAB gain = 0.95 (analytical EF gain, bypasses broken WDF).
+        //    ClassAB gain is signal-dependent (Ic-weighted EF model).
         const double Av_dp  = std::abs(diffPair_.getLocalGain());    // ~6.3
         const double Av_cas = std::abs(static_cast<double>(cascode_.getLocalGain()));  // 0.98
         const double Av_vas = std::abs(static_cast<double>(vas_.getEffectiveGainPerSample())); // ~181
-        const double Av_ab  = std::abs(static_cast<double>(classAB_.getLocalGain()));  // 0.95
+        const double Av_ab  = std::abs(static_cast<double>(classAB_.getLocalGain()));  // signal-dependent EF gain
 
         double Aol = Av_dp * Av_cas * Av_vas * Av_ab;
 
@@ -211,10 +218,6 @@ public:
         double J = 1.0 + beta * Aol;
         J = std::clamp(J, 1.5, 20000.0);
 
-        // ── 3. Forward evaluation: compute g0 = yk - F(x, beta*yk) ──────
-        //    For g0, we evaluate DiffPair → Cascode → VAS but BYPASS the
-        //    ClassAB WDF model. The one-port WDF emitter follower gives wrong
-        //    large-signal gain (0.31× instead of 0.95×), making g0 inconsistent
         //    with the analytical J. Instead, we apply the ClassAB gain as a
         //    linear constant (0.95), matching what J_analytical assumes.
         //    The full nonlinear ClassAB is only used in the commit (step 4).
@@ -369,7 +372,9 @@ private:
             return;
         }
         const float f_hp = 1.0f / (kTwoPif * C_out * Rfb_);
-        const float omega = kTwoPif * f_hp / sampleRate_;
+        // Prewarp cutoff for sample-rate invariance
+        const float f_hp_w = prewarpHz(f_hp, sampleRate_);
+        const float omega = kTwoPif * f_hp_w / sampleRate_;
         feedbackAlpha_ = omega / (1.0f + omega);
     }
 };

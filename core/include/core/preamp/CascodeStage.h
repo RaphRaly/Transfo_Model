@@ -1,5 +1,6 @@
 #pragma once
 
+// [ARCHIVED] Part of JE990Path — on hold pending Sprint 4 BJT tuning.
 // =============================================================================
 // CascodeStage — Linearized cascode stage for the JE-990 discrete op-amp.
 //

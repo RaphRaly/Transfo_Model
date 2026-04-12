@@ -1,8 +1,12 @@
 #pragma once
 
 // =============================================================================
-// NeveClassAPath — Complete Neve Heritage Class-A amplifier path (Chemin A).
+// [ARCHIVED] NeveClassAPath — Neve Heritage Class-A amplifier path.
 //
+// STATUS: ARCHIVED (2026-04-03). Replaced by Neve1063Path (EH10013 model).
+//         Kept for reference and comparison. Not used in PreampModel.
+//
+// ORIGINAL:
 // Three-transistor topology modeled with Wave Digital Filters:
 //   Q1 BC184C  — Common-emitter input stage (NPN, voltage gain)
 //   Q2 BC214C  — Common-emitter second stage (PNP, voltage gain)
@@ -304,7 +308,9 @@ private:
     {
         const float C6 = config_.C_emitter_bypass;  // 470 µF
         const float f_hp = 1.0f / (kTwoPif * C6 * Rfb_);
-        const float omega = kTwoPif * f_hp / sampleRate_;
+        // Prewarp cutoff for sample-rate invariance
+        const float f_hp_w = prewarpHz(f_hp, sampleRate_);
+        const float omega = kTwoPif * f_hp_w / sampleRate_;
         feedbackAlpha_ = omega / (1.0f + omega);
     }
 };

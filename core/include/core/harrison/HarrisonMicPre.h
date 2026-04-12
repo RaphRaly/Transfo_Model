@@ -28,7 +28,6 @@
 #include "../util/SmoothedValue.h"
 #include <cmath>
 #include <algorithm>
-#include <vector>
 
 namespace Harrison {
 namespace MicPre {
@@ -65,9 +64,6 @@ public:
         // Input scale smoothing: 2ms ramp (click-free PAD/phase switching)
         inputScaleSmooth_.reset(static_cast<double>(sampleRate), 0.002);
         inputScaleSmooth_.setCurrentAndTargetValue(computeInputScale());
-
-        // Temp buffer for transformer processing
-        tempBuffer_.resize(static_cast<size_t>(maxBlockSize), 0.0f);
     }
 
     /// Reset all internal state.
@@ -76,7 +72,6 @@ public:
         gainStage_.reset();
         alphaSmooth_.skip();
         inputScaleSmooth_.skip();
-        std::fill(tempBuffer_.begin(), tempBuffer_.end(), 0.0f);
     }
 
     // ── Parameter Control ────────────────────────────────────────────────
@@ -123,8 +118,15 @@ public:
             data[i] *= inputScaleSmooth_.getNextValue();
 
         // ---- Phase 2: Transformer (external model, block processing) ----
+        // TransformerModel::processBlock outputs unity-gain normalized signal;
+        // caller must apply getTurnsRatio() for voltage gain.
         if (transformer_ != nullptr)
+        {
             transformer_->processBlock(data, data, numSamples);
+            const float N = transformer_->getTurnsRatio();
+            for (int i = 0; i < numSamples; ++i)
+                data[i] *= N;
+        }
 
         // ---- Phase 3: U20 gain stage (per-sample, smoothed alpha) ----
         for (int i = 0; i < numSamples; ++i)
@@ -153,8 +155,9 @@ public:
     {
         const float alpha = alphaSmooth_.getCurrentValue();
         const float midGain = gainStage_.getMidBandGain(alpha);
+        const float N = (transformer_ != nullptr) ? transformer_->getTurnsRatio() : 1.0f;
         const float totalLinear = std::abs(inputScaleSmooth_.getCurrentValue())
-                                * midGain;
+                                * N * midGain;
         if (totalLinear < 1e-15f) return -300.0f;
         return 20.0f * std::log10(totalLinear);
     }
@@ -199,8 +202,6 @@ private:
     bool phaseReversed_ = false;
     float sourceImpedance_ = 150.0f;  // default: dynamic mic
 
-    // Temp buffer for block processing
-    std::vector<float> tempBuffer_;
 };
 
 } // namespace MicPre

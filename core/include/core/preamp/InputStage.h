@@ -1,7 +1,7 @@
 #pragma once
 
 // =============================================================================
-// InputStageWDF — WDF input stage for the dual-topology preamp.
+// InputStage — WDF input stage for the dual-topology preamp.
 //
 // Wraps TransformerCircuitWDF<NonlinearLeaf> (T1: JT-115K-E) with preamp-
 // specific configuration: phantom power, PAD attenuator, ratio switching,
@@ -50,17 +50,17 @@
 // =============================================================================
 
 #include "../model/PreampConfig.h"
-#include "../wdf/TransformerCircuitWDF.h"
+#include "../model/TransformerModel.h"
 #include <algorithm>
 #include <cmath>
 
 namespace transfo {
 
 template <typename NonlinearLeaf>
-class InputStageWDF
+class InputStage
 {
 public:
-    InputStageWDF() = default;
+    InputStage() = default;
 
     // ── Preparation ──────────────────────────────────────────────────────────
 
@@ -79,7 +79,6 @@ public:
     {
         t1_.reset();
         lastOutput_ = 0.0f;
-        hpState_ = 0.0f;
     }
 
     // ── Runtime controls (button-press events) ──────────────────────────────
@@ -119,8 +118,10 @@ public:
     /// @return           Secondary voltage after turns ratio scaling.
     float processSample(float micSignal)
     {
-        // Drive the full WDF transformer model — J-A nonlinear leaf + T-circuit
-        lastOutput_ = t1_.processSample(micSignal);
+        // TransformerModel cascade returns unity-gain-normalized output (bNorm).
+        // Multiply by idealGain_ to restore: turnsRatio + insertion loss.
+        // idealGain_ = n * Rload / (Rs*n² + Rdc_pri*n² + Rdc_sec + Rload)
+        lastOutput_ = t1_.processSample(micSignal) * idealGain_;
         return lastOutput_;
     }
 
@@ -139,11 +140,10 @@ public:
     /// Last output voltage from T1 secondary [V].
     float getSecondaryVoltage() const { return lastOutput_; }
 
-    /// Magnetizing current from the nonlinear leaf [A].
-    /// Reads Kirchhoff current at the Lm port of the WDF tree.
+    /// Magnetizing current [A]. In cascade mode, approximation from J-A state.
     float getMagnetizingCurrent() const
     {
-        return t1_.getNonlinearLeaf().getKirchhoffI();
+        return t1_.getMagnetizingCurrent();
     }
 
     /// Current turns ratio (10.0 for 1:10, 5.0 for 1:5).
@@ -152,23 +152,21 @@ public:
     /// Input impedance at the primary terminals [Ohm].
     float getInputImpedance() const { return t1_.getInputImpedance(); }
 
-    /// Instantaneous magnetizing inductance from the nonlinear leaf [H].
+    /// Instantaneous magnetizing inductance [H].
     float getLm() const { return t1_.getLm(); }
 
-    /// Access the underlying TransformerCircuitWDF for advanced diagnostics.
-    const TransformerCircuitWDF<NonlinearLeaf>& getTransformer() const { return t1_; }
-    TransformerCircuitWDF<NonlinearLeaf>& getTransformer() { return t1_; }
+    /// Access the underlying TransformerModel for advanced diagnostics.
+    const TransformerModel<NonlinearLeaf>& getTransformerModel() const { return t1_; }
+    TransformerModel<NonlinearLeaf>& getTransformerModel() { return t1_; }
 
 private:
-    TransformerCircuitWDF<NonlinearLeaf> t1_;
+    TransformerModel<NonlinearLeaf> t1_;
     InputStageConfig config_;
     float sampleRate_      = 44100.0f;
     float Zmic_            = 150.0f;     // Default: SM57
     float Zs_eff_          = 150.0f;
     float lastOutput_      = 0.0f;
-    float idealGain_       = 10.0f;      // Analytical transformer voltage gain
-    float hpState_         = 0.0f;       // HP filter state (DC blocking)
-    float hpAlpha_         = 0.0001f;    // HP filter coefficient (sub-audio cutoff)
+    float idealGain_       = 10.0f;      // n * Rload / (Rs*n² + Rdc_pri*n² + Rdc_sec + Rload)
 
     // ── Effective source impedance computation ──────────────────────────────
 
@@ -203,7 +201,7 @@ private:
     // ── Reconfiguration ─────────────────────────────────────────────────────
 
     /// Rebuild the T1 transformer config from current input stage state
-    /// and re-prepare the WDF tree. Called on pad/ratio/impedance changes.
+    /// and re-prepare the cascade model. Called on pad/ratio/impedance changes.
     void reconfigure()
     {
         Zs_eff_ = computeZsEff();
@@ -228,12 +226,15 @@ private:
         t1Cfg.windings.turnsRatio_N2 =
             (config_.ratio == InputStageConfig::Ratio::X10) ? 10 : 5;
 
-        // Re-prepare the WDF tree with the modified config
-        t1_.prepare(static_cast<double>(sampleRate_), t1Cfg);
+        // Configure and prepare the cascade TransformerModel
+        // (includes J-A + Bertotti + dynamic Lm + LC resonance + HP filter)
+        t1_.setConfig(t1Cfg);
+        t1_.prepareToPlay(sampleRate_, 1);
         t1_.reset();
 
-        // ── Compute analytical gain ──────────────────────────────────────
+        // ── Compute ideal gain (turnsRatio + insertion loss) ─────────────
         // V_sec = V_in * n * Rload / (Rs*n² + Rdc_pri*n² + Rdc_sec + Rload)
+        // The cascade normalizes to unity (bNorm), so we apply this externally.
         const float n = static_cast<float>(t1Cfg.windings.turnsRatio_N2) /
                         static_cast<float>(t1Cfg.windings.turnsRatio_N1);
         const float Rs_ref  = Zs_eff_ * n * n;
@@ -242,17 +243,6 @@ private:
         const float Rload   = t1Cfg.loadImpedance;
         const float Rtotal  = Rs_ref + Rdc_pri_ref + Rdc_sec + Rload;
         idealGain_ = (Rtotal > 0.0f) ? n * Rload / Rtotal : n;
-
-        // ── HP filter: fc = Rsource / (2*pi*Lm_static) ──────────────────
-        const float Lp = t1Cfg.windings.Lp_primary;
-        if (Lp > 0.0f && Zs_eff_ > 0.0f) {
-            const float fc = Zs_eff_ / (kTwoPif * Lp);
-            const float omega = kTwoPif * fc / sampleRate_;
-            hpAlpha_ = omega / (1.0f + omega);
-        } else {
-            hpAlpha_ = 0.0001f;  // ~0.7 Hz at 44.1 kHz
-        }
-        hpState_ = 0.0f;
     }
 };
 

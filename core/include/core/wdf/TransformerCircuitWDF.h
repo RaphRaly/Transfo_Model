@@ -304,7 +304,7 @@ public:
     // ─── Source impedance update ────────────────────────────────────────────
 
     /// Dynamically update the Thevenin source impedance (Rs) of the input
-    /// source element.  This is used by OutputStageWDF to re-adapt T2's
+    /// source element.  This is used by OutputStage to re-adapt T2's
     /// WDF tree when the active amplifier path changes after a crossfade
     /// completes (Neve Zout ≈ 11 Ohm vs JE-990 Zout ≈ 44 Ohm).
     ///

@@ -156,8 +156,11 @@ public:
 
         // ── DC tracking filter for AC coupling ───────────────────────────────
         // Time constant: tau = C_eff * R_bias (dominant path)
-        const float tau = C_eff * config_.R_bias;
-        dcAlpha_ = Ts_ / (Ts_ + tau);
+        // Prewarp the corner frequency for sample-rate invariance
+        const float fc_dc = 1.0f / (kTwoPif * C_eff * config_.R_bias);
+        const float fc_dc_w = prewarpHz(fc_dc, sampleRate_);
+        const float tau_w = 1.0f / (kTwoPif * fc_dc_w);
+        dcAlpha_ = Ts_ / (Ts_ + tau_w);
 
         reset();
     }

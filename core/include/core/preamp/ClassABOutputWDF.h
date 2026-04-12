@@ -1,5 +1,6 @@
 #pragma once
 
+// [ARCHIVED] Part of JE990Path — on hold pending Sprint 4 BJT tuning.
 // =============================================================================
 // ClassABOutputWDF — WDF Class-AB push-pull output stage for the JE-990.
 //
@@ -213,8 +214,11 @@ public:
         // that aids NR convergence.
         if (config_.C_comp_top > 0.0f)
         {
-            const float tau_q8 = config_.q8.Rb * config_.C_comp_top;
-            compAlpha_q8_ = Ts_ / (Ts_ + tau_q8);
+            // Prewarp the corner frequency for sample-rate invariance
+            const float fc_q8 = 1.0f / (kTwoPif * config_.q8.Rb * config_.C_comp_top);
+            const float fc_q8_w = prewarpHz(std::min(fc_q8, sampleRate_ * 0.499f), sampleRate_);
+            const float tau_q8_w = 1.0f / (kTwoPif * fc_q8_w);
+            compAlpha_q8_ = Ts_ / (Ts_ + tau_q8_w);
         }
         else
         {
@@ -223,8 +227,11 @@ public:
 
         if (config_.C_comp_bottom > 0.0f)
         {
-            const float tau_q9 = config_.q9.Rb * config_.C_comp_bottom;
-            compAlpha_q9_ = Ts_ / (Ts_ + tau_q9);
+            // Prewarp the corner frequency for sample-rate invariance
+            const float fc_q9 = 1.0f / (kTwoPif * config_.q9.Rb * config_.C_comp_bottom);
+            const float fc_q9_w = prewarpHz(std::min(fc_q9, sampleRate_ * 0.499f), sampleRate_);
+            const float tau_q9_w = 1.0f / (kTwoPif * fc_q9_w);
+            compAlpha_q9_ = Ts_ / (Ts_ + tau_q9_w);
         }
         else
         {
@@ -240,8 +247,12 @@ public:
         // Time constant: ~0.5s (sub-Hz, well below audio band)
         // This is conservative — slow enough to not affect bass response
         // down to 20 Hz, fast enough to track thermal drift.
+        // Prewarp for sample-rate invariance
         constexpr float kDCTrackTau = 0.5f;
-        dcAlpha_ = Ts_ / (Ts_ + kDCTrackTau);
+        const float fc_dc = 1.0f / (kTwoPif * kDCTrackTau);
+        const float fc_dc_w = prewarpHz(fc_dc, sampleRate_);
+        const float tau_dc_w = 1.0f / (kTwoPif * fc_dc_w);
+        dcAlpha_ = Ts_ / (Ts_ + tau_dc_w);
 
         // ── Output voltage clamp ─────────────────────────────────────────────
         // Maximum output swing is limited by the supply rails minus the
@@ -389,14 +400,7 @@ public:
         lastIc_q8_ = q8Leaf_.getIc();
         lastIc_q9_ = q9Leaf_.getIc();
 
-        // ── Step 7: Push-pull combination ────────────────────────────────────
-        //
-        // Both emitters are connected to the same output node. The output
-        // voltage is determined by the transistor with higher gm (the one
-        // conducting more current).
-        //
-        // We compute a gm-weighted average of the two emitter voltages:
-        //   V_out = (gm_q8 * Ve_q8 + gm_q9 * Ve_q9) / (gm_q8 + gm_q9)
+        // ── Step 7: Push-pull combination (gm-weighted) ─────────────────────
         //
         // This naturally produces Class-AB behavior:
         //   - When Q8 dominates: V_out ≈ Ve_q8
@@ -604,20 +608,22 @@ public:
         // dcState_ is NOT restored — it's a frozen DC offset
     }
 
-    /// Signed local small-signal voltage gain at the current operating
-    /// point. Emitter follower ≈ +1.0 (non-inverting, near-unity).
-    /// Accounts for the R_sense current-feedback loss.
+    /// Signal-dependent local small-signal voltage gain.
+    /// Uses combined gm of both output transistors for the EF gain formula:
+    ///   Av = gm_total / (gm_total + 1/R_sense)
+    /// At quiescence (gm_total ≈ 1.15 S): Av ≈ 0.82
+    /// At large signal (one BJT off): gm_total ≈ 0.577 S → Av ≈ 0.69
+    /// Clamped to [0.5, 0.98] for Newton solver stability.
     float getLocalGain() const
     {
-        const float gm_total = q8Leaf_.getGm() + q9Leaf_.getGm();
-        // EF gain ≈ 1 / (1 + R_sense * gm_total) ... but gm_total
-        // here represents both halves conducting; at quiescence the
-        // NET output current barely changes (push-pull cancellation).
-        // For the Jacobian we need dVout/dVin of the follower which
-        // is dominated by the unity Vbe-tracking, not by R_sense.
-        // A safe estimate is ~0.95 (Vbe tracking loss).
-        (void)gm_total;
-        return 0.95f;
+        const float gm_q8 = q8Leaf_.getGm();
+        const float gm_q9 = q9Leaf_.getGm();
+        const float gm_total = gm_q8 + gm_q9;
+        if (gm_total < kEpsilonF) return 0.5f;
+
+        const float g_sense = 1.0f / std::max(config_.R_sense, 0.1f);
+        const float gain = gm_total / (gm_total + g_sense);
+        return std::clamp(gain, 0.5f, 0.98f);
     }
 
     /// Quiescent bias current [A] as configured.

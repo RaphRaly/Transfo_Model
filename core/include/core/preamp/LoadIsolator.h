@@ -1,5 +1,6 @@
 #pragma once
 
+// [ARCHIVED] Part of JE990Path — on hold pending Sprint 4 BJT tuning.
 // =============================================================================
 // LoadIsolator — Output load isolator for the JE-990 discrete op-amp.
 //
@@ -75,14 +76,13 @@ public:
         // For 39 Ohm / 40 uH: f_c ~ 155.2 kHz
         fc_ = config_.R_series / (2.0f * kPif * config_.L_series);
 
-        // First-order LP coefficient:
-        //   omega = 2*pi*fc*Ts
-        //   alpha = omega / (1 + omega)
-        //
-        // At low sample rates (e.g. 44.1 kHz), fc >> Nyquist, so omega >> 1,
-        // alpha ~ 1, and the filter is essentially transparent (correct
-        // physical behavior: the isolator only matters above audio band).
-        const float omega = 2.0f * kPif * fc_ * Ts;
+        // Prewarp cutoff for sample-rate invariance.
+        // At low sample rates (e.g. 44.1 kHz), fc >> Nyquist, so the
+        // prewarped fc approaches infinity and alpha ~ 1, making the
+        // filter essentially transparent (correct physical behavior:
+        // the isolator only matters above audio band).
+        const float fc_w = prewarpHz(std::min(fc_, sampleRate_ * 0.499f), sampleRate_);
+        const float omega = 2.0f * kPif * fc_w * Ts;
         alpha_ = omega / (1.0f + omega);
 
         reset();

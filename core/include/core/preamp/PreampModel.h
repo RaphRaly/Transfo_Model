@@ -4,7 +4,7 @@
 // PreampModel — Top-level orchestrator for the dual-topology preamp.
 //
 // Assembles the complete signal chain:
-//   InputStageWDF (T1) → [NeveClassAPath | JE990Path] → OutputStageWDF (T2)
+//   InputStage (T1) → [Neve1063Path | JE990Path] → OutputStage (T2)
 //
 // Features:
 //   - 11-position stepped gain control (GainTable)
@@ -25,10 +25,10 @@
 //            SPRINT_PLAN_PREAMP.md Sprint 6
 // =============================================================================
 
-#include "InputStageWDF.h"
-#include "NeveClassAPath.h"
+#include "InputStage.h"
+#include "Neve1063Path.h"
 #include "JE990Path.h"
-#include "OutputStageWDF.h"
+#include "OutputStage.h"
 #include "GainTable.h"
 #include "../model/PreampConfig.h"
 #include "../util/SmoothedValue.h"
@@ -70,17 +70,18 @@ public:
         inputStage_.prepare(sampleRate, config_.input);
 
         // ── Amplifier paths ───────────────────────────────────────────────
-        nevePath_.configure(config_.neveConfig);
+        nevePath_.configure(config_.neve1063Config);
         nevePath_.prepare(sampleRate, maxBlockSize);
 
-        je990Path_.configure(config_.je990Config);
-        je990Path_.prepare(sampleRate, maxBlockSize);
+        // [ARCHIVED] JE990 path on hold (Sprint 4 BJT tuning + H2/H3 fix)
+        // je990Path_.configure(config_.je990Config);
+        // je990Path_.prepare(sampleRate, maxBlockSize);
 
         // ── Output stage (T2) ─────────────────────────────────────────────
         outputStage_.prepare(sampleRate, config_.t2Config, 5.0f);
         outputStage_.setPathImpedances(
-            nevePath_.getOutputImpedance(),   // ~11 Ohm
-            44.0f                              // JE-990 post-isolator ~44 Ohm
+            nevePath_.getOutputImpedance(),   // ~11 Ohm (Neve active)
+            nevePath_.getOutputImpedance()    // JE-990 archived, use Neve impedance
         );
 
         // ── Gain: apply default position to both paths ────────────────────
@@ -115,7 +116,7 @@ public:
     {
         inputStage_.reset();
         nevePath_.reset();
-        je990Path_.reset();
+        // je990Path_.reset();  // [ARCHIVED]
         outputStage_.reset();
 
         lastInputLevel_ = 0.0f;
@@ -177,9 +178,9 @@ public:
             // b. T1 input transformer
             const float t1Out = inputStage_.processSample(x);
 
-            // c. Process BOTH paths (keep WDF states continuous)
+            // c. Process active path (JE990 archived, Neve only)
             const float neveOut = nevePath_.processSample(t1Out);
-            const float jensenOut = je990Path_.processSample(t1Out);
+            const float jensenOut = 0.0f;  // [ARCHIVED] je990Path_
 
             // d. Output stage: crossfade + T2
             float y = outputStage_.processSample(neveOut, jensenOut);
@@ -297,22 +298,22 @@ public:
 
     // ── Access to sub-stages ──────────────────────────────────────────────────
 
-    InputStageWDF<NonlinearLeaf>&  getInputStage()  { return inputStage_; }
-    OutputStageWDF<NonlinearLeaf>& getOutputStage() { return outputStage_; }
-    NeveClassAPath&                getNevePath()    { return nevePath_; }
+    InputStage<NonlinearLeaf>&  getInputStage()  { return inputStage_; }
+    OutputStage<NonlinearLeaf>& getOutputStage() { return outputStage_; }
+    Neve1063Path&                getNevePath()    { return nevePath_; }
     JE990Path&                     getJE990Path()   { return je990Path_; }
 
-    const InputStageWDF<NonlinearLeaf>&  getInputStage()  const { return inputStage_; }
-    const OutputStageWDF<NonlinearLeaf>& getOutputStage() const { return outputStage_; }
-    const NeveClassAPath&                getNevePath()    const { return nevePath_; }
+    const InputStage<NonlinearLeaf>&  getInputStage()  const { return inputStage_; }
+    const OutputStage<NonlinearLeaf>& getOutputStage() const { return outputStage_; }
+    const Neve1063Path&                getNevePath()    const { return nevePath_; }
     const JE990Path&                     getJE990Path()   const { return je990Path_; }
 
 private:
     // ── Pipeline stages ───────────────────────────────────────────────────────
-    InputStageWDF<NonlinearLeaf>  inputStage_;
-    NeveClassAPath                nevePath_;
+    InputStage<NonlinearLeaf>  inputStage_;
+    Neve1063Path                nevePath_;
     JE990Path                     je990Path_;
-    OutputStageWDF<NonlinearLeaf> outputStage_;
+    OutputStage<NonlinearLeaf> outputStage_;
 
     // ── Configuration ─────────────────────────────────────────────────────────
     PreampConfig config_;
@@ -355,7 +356,7 @@ private:
     {
         const float Rfb = GainTable::getRfb(position);
         nevePath_.setGain(Rfb);
-        je990Path_.setGain(Rfb);
+        // je990Path_.setGain(Rfb);  // [ARCHIVED]
     }
 };
 

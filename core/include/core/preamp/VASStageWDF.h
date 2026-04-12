@@ -1,5 +1,6 @@
 #pragma once
 
+// [ARCHIVED] Part of JE990Path — on hold pending Sprint 4 BJT tuning.
 // =============================================================================
 // VASStageWDF — Voltage Amplifier Stage with Miller compensation for JE-990.
 //
@@ -108,7 +109,9 @@ public:
         if (hasMillerCap_)
         {
             const float fc = 1.0f / (kTwoPif * config.R_coll_AC * config.C_miller);
-            const float omega = kTwoPif * fc * Ts_;
+            // Prewarp cutoff for sample-rate invariance
+            const float fc_w = prewarpHz(fc, sampleRate_);
+            const float omega = kTwoPif * fc_w * Ts_;
             millerAlpha_ = omega / (1.0f + omega);
         }
 
@@ -127,6 +130,7 @@ public:
         bjtLeaf_.reset();
         millerState_   = 0.0f;
         outputVoltage_ = 0.0f;
+        lastInputDC_   = 0.0f;
 
         // Warmup: 64 zero-input samples to converge NR at bias point
         for (int i = 0; i < 64; ++i)
@@ -178,14 +182,60 @@ public:
         //      Vc_ac = -Ic_ac × R_coll_AC
         float Vc_ac = -Ic_ac * config_.R_coll_AC;
 
-        // NO hard clamp here — the VAS is an internal node, not an output rail.
-        // Physical rail limiting happens in ClassAB (output stage).
-        // A hard clamp at ±Vcc destroys the Newton Jacobian: with R_coll_AC=60kΩ,
-        // normal signal currents (~0.4mA Ic_ac) already reach 24V, causing both
-        // Newton probes to land on the same plateau → J≈0 → fallback → open loop.
-        // Wide numerical guard only (±200V prevents float overflow, never reached
-        // in normal operation since BJT currents are physically bounded).
-        Vc_ac = std::clamp(Vc_ac, -200.0f, 200.0f);
+        // ── Even-harmonic suppression (emulates push-pull cancellation) ──
+        // Single-ended CE generates H2 from the BJT quadratic term:
+        //   Ic ≈ Ic_q + gm·vbe + (gm / 2Vt)·vbe² + ...
+        // The vbe² term is always positive → asymmetric Ic swing → H2.
+        // In the real JE-990, ~125 dB loop gain suppresses this. Our WDF
+        // loop gain (~60 dB) is lower, so we analytically subtract the
+        // estimated even component scaled by a loop-gain-dependent factor.
+        //
+        // The correction is smooth, differentiable, and zero when vbe_ac=0,
+        // preserving Newton solver Jacobian continuity and injecting no DC.
+        {
+            const float gm = static_cast<float>(bjtLeaf_.getGm());
+
+            // Track DC component of input with a slow one-pole filter (~0.1% per sample)
+            lastInputDC_ += 0.001f * (input - lastInputDC_);
+            const float vbe_ac = input - lastInputDC_;
+
+            // Only apply correction when we have meaningful signal and valid gm
+            if (gm > kEpsilonF && std::abs(vbe_ac) > kEpsilonF)
+            {
+                // Estimated even (H2) component of collector current
+                const float Vt = config_.bjt.Vt;
+                const float Ic_even = (gm / (2.0f * Vt)) * vbe_ac * vbe_ac;
+
+                // Suppression factor eta: at high loop gain → 0 (full suppression),
+                // at low loop gain → 1 (no suppression, saturation regime).
+                // Loop gain estimated from instantaneous Vc_ac / vbe_ac ratio.
+                constexpr float kEvenSuppK = 0.6f;
+                constexpr float kEvenFloor = 0.15f;
+                constexpr float kEvenCeil  = 1.0f;
+
+                const float loopGainEst = std::abs(Vc_ac)
+                                         / (std::abs(vbe_ac) + 1e-10f);
+                float eta = 1.0f / (1.0f + kEvenSuppK
+                            * std::min(loopGainEst, 100.0f));
+                eta = std::clamp(eta, kEvenFloor, kEvenCeil);
+
+                // Correct: add (1-eta) * Ic_even * R_coll to Vc_ac.
+                // Since Vc_ac = -Ic_ac * R_coll, the even term (always positive)
+                // biases Vc_ac negative; we add a positive correction to cancel.
+                Vc_ac += (1.0f - eta) * Ic_even * config_.R_coll_AC;
+            }
+        }
+
+        // Soft saturation: models the active mirror compression as Q6 approaches rails.
+        // Vc_clip = 90% of Vcc (~21.6V for Vcc=24V).
+        // tanh soft-clips smoothly, preserving the Newton Jacobian continuity.
+        // The ±200V hard clamp was a numerical guard that never activated in
+        // normal operation; this tanh model activates at realistic signal levels
+        // and generates asymmetric soft-clipping harmonics from the VAS.
+        {
+            const float Vc_clip = config_.Vcc * 0.9f;
+            Vc_ac = Vc_clip * std::tanh(Vc_ac / Vc_clip);
+        }
 
         // 4. Emitter degeneration: Av_degen = 1/(1 + gm × R_emitter)
         if (config_.R_emitter > 0.0f)
@@ -255,11 +305,12 @@ public:
     struct AcSnap {
         typename NonlinearLeaf::AcState bjt;
         float millerState, outputVoltage;
+        float lastInputDC;
     };
 
     AcSnap saveAcState() const
     {
-        return { bjtLeaf_.saveAcState(), millerState_, outputVoltage_ };
+        return { bjtLeaf_.saveAcState(), millerState_, outputVoltage_, lastInputDC_ };
     }
 
     void restoreAcState(const AcSnap& s)
@@ -267,6 +318,7 @@ public:
         bjtLeaf_.restoreAcState(s.bjt);
         millerState_   = s.millerState;
         outputVoltage_ = s.outputVoltage;
+        lastInputDC_   = s.lastInputDC;
     }
 
 private:
@@ -286,6 +338,8 @@ private:
 
     float outputDC_      = 0.0f;        // Frozen DC offset
     float outputVoltage_ = 0.0f;
+
+    float lastInputDC_   = 0.0f;        // Slow DC tracker for even-harmonic suppression
 };
 
 } // namespace transfo

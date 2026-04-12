@@ -1,5 +1,6 @@
 #pragma once
 
+// [ARCHIVED] Part of JE990Path — on hold pending Sprint 4 BJT tuning.
 // =============================================================================
 // DiffPairWDF — WDF Differential Pair stage for the JE-990 discrete op-amp.
 //
@@ -173,11 +174,13 @@ public:
         if (hasInductors_ && config.L_emitter > 0.0f)
         {
             const float fc = config.R_emitter / (kTwoPif * config.L_emitter);
+            // Prewarp cutoff for sample-rate invariance
+            const float fc_w = prewarpHz(fc, sampleRate_);
             // Discrete first-order LP coefficient for tracking the inductive
             // component: alpha = 1 / (1 + fc * Ts * 2*pi) ... but we want
             // HPF behavior (inductor passes more at HF), so:
-            //   inductorAlpha_ = exp(-Ts * 2*pi*fc) -- time-domain decay
-            inductorAlpha_ = std::exp(-Ts_ * kTwoPif * fc);
+            //   inductorAlpha_ = exp(-Ts * 2*pi*fc_w) -- time-domain decay
+            inductorAlpha_ = std::exp(-Ts_ * kTwoPif * fc_w);
         }
 
         // -- Output scaling ---------------------------------------------------

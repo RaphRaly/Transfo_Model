@@ -105,6 +105,13 @@ public:
         bjtLeaf_.configure(config.bjt);
         bjtLeaf_.prepare(sampleRate);
 
+        // Set port resistance from quiescent Ic (not the default 1mA).
+        // Prevents startup lockup for high-current stages like BDY61 @70mA
+        // where rbe(1mA)=1551Ω vs rbe(36mA)=43Ω — a 35× mismatch that
+        // attenuates the WDF response and traps the BJT in cutoff.
+        const float Ic_q = config.Vcc / (2.0f * config.R_collector);
+        bjtLeaf_.setPortResistance(config.bjt.rbe(Ic_q));
+
         // ── Input coupling capacitor (optional) ──────────────────────────────
         hasCouplingCap_ = (config.C_input > 0.0f);
         if (hasCouplingCap_)
@@ -133,7 +140,9 @@ public:
         if (hasMillerCap_)
         {
             const float fc = 1.0f / (kTwoPif * config.R_collector * config.C_miller);
-            const float omega = kTwoPif * fc * Ts_;
+            // Prewarp cutoff for sample-rate invariance
+            const float fc_w = prewarpHz(fc, sampleRate_);
+            const float omega = kTwoPif * fc_w * Ts_;
             millerAlpha_ = omega / (1.0f + omega);
         }
 
@@ -147,8 +156,11 @@ public:
         {
             // Time constant tau = R_emitter * C_bypass
             // alpha_bypass = exp(-Ts / tau) for a discrete first-order filter
-            const float tau = config.R_emitter * config.C_bypass;
-            bypassAlpha_ = std::exp(-Ts_ / tau);
+            // Prewarp the corner frequency for sample-rate invariance
+            const float fc_bypass = 1.0f / (kTwoPif * config.R_emitter * config.C_bypass);
+            const float fc_w = prewarpHz(fc_bypass, sampleRate_);
+            const float tau_w = 1.0f / (kTwoPif * fc_w);
+            bypassAlpha_ = std::exp(-Ts_ / tau_w);
         }
 
         // ── DC bias for forward-active operation ──────────────────────────────
@@ -195,6 +207,34 @@ public:
         millerState_ = Vc_last_;
         outputVoltage_ = 0.0f;
         dcSettleCount_ = 0;
+    }
+
+    // ── Dynamic parameter update ────────────────────────────────────────────
+
+    /// Change the emitter degeneration resistance at runtime [Ohm].
+    /// Affects AC gain: Av = -Rc / (Re + 1/gm).
+    /// Does NOT affect DC bias (Ic_target is set by Rc and Vcc).
+    void setEmitterResistance(float Re)
+    {
+        config_.R_emitter = std::max(Re, 0.0f);
+    }
+
+    /// Skip the fast DC settling phase (alpha=0.01) and use slow tracking
+    /// immediately. Call after reset() when the stage operates inside a
+    /// Newton feedback loop (the Newton solver handles settling).
+    void skipFastSettle()
+    {
+        dcSettleCount_ = kDCSettleSamples;
+    }
+
+    /// Disable DC tracker entirely for DC-coupled stages.
+    /// On DC-coupled internal nodes (e.g., AM TR1→TR2→TR3), the DC from
+    /// one stage IS the bias for the next. Removing it via the tracker
+    /// destroys the inter-stage bias and causes cutoff in later stages.
+    /// Output becomes raw Vc (includes DC operating point).
+    void setDCCoupled(bool dcCoupled)
+    {
+        dcCoupled_ = dcCoupled;
     }
 
     // ── Audio processing ─────────────────────────────────────────────────────
@@ -322,19 +362,22 @@ public:
             Vc = millerState_;
         }
 
-        // ── Step 8: Output = AC component of collector voltage ───────────────
-        // Subtract DC operating point for a cleaner signal.
-        // The DC estimate tracks slowly to handle bias drift.
-        if (dcSettleCount_ < kDCSettleSamples)
+        // ── Step 8: Output ────────────────────────────────────────────────────
+        // DC-coupled mode: output raw Vc (preserves inter-stage DC bias).
+        // AC-coupled mode: subtract DC operating point for cleaner signal.
+        if (dcCoupled_)
         {
-            // During initial settling, track DC rapidly
+            // No DC tracking — raw collector voltage.
+            // The feedback loop (C4/39K) handles DC stability.
+            Vc_dc_ = 0.0f;
+        }
+        else if (dcSettleCount_ < kDCSettleSamples)
+        {
             Vc_dc_ += 0.01f * (Vc - Vc_dc_);
             ++dcSettleCount_;
         }
         else
         {
-            // Steady state: very slow DC tracking (sub-Hz)
-            // alpha_dc = 1 / (1 + 2*pi*f_dc*Ts), f_dc ~ 0.1 Hz
             constexpr float kDCTrackAlpha = 0.0001f;
             Vc_dc_ += kDCTrackAlpha * (Vc - Vc_dc_);
         }
@@ -469,6 +512,7 @@ private:
     // ── DC settling ──────────────────────────────────────────────────────────
     static constexpr int kDCSettleSamples = 4096;  // ~93ms at 44.1kHz
     int dcSettleCount_ = 0;
+    bool dcCoupled_    = false;          // True = skip DC tracker (raw Vc output)
 
 };
 
