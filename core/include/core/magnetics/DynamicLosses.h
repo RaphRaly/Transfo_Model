@@ -141,6 +141,56 @@ public:
         B_prev_committed_ = B_prev_backup_;
     }
 
+    // ─── Field-separated Bertotti correction (Problem #5 fix) ──────────────
+    //
+    // Instead of subtracting H_dyn from H_applied BEFORE the J-A solve
+    // (which can flip H_eff sign when H_applied is small), we:
+    //   1. Let J-A solve with H_applied alone → B_static
+    //   2. Compute H_dyn from dB_static/dt
+    //   3. Apply safety clamp: |H_dyn| < safetyFactor × |H_applied|
+    //   4. Return a B correction term to add to B_static
+    //
+    // The correction widens the B-H loop at high frequencies (correct physics)
+    // without ever flipping the applied field direction.
+    //
+    // Reference: Baghel & Kulkarni IEEE Trans. Magn. 2014 (field separation);
+    //            Mousavi & Engdahl IET CEM 2014 (local linearization).
+    struct FieldSepResult {
+        double H_dyn;           // Raw dynamic field [A/m]
+        double H_dyn_clamped;   // Safety-clamped dynamic field
+        double B_correction;    // Additive correction to B_static
+    };
+
+    FieldSepResult computeFieldSeparated(double B_static, double H_applied,
+                                          double cascadeEddyFactor = 1.0) const
+    {
+        FieldSepResult r{};
+
+        // 1. dB_static/dt via backward difference from committed B
+        const double dBdt_static = sampleRate_ * (B_static - B_prev_committed_);
+
+        // 2. Compute raw dynamic field
+        r.H_dyn = computeHfromDBdt(dBdt_static);
+
+        // 3. Safety clamp: prevent |H_dyn| from exceeding 80% of |H_applied|.
+        //    This is the structural guarantee against sign inversion.
+        constexpr double kSafetyFactor = 0.8;
+        r.H_dyn_clamped = r.H_dyn;
+        const double H_limit = kSafetyFactor * std::abs(H_applied);
+        if (std::abs(r.H_dyn) > H_limit && std::abs(H_applied) > 1e-10)
+        {
+            r.H_dyn_clamped = std::copysign(H_limit, r.H_dyn);
+        }
+
+        // 4. B correction: the dynamic field widens the B-H loop.
+        //    ΔB = μ₀ × H_dyn_clamped × cascadeEddyFactor
+        //    Added to B_static to produce B_corrected.
+        r.B_correction = 1.2566370614359173e-6  // μ₀
+                        * r.H_dyn_clamped * cascadeEddyFactor;
+
+        return r;
+    }
+
     // ─── Legacy API (backward compatibility with ObjectiveFunction) ─────────
     // Alias for commitState() — used by identification pipeline.
     void updateState(double B_current)

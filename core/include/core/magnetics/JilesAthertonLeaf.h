@@ -96,12 +96,18 @@ public:
     if (K_geo_ > 0.0f) {
       // ================================================================
       // Electrical-domain WDF: trapezoidal companion model
+      // with 2x sub-stepping for sample-rate invariance (A.5).
       //
       // The outer NR solves for H such that the flux-balance residual
-      //   g(H) = N*A*(B_JA(H) - B_prev) - (Ts/2)*(a - Z*(N/le)*H + V_prev)
+      //   g(H) = N*A*(B_JA(H) - B_prev) - (Ts_sub/2)*(a_sub - Z*(N/le)*H + V_prev)
       // is zero. This correctly couples the J-A nonlinear B(H) to the
       // WDF port via history state (B_prev, V_prev), making the inductor
       // behave reactively instead of as a matched resistive load.
+      //
+      // Sub-stepping: split each sample period into kJaSub=2 equal
+      // sub-steps with linearly interpolated incident wave. This halves
+      // the dH step seen by the J-A trapezoidal integrator, reducing
+      // the sample-rate dependence of effective Lm and THD.
       //
       // Ref: Giampiccolo/Bernardini/Sarti JAES 2021 (eq. 11);
       //      Werner CCRMA 2016 (companion model approach)
@@ -113,84 +119,125 @@ public:
       const double Ts = 1.0 / sampleRate_;
       const double a = static_cast<double>(a_m);
 
-      // Warm-start H from previous converged value
-      double H = H_prev_e_;
-
-      constexpr int kMaxOuterIter = 8;
-      constexpr double kOuterTol = 1e-8;
+      // ── 2x sub-stepping (A.5) ──
+      constexpr int kJaSub = 2;
+      const double Ts_sub = Ts / static_cast<double>(kJaSub);
+      const double fs_sub = sampleRate_ * static_cast<double>(kJaSub);
 
       double B_new = 0.0;
       double M_new = 0.0;
+      double H = H_prev_e_;
+      double b_m_last = 0.0;
 
-      for (int iter = 0; iter < kMaxOuterIter; ++iter) {
-        // 1. Compute H_effective with Bertotti dynamic losses
-        double H_eff = H;
+      for (int sub = 0; sub < kJaSub; ++sub) {
+        // Linearly interpolate incident wave for this sub-step
+        const double frac =
+            static_cast<double>(sub + 1) / static_cast<double>(kJaSub);
+        const double a_sub = a_prev_e_ + frac * (a - a_prev_e_);
+
+        // Use committed M at the start of each sub-step
+        const double M_c_sub = hystModel_.getMagnetization();
+
+        constexpr int kMaxOuterIter = 8;
+        constexpr double kOuterTol = 1e-8;
+
+        for (int iter = 0; iter < kMaxOuterIter; ++iter) {
+          // 1. Compute H_effective with Bertotti dynamic losses
+          //    [Problem #5 fix] Safety clamp: |H_dyn| < 0.8×|H|
+          double H_eff = H;
+          if (dynLosses_.isEnabled()) {
+            const double chi =
+                std::max(0.0, hystModel_.getInstantaneousSusceptibility());
+            const double B_pred = kMu0 * (H + M_c_sub);
+            const double dBdt_raw =
+                fs_sub * (B_pred - dynLosses_.getBprevCommitted());
+            const double G = dynLosses_.getK1() * fs_sub * kMu0 * chi;
+            const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
+            double H_dyn = dynLosses_.computeHfromDBdt(dBdt);
+            // Safety clamp: prevent sign inversion at low H
+            constexpr double kSafety = 0.8;
+            const double H_limit = kSafety * std::abs(H);
+            if (std::abs(H_dyn) > H_limit && std::abs(H) > 1e-10)
+                H_dyn = std::copysign(H_limit, H_dyn);
+            H_eff = H - H_dyn;
+          }
+
+          // 2. J-A solve: M(H_eff)
+          M_new = hystModel_.solveImplicitStep(H_eff);
+          B_new = kMu0 * (H + M_new);
+
+          // 3. Trapezoidal flux balance residual (using Ts_sub)
+          //    g(H) = N*A*(B_new - B_prev) - (Ts_sub/2)*(a_sub - Z*(N/le)*H + V_prev)
+          const double flux_term = N_turns * A_eff * (B_new - B_prev_e_);
+          const double voltage_term =
+              (Ts_sub / 2.0) *
+              (a_sub - Z * (N_turns / le) * H + V_prev_e_);
+          const double g = flux_term - voltage_term;
+
+          // 4. Jacobian: g'(H) = N*A*dB/dH + (Ts_sub/2)*Z*(N/le)
+          const double dMdH = hystModel_.getInstantaneousSusceptibility();
+          const double dBdH = kMu0 * (1.0 + std::max(dMdH, 0.0));
+          const double g_prime =
+              N_turns * A_eff * dBdH +
+              (Ts_sub / 2.0) * Z * (N_turns / le);
+
+          if (std::abs(g_prime) < 1e-30)
+            break;
+
+          const double dH = -g / g_prime;
+          H += std::clamp(dH, -1000.0, 1000.0); // Damped step
+
+          // Rollback J-A tentative state for next iteration (if not converged)
+          hystModel_.rollbackState();
+
+          if (std::abs(dH) < kOuterTol * (1.0 + std::abs(H)))
+            break;
+        }
+
+        // Final J-A solve with converged H for this sub-step
+        //    [Problem #5 fix] Same safety clamp as iterative path
+        double H_eff_final = H;
         if (dynLosses_.isEnabled()) {
           const double chi =
               std::max(0.0, hystModel_.getInstantaneousSusceptibility());
-          const double B_pred = kMu0 * (H + M_c);
-          const double dBdt_raw = dynLosses_.computeDBdt(B_pred);
-          const double G =
-              dynLosses_.getK1() * sampleRate_ * kMu0 * chi;
+          const double B_pred = kMu0 * (H + M_c_sub);
+          const double dBdt_raw =
+              fs_sub * (B_pred - dynLosses_.getBprevCommitted());
+          const double G = dynLosses_.getK1() * fs_sub * kMu0 * chi;
           const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
-          const double H_dyn = dynLosses_.computeHfromDBdt(dBdt);
-          H_eff = H - H_dyn;
+          double H_dyn_final = dynLosses_.computeHfromDBdt(dBdt);
+          constexpr double kSafety = 0.8;
+          const double H_limit = kSafety * std::abs(H);
+          if (std::abs(H_dyn_final) > H_limit && std::abs(H) > 1e-10)
+              H_dyn_final = std::copysign(H_limit, H_dyn_final);
+          H_eff_final = H - H_dyn_final;
         }
-
-        // 2. J-A solve: M(H_eff)
-        M_new = hystModel_.solveImplicitStep(H_eff);
+        M_new = hystModel_.solveImplicitStep(H_eff_final);
         B_new = kMu0 * (H + M_new);
 
-        // 3. Trapezoidal flux balance residual
-        //    g(H) = N*A*(B_new - B_prev) - (Ts/2)*(a - Z*(N/le)*H + V_prev)
-        const double flux_term = N_turns * A_eff * (B_new - B_prev_e_);
-        const double voltage_term =
-            (Ts / 2.0) * (a - Z * (N_turns / le) * H + V_prev_e_);
-        const double g = flux_term - voltage_term;
+        // Compute reflected wave from Kirchhoff variables
+        const double I_m = (N_turns / le) * H;
+        b_m_last = a_sub - 2.0 * Z * I_m;
+        const double V_m = (a_sub + b_m_last) / 2.0;
 
-        // 4. Jacobian: g'(H) = N*A*dB/dH + (Ts/2)*Z*(N/le)
-        const double dMdH = hystModel_.getInstantaneousSusceptibility();
-        const double dBdH = kMu0 * (1.0 + std::max(dMdH, 0.0));
-        const double g_prime =
-            N_turns * A_eff * dBdH + (Ts / 2.0) * Z * (N_turns / le);
+        // Commit intermediate state for next sub-step (advances H_prev_,
+        // dMdH_prev_ in HysteresisModel and B_prev in DynamicLosses)
+        if (sub < kJaSub - 1) {
+          hystModel_.commitState();
+          dynLosses_.commitState(B_new);
+          B_prev_e_ = B_new;
+          V_prev_e_ = V_m;
+          H_prev_e_ = H;
+        } else {
+          // Last sub-step: store as tentative for outer commit/rollback
+          H_tentative_e_ = H;
+          B_tentative_e_ = B_new;
+          V_tentative_e_ = V_m;
+        }
+      } // end sub-step loop
 
-        if (std::abs(g_prime) < 1e-30)
-          break;
-
-        const double dH = -g / g_prime;
-        H += std::clamp(dH, -1000.0, 1000.0); // Damped step
-
-        // Rollback J-A tentative state for next iteration (if not converged)
-        hystModel_.rollbackState();
-
-        if (std::abs(dH) < kOuterTol * (1.0 + std::abs(H)))
-          break;
-      }
-
-      // Final J-A solve with converged H
-      double H_eff_final = H;
-      if (dynLosses_.isEnabled()) {
-        const double chi =
-            std::max(0.0, hystModel_.getInstantaneousSusceptibility());
-        const double B_pred = kMu0 * (H + M_c);
-        const double dBdt_raw = dynLosses_.computeDBdt(B_pred);
-        const double G =
-            dynLosses_.getK1() * sampleRate_ * kMu0 * chi;
-        const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
-        H_eff_final = H - dynLosses_.computeHfromDBdt(dBdt);
-      }
-      M_new = hystModel_.solveImplicitStep(H_eff_final);
-      B_new = kMu0 * (H + M_new);
-
-      // Compute reflected wave from Kirchhoff variables
-      const double I_m = (N_turns / le) * H;
-      const double b_m = a - 2.0 * Z * I_m;
-      const double V_m = (a + b_m) / 2.0;
-
-      // Store tentative state for commit/rollback
-      H_tentative_e_ = H;
-      B_tentative_e_ = B_new;
-      V_tentative_e_ = V_m;
+      // Update previous incident wave for next sample's interpolation
+      a_prev_e_ = a;
 
       H_applied = H; // For monitoring
 
@@ -199,7 +246,7 @@ public:
       B_tentative_ = B_new;
       lastB_ = static_cast<float>(B_tentative_);
 
-      return static_cast<float>(b_m);
+      return static_cast<float>(b_m_last);
     }
 
     // ==================================================================
@@ -209,23 +256,16 @@ public:
     // 1. H from wave variable: H = (a_m - alpha2*M) / alpha1
     H_applied = (static_cast<double>(a_m) - alpha2_ * M_c) / alpha1_;
 
-    // 2. Dynamic Bertotti extension
-    double H_effective = H_applied;
+    // 2. Solve J-A with FULL H_applied (field separation — Problem #5 fix)
+    //    No pre-subtraction of H_dyn; Bertotti applied post-J-A via B correction.
+    const double M_new = hystModel_.solveImplicitStep(H_applied);
 
+    // 3. Compute B_static and apply field-separated Bertotti correction
+    double B_result = kMu0 * (H_applied + M_new);
     if (dynLosses_.isEnabled()) {
-      const double chi =
-          std::max(0.0, hystModel_.getInstantaneousSusceptibility());
-      const double B_pred = kMu0 * (H_applied + M_c);
-      const double dBdt_raw = dynLosses_.computeDBdt(B_pred);
-      const double G =
-          dynLosses_.getK1() * dynLosses_.getSampleRate() * kMu0 * chi;
-      const double dBdt = dBdt_raw * (1.0 + chi) / (1.0 + G);
-      const double H_dynamic = dynLosses_.computeHfromDBdt(dBdt);
-      H_effective = H_applied - H_dynamic;
+      const auto fsep = dynLosses_.computeFieldSeparated(B_result, H_applied);
+      B_result += fsep.B_correction;
     }
-
-    // 3. Solve J-A: Newton-Raphson trapezoidal
-    const double M_new = hystModel_.solveImplicitStep(H_effective);
 
     // 4. Compute reflected wave b_m (legacy magnetic-domain)
     const double dM = M_new - M_c;
@@ -234,7 +274,7 @@ public:
 
     // 5. Store physical state for BHScope monitoring
     lastH_ = static_cast<float>(H_applied);
-    B_tentative_ = kMu0 * (H_applied + M_new);
+    B_tentative_ = B_result;
     lastB_ = static_cast<float>(B_tentative_);
 
     return static_cast<float>(b_m);
@@ -304,6 +344,7 @@ public:
     B_prev_e_ = 0.0;
     V_prev_e_ = 0.0;
     H_prev_e_ = 0.0;
+    a_prev_e_ = 0.0;
     B_tentative_e_ = 0.0;
     V_tentative_e_ = 0.0;
     H_tentative_e_ = 0.0;
@@ -328,6 +369,7 @@ private:
   double B_prev_e_ = 0.0;     // B[n-1] committed
   double V_prev_e_ = 0.0;     // V[n-1] committed (port voltage)
   double H_prev_e_ = 0.0;     // H[n-1] for warm-start
+  double a_prev_e_ = 0.0;     // Previous incident wave for sub-step interpolation (A.5)
   // Tentative values (for iterative rollback — retained for future use)
   double B_tentative_e_ = 0.0;
   double V_tentative_e_ = 0.0;

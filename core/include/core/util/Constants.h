@@ -61,4 +61,18 @@ inline float softSatDeriv(float x, float limit)
     return 1.0f - t * t;
 }
 
+/// Bilinear frequency prewarp: maps an analog cutoff frequency fHz so that
+/// the BLT-discretized filter matches the analog response exactly at fHz.
+/// Without prewarping, the bilinear transform compresses frequencies toward
+/// Nyquist, causing sample-rate-dependent filter behaviour.
+///
+///   fc_warped = (fs / pi) * tan(pi * fHz / fs)
+///
+/// For fHz << fs, fc_warped ~ fHz (negligible correction).
+/// For fHz near Nyquist, the correction is significant.
+inline float prewarpHz(float fHz, float fs)
+{
+    return (fs / kPif) * std::tan(kPif * fHz / fs);
+}
+
 } // namespace transfo

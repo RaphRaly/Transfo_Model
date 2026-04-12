@@ -24,6 +24,7 @@
 #include "../util/Constants.h"
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 namespace transfo {
 
@@ -86,10 +87,20 @@ public:
         if (delta * diff > 0.0)
         {
             double denom = delta * params_.k - params_.alpha * diff;
-            if (std::abs(denom) < 1e-8)
-                denom = (denom >= 0.0) ? 1e-8 : -1e-8;
+            // [Fix A] Scaled epsilon: prevents denominator singularity when
+            // |alpha*(Man-M)| → k (near reversal from deep saturation).
+            // Scales with k for material-independence (Zhao 2024).
+            const double eps_denom = std::max(1e-6, 1e-4 * static_cast<double>(params_.k));
+            if (std::abs(denom) < eps_denom)
+                denom = std::copysign(eps_denom, denom);
 
             dMdH_irrev = (1.0 - params_.c) * diff / denom;
+
+            // Clamp irrev susceptibility to physically plausible range.
+            // Max reasonable χ ≈ 2·Ms/a (well above normal operation).
+            const double irrev_max = 2.0 * static_cast<double>(params_.Ms)
+                                   / static_cast<double>(params_.a);
+            dMdH_irrev = std::clamp(dMdH_irrev, -irrev_max, irrev_max);
         }
 
         // Reversible component
@@ -132,8 +143,10 @@ public:
         if (delta * diff > 0.0)
         {
             double denom = delta * params_.k - params_.alpha * diff;
-            if (std::abs(denom) < 1e-8)
-                denom = (denom >= 0.0) ? 1e-8 : -1e-8;
+            // [Fix A] Same scaled epsilon as computeRHS for Jacobian consistency.
+            const double eps_denom = std::max(1e-6, 1e-4 * static_cast<double>(params_.k));
+            if (std::abs(denom) < eps_denom)
+                denom = std::copysign(eps_denom, denom);
 
             irrev_val = (1.0 - params_.c) * diff / denom;
             const double dDenom_dM = -params_.alpha * dDiff_dM;
@@ -190,10 +203,17 @@ public:
         double M_est = 2.0 * M_committed_ - M_prev_committed_;
 
         // [v3] Soft-recovery from deep saturation.
+        // [v4] Slope-aware warm-start: reduce extrapolation when M changes fast
+        //       near saturation, then blend toward anhysteretic.
         const double satRatio = std::abs(M_committed_)
                               / (static_cast<double>(params_.Ms) + 1e-30);
         if (satRatio > 0.95)
         {
+            const double slope = M_committed_ - M_prev_committed_;
+            const double satAwareness = 1.0 / (1.0 + 0.25 * std::abs(slope));
+            // In deep saturation with fast-changing M, reduce extrapolation
+            M_est = M_committed_ + satAwareness * slope;
+            // Blend toward anhysteretic
             const double Heff = H_new + params_.alpha * M_committed_;
             const double Man = params_.Ms * anhyst_.evaluateD(Heff / params_.a);
             const double blend = std::min((satRatio - 0.95) * 10.0, 0.5);
@@ -204,7 +224,8 @@ public:
         lastIterCount_ = 0;
         lastConvMode_ = ConvMode::NR;
 
-        // ── Newton-Raphson with damping ─────────────────────────────────────
+        // ── Newton-Raphson with monotone backtracking line search [v4] ─────
+        double g_current = std::numeric_limits<double>::max(); // track |g| for line search
         for (int i = 0; i < maxIter_; ++i)
         {
             lastIterCount_ = i + 1;
@@ -212,8 +233,9 @@ public:
             const double dMdH_new = computeRHS(M_est, H_new, newDelta);
 
             // H-domain trapezoidal: ΔM = ½(F[n] + F[n-1])·ΔH
-            const double g = M_est - M_committed_
-                           - 0.5 * (dMdH_new + dMdH_prev_) * dH;
+            double g = M_est - M_committed_
+                     - 0.5 * (dMdH_new + dMdH_prev_) * dH;
+            g_current = std::abs(g);
 
             const double dfdM = computeJacobian(M_est, H_new, newDelta);
             double g_prime = 1.0 - 0.5 * dfdM * dH;
@@ -223,17 +245,58 @@ public:
 
             double delta_M = -g / g_prime;
 
-            // V2.2: Damping when step is too large
-            if (std::abs(delta_M) > std::abs(M_est) * 0.5 + 1.0)
+            // ── [Fix B] Armijo backtracking line-search ──────────────
+            // 6 steps (λ down to 1/64) + reverse-direction fallback
+            // when the Jacobian sign is wrong near reversal points.
+            // Merit function φ(λ) = g² must strictly decrease.
+            const double phi_0 = g * g;
+            double lambda = 1.0;
+            bool accepted = false;
+            for (int ls = 0; ls < 6; ++ls)
             {
-                delta_M *= 0.5;
+                const double M_cand = M_est + lambda * delta_M;
+                const double dMdH_cand = computeRHS(M_cand, H_new, newDelta);
+                const double g_cand = M_cand - M_committed_
+                                    - 0.5 * (dMdH_cand + dMdH_prev_) * dH;
+
+                if (std::isfinite(g_cand) && g_cand * g_cand < phi_0)
+                {
+                    M_est = M_cand;
+                    g_current = std::abs(g_cand);
+                    accepted = true;
+                    if (ls > 0) lastConvMode_ = ConvMode::DampedNR;
+                    break;
+                }
+                lambda *= 0.5;
+            }
+
+            if (!accepted)
+            {
+                // Forward direction exhausted — try reverse (Jacobian sign flip).
+                // At reversal points, the analytical Jacobian can have the wrong
+                // sign, making delta_M point uphill. Trying -delta_M rescues this.
+                const double M_rev = M_est - 0.0625 * delta_M;
+                const double dMdH_rev = computeRHS(M_rev, H_new, newDelta);
+                const double g_rev = M_rev - M_committed_
+                                   - 0.5 * (dMdH_rev + dMdH_prev_) * dH;
+                if (std::isfinite(g_rev) && g_rev * g_rev < phi_0)
+                {
+                    M_est = M_rev;
+                    g_current = std::abs(g_rev);
+                }
+                else
+                {
+                    // Last resort: minimal forward step
+                    M_est += (1.0 / 64.0) * delta_M;
+                }
                 lastConvMode_ = ConvMode::DampedNR;
             }
 
-            M_est += delta_M;
-
+            // Convergence check on step size
+            const double effectiveStep = accepted ? lambda * std::abs(delta_M)
+                                                  : 0.0625 * std::abs(delta_M);
             const double tol = std::max(tolerance_, tolerance_ * std::abs(M_est));
-            if (std::abs(delta_M) < tol)
+            if (effectiveStep < tol)
             {
                 lastConverged_ = true;
                 break;
@@ -244,8 +307,8 @@ public:
         // Fix 2: Bracket around the predictor instead of ±1.1·Ms.
         // The old global bracket (resolution ≈ 4700 after 8 steps) produced
         // midpoint artifacts like M=2363 when the true root was near 37.
-        // Local bracket + adaptive expansion + 20 iterations gives sub-1 A/m
-        // resolution near the correct root.
+        // Local bracket + adaptive expansion + 8 iterations gives span/256
+        // resolution near the correct root. Total max = 8 NR + 8 bisect = 16.
         if (!lastConverged_)
         {
             lastConvMode_ = ConvMode::Bisection;
@@ -274,11 +337,27 @@ public:
                 g_hi = gFunc(M_hi);
             }
 
-            // 20 bisection iterations → resolution ≈ span / 2^20
-            for (int bi = 0; bi < 20; ++bi)
+            // [Fix C] Adaptive bisection: iteration count scales with bracket
+            // span so wide brackets get more iterations (up to 14).
+            // Resolution target: span / 2^N < 0.1 A/m.
+            const double bisectSpan = M_hi - M_lo;
+            const int kBisectionIter = std::clamp(
+                static_cast<int>(std::ceil(std::log2(std::max(1.0, bisectSpan / 0.1)))) + 1,
+                8, 14);
+            for (int bi = 0; bi < kBisectionIter; ++bi)
             {
                 double M_mid = 0.5 * (M_lo + M_hi);
                 double g_mid = gFunc(M_mid);
+
+                // NaN safety: if midpoint diverged, shrink toward safer side
+                if (!std::isfinite(g_mid))
+                {
+                    if (std::isfinite(g_lo))
+                        M_hi = M_mid;
+                    else
+                        M_lo = M_mid;
+                    continue;
+                }
 
                 if (g_lo * g_mid <= 0.0)
                     M_hi = M_mid;
@@ -289,8 +368,29 @@ public:
                 }
             }
             M_est = 0.5 * (M_lo + M_hi);
+
+            // NR polish: one Newton step from bisection result to refine
+            // to machine precision without risking divergence.
+            {
+                const double dMdH_pol = computeRHS(M_est, H_new, newDelta);
+                const double g_pol = M_est - M_committed_
+                                   - 0.5 * (dMdH_pol + dMdH_prev_) * dH;
+                const double dfdM_pol = computeJacobian(M_est, H_new, newDelta);
+                const double gp_pol = 1.0 - 0.5 * dfdM_pol * dH;
+                if (std::abs(gp_pol) > 1e-15)
+                {
+                    const double M_polished = M_est - 0.5 * g_pol / gp_pol;
+                    // Accept only if polish improves residual
+                    const double dMdH_check = computeRHS(M_polished, H_new, newDelta);
+                    const double g_check = M_polished - M_committed_
+                                         - 0.5 * (dMdH_check + dMdH_prev_) * dH;
+                    if (std::isfinite(g_check) && std::abs(g_check) < std::abs(g_pol))
+                        M_est = M_polished;
+                }
+            }
+
             lastConverged_ = true;
-            lastIterCount_ += 20;
+            lastIterCount_ += kBisectionIter;
         }
 
         // Safety clamp
