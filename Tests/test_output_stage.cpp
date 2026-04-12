@@ -1,7 +1,7 @@
 // =============================================================================
-// Test: OutputStageWDF & ABCrossfade — Sprint 5 validation
+// Test: OutputStage & ABCrossfade — Sprint 5 validation
 //
-// Standalone test (no JUCE dependency) that validates the OutputStageWDF
+// Standalone test (no JUCE dependency) that validates the OutputStage
 // (T2 output transformer + A/B crossfade) and its ABCrossfade component.
 //
 // Test groups:
@@ -11,14 +11,14 @@
 //   4.  ABCrossfade: Equal power at midpoint
 //   5.  ABCrossfade: Click-free transition (no discontinuity)
 //   6.  ABCrossfade: Transition duration
-//   7.  OutputStageWDF: Construction and prepare
-//   8.  OutputStageWDF: Signal passthrough (non-silent)
-//   9.  OutputStageWDF: T2 insertion loss approximately -1.1 dB
-//  10.  OutputStageWDF: Path switching produces different outputs
-//  11.  OutputStageWDF: Output impedance range
-//  12.  OutputStageWDF: Numerical stability
-//  13.  OutputStageWDF: processBlock consistency
-//  14.  OutputStageWDF: Reset clears state
+//   7.  OutputStage: Construction and prepare
+//   8.  OutputStage: Signal passthrough (non-silent)
+//   9.  OutputStage: T2 insertion loss approximately -1.1 dB
+//  10.  OutputStage: Path switching produces different outputs
+//  11.  OutputStage: Output impedance range
+//  12.  OutputStage: Numerical stability
+//  13.  OutputStage: processBlock consistency
+//  14.  OutputStage: Reset clears state
 //
 // Pattern: standalone test, same CHECK macro as other tests in this project.
 //
@@ -26,7 +26,7 @@
 //            SPRINT_PLAN_PREAMP.md Sprint 5
 // =============================================================================
 
-#include "../core/include/core/preamp/OutputStageWDF.h"
+#include "../core/include/core/preamp/OutputStage.h"
 #include "../core/include/core/preamp/ABCrossfade.h"
 #include "../core/include/core/model/TransformerConfig.h"
 #include "../core/include/core/magnetics/JilesAthertonLeaf.h"
@@ -227,28 +227,28 @@ void test6_abcrossfade_transition_duration()
 }
 
 // =============================================================================
-// TEST 7 — OutputStageWDF: Construction and prepare
+// TEST 7 — OutputStage: Construction and prepare
 // =============================================================================
 
 void test7_output_stage_construction()
 {
-    std::cout << "\n--- Test 7: OutputStageWDF Construction and prepare ---" << std::endl;
+    std::cout << "\n--- Test 7: OutputStage Construction and prepare ---" << std::endl;
 
-    transfo::OutputStageWDF<JALeaf> stage;
+    transfo::OutputStage<JALeaf> stage;
     stage.prepare(44100.0f, makeT2Config());
 
-    CHECK(true, "OutputStageWDF<CPWLLeaf> prepare() without crash");
+    CHECK(true, "OutputStage<CPWLLeaf> prepare() without crash");
 }
 
 // =============================================================================
-// TEST 8 — OutputStageWDF: Signal passthrough (non-silent)
+// TEST 8 — OutputStage: Signal passthrough (non-silent)
 // =============================================================================
 
 void test8_output_stage_passthrough()
 {
-    std::cout << "\n--- Test 8: OutputStageWDF Signal passthrough ---" << std::endl;
+    std::cout << "\n--- Test 8: OutputStage Signal passthrough ---" << std::endl;
 
-    transfo::OutputStageWDF<JALeaf> stage;
+    transfo::OutputStage<JALeaf> stage;
     stage.prepare(44100.0f, makeT2Config());
     stage.setPath(0.0f);  // Path A
 
@@ -278,14 +278,14 @@ void test8_output_stage_passthrough()
 }
 
 // =============================================================================
-// TEST 9 — OutputStageWDF: T2 insertion loss approximately -1.1 dB
+// TEST 9 — OutputStage: T2 insertion loss approximately -1.1 dB
 // =============================================================================
 
 void test9_output_stage_insertion_loss()
 {
-    std::cout << "\n--- Test 9: OutputStageWDF T2 insertion loss ---" << std::endl;
+    std::cout << "\n--- Test 9: OutputStage T2 insertion loss ---" << std::endl;
 
-    transfo::OutputStageWDF<JALeaf> stage;
+    transfo::OutputStage<JALeaf> stage;
     stage.prepare(44100.0f, makeT2Config());
     stage.setPath(0.0f);  // Path A
 
@@ -337,12 +337,12 @@ void test9_output_stage_insertion_loss()
 }
 
 // =============================================================================
-// TEST 10 — OutputStageWDF: Path switching produces different outputs
+// TEST 10 — OutputStage: Path switching produces different outputs
 // =============================================================================
 
 void test10_output_stage_path_switching()
 {
-    std::cout << "\n--- Test 10: OutputStageWDF Path switching ---" << std::endl;
+    std::cout << "\n--- Test 10: OutputStage Path switching ---" << std::endl;
 
     const float sampleRate = 44100.0f;
     const float freq = 1000.0f;
@@ -350,7 +350,7 @@ void test10_output_stage_path_switching()
     const int N = 2048;
 
     // --- Path A ---
-    transfo::OutputStageWDF<JALeaf> stageA;
+    transfo::OutputStage<JALeaf> stageA;
     stageA.prepare(sampleRate, makeT2Config());
     stageA.setPath(0.0f);
 
@@ -364,7 +364,7 @@ void test10_output_stage_path_switching()
     }
 
     // --- Path B ---
-    transfo::OutputStageWDF<JALeaf> stageB;
+    transfo::OutputStage<JALeaf> stageB;
     stageB.prepare(sampleRate, makeT2Config());
     stageB.setPath(1.0f);
 
@@ -400,14 +400,14 @@ void test10_output_stage_path_switching()
 }
 
 // =============================================================================
-// TEST 11 — OutputStageWDF: Output impedance range
+// TEST 11 — OutputStage: Output impedance range
 // =============================================================================
 
 void test11_output_impedance()
 {
-    std::cout << "\n--- Test 11: OutputStageWDF Output impedance range ---" << std::endl;
+    std::cout << "\n--- Test 11: OutputStage Output impedance range ---" << std::endl;
 
-    transfo::OutputStageWDF<JALeaf> stage;
+    transfo::OutputStage<JALeaf> stage;
     stage.prepare(44100.0f, makeT2Config());
 
     float zOut = stage.getOutputImpedance();
@@ -421,14 +421,14 @@ void test11_output_impedance()
 }
 
 // =============================================================================
-// TEST 12 — OutputStageWDF: Numerical stability
+// TEST 12 — OutputStage: Numerical stability
 // =============================================================================
 
 void test12_numerical_stability()
 {
-    std::cout << "\n--- Test 12: OutputStageWDF Numerical stability ---" << std::endl;
+    std::cout << "\n--- Test 12: OutputStage Numerical stability ---" << std::endl;
 
-    transfo::OutputStageWDF<JALeaf> stage;
+    transfo::OutputStage<JALeaf> stage;
     stage.prepare(44100.0f, makeT2Config());
 
     const float sampleRate = 44100.0f;
@@ -474,12 +474,12 @@ void test12_numerical_stability()
 }
 
 // =============================================================================
-// TEST 13 — OutputStageWDF: processBlock consistency
+// TEST 13 — OutputStage: processBlock consistency
 // =============================================================================
 
 void test13_process_block_consistency()
 {
-    std::cout << "\n--- Test 13: OutputStageWDF processBlock consistency ---" << std::endl;
+    std::cout << "\n--- Test 13: OutputStage processBlock consistency ---" << std::endl;
 
     const float sampleRate = 44100.0f;
     const float freq = 1000.0f;
@@ -499,7 +499,7 @@ void test13_process_block_consistency()
     auto t2Config = makeT2Config();
 
     // Instance A: processSample one by one
-    transfo::OutputStageWDF<JALeaf> stageA;
+    transfo::OutputStage<JALeaf> stageA;
     stageA.prepare(sampleRate, t2Config);
     stageA.reset();
 
@@ -508,7 +508,7 @@ void test13_process_block_consistency()
         outputSample[i] = stageA.processSample(inputA[i], inputB[i]);
 
     // Instance B: processBlock
-    transfo::OutputStageWDF<JALeaf> stageB;
+    transfo::OutputStage<JALeaf> stageB;
     stageB.prepare(sampleRate, t2Config);
     stageB.reset();
 
@@ -531,18 +531,18 @@ void test13_process_block_consistency()
 }
 
 // =============================================================================
-// TEST 14 — OutputStageWDF: Reset clears state
+// TEST 14 — OutputStage: Reset clears state
 // =============================================================================
 
 void test14_reset_clears_state()
 {
-    std::cout << "\n--- Test 14: OutputStageWDF Reset clears state ---" << std::endl;
+    std::cout << "\n--- Test 14: OutputStage Reset clears state ---" << std::endl;
 
     const float sampleRate = 44100.0f;
     const float freq = 1000.0f;
     const float amplitude = 0.1f;
 
-    transfo::OutputStageWDF<JALeaf> stage;
+    transfo::OutputStage<JALeaf> stage;
     stage.prepare(sampleRate, makeT2Config());
     stage.reset();
 
@@ -576,7 +576,7 @@ int main()
 {
     std::cout << "================================================================" << std::endl;
     std::cout << "  OutputStage & ABCrossfade — Test Suite (Sprint 5)" << std::endl;
-    std::cout << "  OutputStageWDF + ABCrossfade validation" << std::endl;
+    std::cout << "  OutputStage + ABCrossfade validation" << std::endl;
     std::cout << "================================================================" << std::endl;
 
     test1_abcrossfade_construction();

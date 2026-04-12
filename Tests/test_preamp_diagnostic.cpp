@@ -148,7 +148,6 @@ static bool test_neve_trace()
     // Configure preamp
     transfo::PreampModel<JALeaf> model;
     auto cfg = transfo::PreampConfig::DualTopology();
-    cfg.t2Config.loadImpedance = 10000.0f;
     model.setConfig(cfg);
     model.prepareToPlay(kSR, kBlock);
     model.setPath(0);           // Neve
@@ -225,7 +224,6 @@ static bool test_je990_trace()
 
     transfo::PreampModel<JALeaf> model;
     auto cfg = transfo::PreampConfig::DualTopology();
-    cfg.t2Config.loadImpedance = 10000.0f;
     model.setConfig(cfg);
     model.prepareToPlay(kSR, kBlock);
     model.setPath(1);           // JE990
@@ -284,8 +282,8 @@ static bool test_neve_stages_only()
     const float amplitude = 0.05f;
 
     // Set up JUST the Neve path
-    transfo::NeveClassAPath neve;
-    transfo::NevePathConfig neveCfg;
+    transfo::Neve1063Path neve;
+    transfo::Neve1063PathConfig neveCfg;
     neve.configure(neveCfg);
     neve.prepare(kSR, kBlock);
     neve.setGain(transfo::GainTable::getRfb(5)); // Position 5
@@ -323,9 +321,9 @@ static bool test_neve_stages_only()
                 neve.getClosedLoopGain(), neve.getClosedLoopGainDB());
 
     auto op = neve.getOperatingPoint();
-    std::printf("  Operating point: Q1(Vce=%.2f, Ic=%.4f) Q2(Vce=%.2f, Ic=%.4f) "
-                "Q3(Vce=%.2f, Ic=%.4f)\n",
-                op.Vce_q1, op.Ic_q1, op.Vce_q2, op.Ic_q2, op.Vce_q3, op.Ic_q3);
+    std::printf("  Operating point: NV4(Vce=%.2f, Ic=%.4f) AM1(Vce=%.2f, Ic=%.4f) "
+                "AM3(Vce=%.2f, Ic=%.4f)\n",
+                op.Vce_nv4, op.Ic_nv4, op.Vce_am1, op.Ic_am1, op.Vce_am3, op.Ic_am3);
 
     std::printf("\n  First 50 output samples (after 0.3s):\n");
     for (int i = 0; i < 50 && (skip + i) < N; ++i)
@@ -353,7 +351,7 @@ static bool test_t1_only()
 
     auto cfg = transfo::PreampConfig::DualTopology();
 
-    transfo::InputStageWDF<JALeaf> t1;
+    transfo::InputStage<JALeaf> t1;
     t1.prepare(kSR, cfg.input);
 
     std::vector<float> input(N);
@@ -422,7 +420,6 @@ static bool test_gain_positions()
     {
         transfo::PreampModel<JALeaf> model;
         auto cfg = transfo::PreampConfig::DualTopology();
-        cfg.t2Config.loadImpedance = 10000.0f;
         model.setConfig(cfg);
         model.prepareToPlay(kSR, kBlock);
         model.setPath(0);
@@ -465,7 +462,6 @@ static bool test_waveform_quality()
 
     transfo::PreampModel<JALeaf> model;
     auto cfg = transfo::PreampConfig::DualTopology();
-    cfg.t2Config.loadImpedance = 10000.0f;
     model.setConfig(cfg);
     model.prepareToPlay(kSR, kBlock);
     model.setPath(0);

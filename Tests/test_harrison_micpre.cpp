@@ -108,13 +108,15 @@ static bool polesStable(const OpAmpGainStage& stage)
     }
 }
 
-// Stub transformer for full-chain test
+// Stub transformer for full-chain test.
+// Matches TransformerModel contract: processBlock is unity-gain normalized,
+// caller (HarrisonMicPre) applies getTurnsRatio() separately.
 struct StubTransformer
 {
-    float turnsRatio = 5.0f;
+    float turnsRatio = 10.0f;
     void processBlock(const float* in, float* out, int n)
     {
-        for (int i = 0; i < n; ++i) out[i] = in[i] * turnsRatio;
+        for (int i = 0; i < n; ++i) out[i] = in[i];  // unity-gain (core model)
     }
     float getTurnsRatio() const { return turnsRatio; }
 };
@@ -286,7 +288,7 @@ static void testFullChain()
     std::printf("\n--- Test 9: Full Chain (Stub Transformer) ---\n");
 
     StubTransformer transfo;
-    transfo.turnsRatio = 5.0f;
+    transfo.turnsRatio = 10.0f;
 
     HarrisonMicPre<StubTransformer> micPre;
     micPre.setTransformer(&transfo);
@@ -325,7 +327,7 @@ static void testFullChain()
     const double A_term = static_cast<double>(R100)
                         / (static_cast<double>(R100) + 150.0 * 0.5);
     const double H_500 = analogMagnitude(500.0, 0.0);
-    const double expectedGain = A_term * 5.0 * H_500;
+    const double expectedGain = A_term * 10.0 * H_500;
 
     char detail[128];
     std::snprintf(detail, sizeof(detail), "(measured=%.4f, expected=%.4f)",

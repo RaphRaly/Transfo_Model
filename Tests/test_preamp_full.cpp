@@ -2,7 +2,7 @@
 // Test: PreampModel — Sprint 6 validation (full chain integration)
 //
 // Standalone test (no JUCE dependency) that validates the PreampModel
-// top-level orchestrator: InputStageWDF -> [Neve|JE990] -> OutputStageWDF.
+// top-level orchestrator: InputStage -> [Neve|JE990] -> OutputStage.
 //
 // Test groups:
 //   1.  Construction — default construct, no crash
@@ -57,7 +57,6 @@ using JALeaf = transfo::JilesAthertonLeaf<transfo::LangevinPade>;
 static transfo::PreampConfig makeDefaultConfig()
 {
     auto cfg = transfo::PreampConfig::DualTopology();
-    cfg.t2Config.loadImpedance = 10000.0f;  // 10k bridging load workaround
     return cfg;
 }
 
@@ -590,7 +589,7 @@ int main()
 {
     std::printf("================================================================\n");
     std::printf("  PreampModel Full Chain — Test Suite (Sprint 6)\n");
-    std::printf("  InputStageWDF -> [Neve|JE990] -> OutputStageWDF\n");
+    std::printf("  InputStage -> [Neve|JE990] -> OutputStage\n");
     std::printf("================================================================\n\n");
 
     int pass = 0, fail = 0;

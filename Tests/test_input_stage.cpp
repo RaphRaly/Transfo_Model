@@ -1,7 +1,7 @@
 // =============================================================================
-// Test: InputStageWDF — Complete input circuit validation
+// Test: InputStage — Complete input circuit validation
 //
-// Validates the InputStageWDF (Sprint 2 of the preamp project) which wraps
+// Validates the InputStage (Sprint 2 of the preamp project) which wraps
 // the transformer circuit with phantom supply, pad attenuator, termination
 // network, and source impedance modeling.
 //
@@ -22,7 +22,7 @@
 // Reference: ANALYSE_ET_DESIGN_Rev2.md, SPRINT_PLAN_PREAMP.md Sprint 2
 // =============================================================================
 
-#include "../core/include/core/preamp/InputStageWDF.h"
+#include "../core/include/core/preamp/InputStage.h"
 #include "../core/include/core/model/PreampConfig.h"
 #include "../core/include/core/magnetics/JilesAthertonLeaf.h"
 #include "../core/include/core/magnetics/AnhystereticFunctions.h"
@@ -33,7 +33,7 @@
 #include <numeric>
 
 using JALeaf = transfo::JilesAthertonLeaf<transfo::LangevinPade>;
-using InputStage = transfo::InputStageWDF<JALeaf>;
+using InputStageJA = transfo::InputStage<JALeaf>;
 
 static constexpr double PI = 3.14159265358979323846;
 
@@ -90,14 +90,14 @@ int main()
 {
     using namespace transfo;
 
-    std::cout << "=== InputStageWDF Tests ===" << std::endl;
+    std::cout << "=== InputStage Tests ===" << std::endl;
 
     const float sampleRate = 44100.0f;
 
     // ── Test 1: Construction and configure (no crash) ────────────────────────
     std::cout << "\n--- Test 1: Construction and Configure ---" << std::endl;
     {
-        InputStage stage;
+        InputStageJA stage;
         InputStageConfig config = PreampConfig::DualTopology().input;
         stage.prepare(sampleRate, config);
         stage.reset();
@@ -107,7 +107,7 @@ int main()
     // ── Test 2: Zs_eff computation ───────────────────────────────────────────
     std::cout << "\n--- Test 2: Zs_eff Computation ---" << std::endl;
     {
-        InputStage stage;
+        InputStageJA stage;
         InputStageConfig config = PreampConfig::DualTopology().input;
 
         // Case A: SM57 (Zmic=150), phantom ON, pad OFF
@@ -157,7 +157,7 @@ int main()
     // ── Test 3: Signal passthrough (non-zero output, correct polarity) ───────
     std::cout << "\n--- Test 3: Signal Passthrough ---" << std::endl;
     {
-        InputStage stage;
+        InputStageJA stage;
         InputStageConfig config = PreampConfig::DualTopology().input;
         config.ratio = InputStageConfig::Ratio::X10;
         stage.prepare(sampleRate, config);
@@ -220,7 +220,7 @@ int main()
         // ── Ratio 1:10 ──
         float gain10_dB;
         {
-            InputStage stage;
+            InputStageJA stage;
             InputStageConfig config = PreampConfig::DualTopology().input;
             config.ratio = InputStageConfig::Ratio::X10;
             stage.prepare(sampleRate, config);
@@ -240,7 +240,7 @@ int main()
         // ── Ratio 1:5 ──
         float gain5_dB;
         {
-            InputStage stage;
+            InputStageJA stage;
             InputStageConfig config = PreampConfig::DualTopology().input;
             config.ratio = InputStageConfig::Ratio::X5;
             stage.prepare(sampleRate, config);
@@ -280,7 +280,7 @@ int main()
         // Without pad
         double rmsNoPad;
         {
-            InputStage stage;
+            InputStageJA stage;
             InputStageConfig config = PreampConfig::DualTopology().input;
             config.padEnabled = false;
             stage.prepare(sampleRate, config);
@@ -299,7 +299,7 @@ int main()
         // With pad
         double rmsPad;
         {
-            InputStage stage;
+            InputStageJA stage;
             InputStageConfig config = PreampConfig::DualTopology().input;
             config.padEnabled = true;
             stage.prepare(sampleRate, config);
@@ -322,7 +322,7 @@ int main()
     // ── Test 6: Numerical stability (extreme inputs) ─────────────────────────
     std::cout << "\n--- Test 6: Numerical Stability ---" << std::endl;
     {
-        InputStage stage;
+        InputStageJA stage;
         InputStageConfig config = PreampConfig::DualTopology().input;
         stage.prepare(sampleRate, config);
         stage.setSourceImpedance(150.0f);
@@ -372,7 +372,7 @@ int main()
         auto input = generateSine(0.01f, 1000.0f, sampleRate, N);
 
         // Instance A: processSample one by one
-        InputStage stageA;
+        InputStageJA stageA;
         InputStageConfig configA = PreampConfig::DualTopology().input;
         stageA.prepare(sampleRate, configA);
         stageA.setSourceImpedance(150.0f);
@@ -383,7 +383,7 @@ int main()
             outA[i] = stageA.processSample(input[i]);
 
         // Instance B: processBlock
-        InputStage stageB;
+        InputStageJA stageB;
         InputStageConfig configB = PreampConfig::DualTopology().input;
         stageB.prepare(sampleRate, configB);
         stageB.setSourceImpedance(150.0f);
@@ -412,7 +412,7 @@ int main()
     // ── Test 8: Reset clears state ───────────────────────────────────────────
     std::cout << "\n--- Test 8: Reset Clears State ---" << std::endl;
     {
-        InputStage stage;
+        InputStageJA stage;
         InputStageConfig config = PreampConfig::DualTopology().input;
         stage.prepare(sampleRate, config);
         stage.setSourceImpedance(150.0f);
@@ -445,7 +445,7 @@ int main()
     // ── Test 9: Source impedance switching ────────────────────────────────────
     std::cout << "\n--- Test 9: Source Impedance Switching ---" << std::endl;
     {
-        InputStage stage;
+        InputStageJA stage;
         InputStageConfig config = PreampConfig::DualTopology().input;
         config.phantomEnabled = true;
         config.padEnabled = false;
@@ -472,7 +472,7 @@ int main()
     {
         // Ratio 1:10
         {
-            InputStage stage;
+            InputStageJA stage;
             InputStageConfig config = PreampConfig::DualTopology().input;
             config.ratio = InputStageConfig::Ratio::X10;
             stage.prepare(sampleRate, config);
@@ -484,7 +484,7 @@ int main()
 
         // Ratio 1:5
         {
-            InputStage stage;
+            InputStageJA stage;
             InputStageConfig config = PreampConfig::DualTopology().input;
             config.ratio = InputStageConfig::Ratio::X5;
             stage.prepare(sampleRate, config);
@@ -496,7 +496,7 @@ int main()
     }
 
     // ── Summary ──────────────────────────────────────────────────────────────
-    std::cout << "\n=== InputStageWDF Results ===" << std::endl;
+    std::cout << "\n=== InputStage Results ===" << std::endl;
     std::cout << "  Total: " << (g_pass + g_fail) << "  Pass: " << g_pass
               << "  Fail: " << g_fail << std::endl;
 

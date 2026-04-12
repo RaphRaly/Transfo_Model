@@ -1,7 +1,7 @@
-// Quick diagnostic to find the +15.5 dB offset source in NeveClassAPath
+// Quick diagnostic for Neve1063Path gain
 #include <cmath>
 #include <cstdio>
-#include "core/preamp/NeveClassAPath.h"
+#include "core/preamp/Neve1063Path.h"
 #include "core/preamp/GainTable.h"
 #include "core/model/PreampConfig.h"
 
@@ -12,8 +12,8 @@ int main()
     const float amp = 0.001f; // 1mV
     const float Ts = 1.0f / sampleRate;
 
-    transfo::NeveClassAPath path;
-    transfo::NevePathConfig config;
+    transfo::Neve1063Path path;
+    transfo::Neve1063PathConfig config;
     path.configure(config);
     path.prepare(sampleRate, 512);
 
@@ -56,12 +56,12 @@ int main()
             printf("Gain (linear)  = %.2f (%.1f dB)\n",
                    std::abs(output / input),
                    20.0f * std::log10(std::abs(output / input) + 1e-30f));
-            printf("\nQ1: Vce=%.3f V, Ic=%.4f mA, gm=%.3f mS\n",
-                   op.Vce_q1, op.Ic_q1 * 1000, op.Ic_q1 > 0 ? op.Ic_q1 / 0.026f * 1000 : 0.0f);
-            printf("Q2: Vce=%.3f V, Ic=%.4f mA, gm=%.3f mS\n",
-                   op.Vce_q2, op.Ic_q2 * 1000, std::abs(op.Ic_q2) / 0.026f * 1000);
-            printf("Q3: Vce=%.3f V, Ic=%.4f mA\n",
-                   op.Vce_q3, op.Ic_q3 * 1000);
+            printf("\nNV-TR4: Vce=%.3f V, Ic=%.4f mA, gm=%.3f mS\n",
+                   op.Vce_nv4, op.Ic_nv4 * 1000, op.Ic_nv4 > 0 ? op.Ic_nv4 / 0.026f * 1000 : 0.0f);
+            printf("AM-TR1: Vce=%.3f V, Ic=%.4f mA, gm=%.3f mS\n",
+                   op.Vce_am1, op.Ic_am1 * 1000, std::abs(op.Ic_am1) / 0.026f * 1000);
+            printf("AM-TR3: Vce=%.3f V, Ic=%.4f mA\n",
+                   op.Vce_am3, op.Ic_am3 * 1000);
             printf("\nAol (getOpenLoopGain) = %.2f (%.1f dB)\n",
                    Aol, 20.0f * std::log10(Aol + 1e-30f));
             printf("Acl (1+Rfb/Rg)       = %.2f (%.1f dB)\n",

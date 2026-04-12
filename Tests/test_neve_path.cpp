@@ -22,7 +22,7 @@
 // Reference: ANALYSE_ET_DESIGN_Rev2.md, SPRINT_PLAN_PREAMP.md Sprint 3
 // =============================================================================
 
-#include "../core/include/core/preamp/NeveClassAPath.h"
+#include "../core/include/core/preamp/Neve1063Path.h"
 #include "../core/include/core/preamp/GainTable.h"
 #include "../core/include/core/model/PreampConfig.h"
 #include <iostream>
@@ -74,7 +74,7 @@ static double goertzelMagnitude(const float* signal, int numSamples,
 
 // ---- Helper: measure gain in dB via sine tone RMS ---------------------------
 
-double measureGainDB(transfo::NeveClassAPath& path, float freq, float amplitude,
+double measureGainDB(transfo::Neve1063Path& path, float freq, float amplitude,
                      float sampleRate, int numCycles = 20)
 {
     const int samplesPerCycle = static_cast<int>(sampleRate / freq);
@@ -110,22 +110,23 @@ void test1_construction_and_configure()
 {
     std::cout << "\n=== TEST 1: Construction and configure ===" << std::endl;
 
-    transfo::NeveClassAPath path;
-    transfo::NevePathConfig config;  // Default: BC184C / BC214C / BD139, Vcc=24V
+    transfo::Neve1063Path path;
+    transfo::Neve1063PathConfig config;  // Default: BC184C / BC214C / BD139, Vcc=24V
 
     path.configure(config);
     path.prepare(96000.0f, 512);
 
-    // Name should be "Neve Heritage"
+    // Name should be "Neve 1063"
     std::string name = path.getName();
-    CHECK(name == "Neve Heritage",
-          "getName() returns \"Neve Heritage\"");
+    CHECK(name == "Neve 1063",
+          "getName() returns \"Neve 1063\"");
 
-    // Output impedance: emitter follower stage gives low Zout, typically ~11 Ohm
+    // Output impedance: CE power stage (BDY61) gives higher Zout than old EF design
+    // Zout ~ Rc || rce ~ 209 Ohm (vs old 11 Ohm)
     float zOut = path.getOutputImpedance();
     std::cout << "    Output impedance: " << zOut << " Ohm" << std::endl;
-    CHECK(zOut > 0.0f && zOut < 100.0f,
-          "Output impedance > 0 and < 100 Ohm");
+    CHECK(zOut > 0.0f && zOut < 1000.0f,
+          "Output impedance > 0 and < 1000 Ohm");
 }
 
 // =============================================================================
@@ -145,8 +146,8 @@ void test2_gain_vs_position()
 
     for (int pos : positions)
     {
-        transfo::NeveClassAPath path;
-        transfo::NevePathConfig config;
+        transfo::Neve1063Path path;
+        transfo::Neve1063PathConfig config;
         path.configure(config);
         path.prepare(sampleRate, 512);
 
@@ -184,8 +185,8 @@ void test3_signal_passthrough()
     const float amplitude = 0.001f;  // 1 mV
     const int numSamples = 5000;
 
-    transfo::NeveClassAPath path;
-    transfo::NevePathConfig config;
+    transfo::Neve1063Path path;
+    transfo::Neve1063PathConfig config;
     path.configure(config);
     path.prepare(sampleRate, 512);
 
@@ -228,8 +229,8 @@ void test4_gain_increases_with_rfb()
     const float amplitude = 0.001f;  // 1 mV
 
     // Measure gain at position 0 (Rfb=100)
-    transfo::NeveClassAPath pathLow;
-    transfo::NevePathConfig config;
+    transfo::Neve1063Path pathLow;
+    transfo::Neve1063PathConfig config;
     pathLow.configure(config);
     pathLow.prepare(sampleRate, 512);
     pathLow.setGain(transfo::GainTable::getRfb(0));
@@ -237,7 +238,7 @@ void test4_gain_increases_with_rfb()
     double gainLow = measureGainDB(pathLow, freq, amplitude, sampleRate);
 
     // Measure gain at position 10 (Rfb=14700)
-    transfo::NeveClassAPath pathHigh;
+    transfo::Neve1063Path pathHigh;
     pathHigh.configure(config);
     pathHigh.prepare(sampleRate, 512);
     pathHigh.setGain(transfo::GainTable::getRfb(10));
@@ -267,8 +268,8 @@ void test5_frequency_response_shape()
     const float sampleRate = 96000.0f;
     const float amplitude = 0.001f;  // 1 mV
 
-    transfo::NeveClassAPath path;
-    transfo::NevePathConfig config;
+    transfo::Neve1063Path path;
+    transfo::Neve1063PathConfig config;
     path.configure(config);
     path.prepare(sampleRate, 512);
 
@@ -307,8 +308,8 @@ void test6_numerical_stability()
     const float freq = 1000.0f;
     const int numSamples = 5000;
 
-    transfo::NeveClassAPath path;
-    transfo::NevePathConfig config;
+    transfo::Neve1063Path path;
+    transfo::Neve1063PathConfig config;
     path.configure(config);
     path.prepare(sampleRate, 512);
     path.setGain(transfo::GainTable::getRfb(5));
@@ -360,10 +361,10 @@ void test7_process_block_consistency()
         input[i] = amplitude * std::sin(2.0f * static_cast<float>(PI) * freq * t);
     }
 
-    transfo::NevePathConfig config;
+    transfo::Neve1063PathConfig config;
 
     // Path A: processSample one by one
-    transfo::NeveClassAPath pathA;
+    transfo::Neve1063Path pathA;
     pathA.configure(config);
     pathA.prepare(sampleRate, N);
     pathA.setGain(transfo::GainTable::getRfb(5));
@@ -374,7 +375,7 @@ void test7_process_block_consistency()
         outputSample[i] = pathA.processSample(input[i]);
 
     // Path B: processBlock
-    transfo::NeveClassAPath pathB;
+    transfo::Neve1063Path pathB;
     pathB.configure(config);
     pathB.prepare(sampleRate, N);
     pathB.setGain(transfo::GainTable::getRfb(5));
@@ -410,8 +411,8 @@ void test8_reset_clears_state()
     const float freq = 1000.0f;
     const float amplitude = 0.001f;
 
-    transfo::NeveClassAPath path;
-    transfo::NevePathConfig config;
+    transfo::Neve1063Path path;
+    transfo::Neve1063PathConfig config;
     path.configure(config);
     path.prepare(sampleRate, 512);
     path.setGain(transfo::GainTable::getRfb(5));
@@ -449,8 +450,8 @@ void test9_output_impedance_range()
 {
     std::cout << "\n=== TEST 9: Output impedance range ===" << std::endl;
 
-    transfo::NeveClassAPath path;
-    transfo::NevePathConfig config;
+    transfo::Neve1063Path path;
+    transfo::Neve1063PathConfig config;
     path.configure(config);
     path.prepare(96000.0f, 512);
 
@@ -467,8 +468,8 @@ void test9_output_impedance_range()
                   << "): Zout = " << zOut << " Ohm" << std::endl;
 
         std::string msg = "Zout at position " + std::to_string(pos)
-                        + " between 1 and 100 Ohm (EF stage)";
-        CHECK(zOut >= 1.0f && zOut <= 100.0f, msg.c_str());
+                        + " between 1 and 1000 Ohm (CE power stage)";
+        CHECK(zOut >= 1.0f && zOut <= 1000.0f, msg.c_str());
     }
 }
 
@@ -486,8 +487,8 @@ void test10_harmonics()
     const int warmupSamples = 2000;
     const int N = 8192;
 
-    transfo::NeveClassAPath path;
-    transfo::NevePathConfig config;
+    transfo::Neve1063Path path;
+    transfo::Neve1063PathConfig config;
     path.configure(config);
     path.prepare(sampleRate, 512);
     path.setGain(transfo::GainTable::getRfb(5));
@@ -547,8 +548,8 @@ void test10_harmonics()
 int main()
 {
     std::cout << "================================================================" << std::endl;
-    std::cout << "  Neve Heritage Class-A Path — Test Suite" << std::endl;
-    std::cout << "  NeveClassAPath WDF model validation" << std::endl;
+    std::cout << "  Neve 1063 Channel Amplifier Path — Test Suite" << std::endl;
+    std::cout << "  Neve1063Path WDF model validation" << std::endl;
     std::cout << "================================================================" << std::endl;
 
     test1_construction_and_configure();

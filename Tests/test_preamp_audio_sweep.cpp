@@ -59,7 +59,6 @@ static constexpr int    kSweepLen   = static_cast<int>(kSR * kSweepDur);
 static transfo::PreampConfig makeDefaultConfig()
 {
     auto cfg = transfo::PreampConfig::DualTopology();
-    cfg.t2Config.loadImpedance = 10000.0f;
     return cfg;
 }
 

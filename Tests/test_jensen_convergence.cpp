@@ -146,8 +146,8 @@ void test_convergence_high_drive()
 
     CHECK(totalConverged == numSamples,
         "100% convergence under deep saturation");
-    CHECK(maxIter <= 16,
-        "Max iterations <= 16 (NR 8 + bisection 8)");
+    CHECK(maxIter <= 22,
+        "Max iterations <= 22 (NR 8 + adaptive bisection up to 14)");
 }
 
 // ---- Test 3: Low-frequency convergence (worst case for trapezoidal) ---------

@@ -201,6 +201,19 @@ add_executable(test_jensen_cpwl_parity
 )
 target_include_directories(test_jensen_cpwl_parity PRIVATE ${CORE_INCLUDE})
 
+add_executable(test_nr_low_h_stress
+    test_nr_low_h_stress.cpp
+)
+target_include_directories(test_nr_low_h_stress PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME nr_low_h_stress               COMMAND test_nr_low_h_stress)
+
+add_executable(test_bertotti_field_separation
+    test_bertotti_field_separation.cpp
+)
+target_include_directories(test_bertotti_field_separation PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME bertotti_field_separation     COMMAND test_bertotti_field_separation)
 add_test(NAME jensen_passivity              COMMAND test_jensen_passivity)
 add_test(NAME jensen_convergence            COMMAND test_jensen_convergence)
 add_test(NAME jensen_harmonics              COMMAND test_jensen_harmonics)
@@ -230,6 +243,61 @@ add_executable(test_channel_strip
 target_include_directories(test_channel_strip PRIVATE ${CORE_INCLUDE})
 
 add_test(NAME channel_strip                   COMMAND test_channel_strip)
+
+# ── Phase 3 UAD Critique Tests ─────────────────────────────────────────────────
+
+# Sprint A.1: VAS diagnostic (double-degen check)
+add_executable(test_vas_diagnostic test_vas_diagnostic.cpp)
+target_include_directories(test_vas_diagnostic PRIVATE ${CORE_INCLUDE})
+add_test(NAME vas_diagnostic                    COMMAND test_vas_diagnostic)
+
+# Sprint B.5: ClassAB isolated crossover validation
+add_executable(test_classab_isolated test_classab_isolated.cpp)
+target_include_directories(test_classab_isolated PRIVATE ${CORE_INCLUDE})
+add_test(NAME classab_isolated                  COMMAND test_classab_isolated)
+
+# Sprint C.1: Heritage THD at low level
+add_executable(test_heritage_thd_lowlevel test_heritage_thd_lowlevel.cpp)
+target_include_directories(test_heritage_thd_lowlevel PRIVATE ${CORE_INCLUDE})
+add_test(NAME heritage_thd_lowlevel             COMMAND test_heritage_thd_lowlevel)
+
+# ── Flux Integrator Tests (Problem #4: freq-dependent saturation) ────────────
+add_executable(test_flux_integrator test_flux_integrator.cpp)
+target_include_directories(test_flux_integrator PRIVATE ${CORE_INCLUDE})
+add_test(NAME flux_integrator                    COMMAND test_flux_integrator)
+
+# ── FluxIntegrator Physical Mode Regression ───────────────────────────────────
+add_executable(test_fluxint_physical test_fluxint_physical.cpp)
+target_include_directories(test_fluxint_physical PRIVATE ${CORE_INCLUDE})
+add_test(NAME fluxint_physical                    COMMAND test_fluxint_physical)
+
+# ── Harrison Console Mic Pre Tests ──────────────────────────────────────────
+add_executable(test_harrison_micpre test_harrison_micpre.cpp)
+target_include_directories(test_harrison_micpre PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME harrison_micpre                     COMMAND test_harrison_micpre)
+
+add_executable(test_harrison_integration test_harrison_integration.cpp)
+target_include_directories(test_harrison_integration PRIVATE ${CORE_INCLUDE})
+
+add_test(NAME harrison_integration                COMMAND test_harrison_integration)
+
+# ── Preamp FR Full-Chain Sweep (Chantier A2) ──────────────────────────────────
+add_executable(test_preamp_fr_sweep test_preamp_fr_sweep.cpp)
+target_include_directories(test_preamp_fr_sweep PRIVATE ${CORE_INCLUDE})
+add_test(NAME preamp_fr_sweep                    COMMAND test_preamp_fr_sweep)
+
+# ── FluxIntegrator Exploration Diagnostic (not a CTest — manual only) ─────────
+add_executable(test_fluxint_diag test_fluxint_diag.cpp)
+target_include_directories(test_fluxint_diag PRIVATE ${CORE_INCLUDE})
+
+# TR3 trace diagnostic (manual only)
+add_executable(test_neve_tr3_trace test_neve_tr3_trace.cpp)
+target_include_directories(test_neve_tr3_trace PRIVATE ${CORE_INCLUDE})
+
+# Newton trace diagnostic (manual only)
+add_executable(test_neve_newton_trace test_neve_newton_trace.cpp)
+target_include_directories(test_neve_newton_trace PRIVATE ${CORE_INCLUDE})
 
 # ── Demo Audio Generator (P2.3) ──────────────────────────────────────────────
 add_executable(generate_demo_audio

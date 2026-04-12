@@ -62,7 +62,6 @@ static std::unique_ptr<PreampModel<CPWLLeaf>> createModel(float sampleRate,
 {
     auto model = std::make_unique<PreampModel<CPWLLeaf>>();
     auto cfg = PreampConfig::DualTopology();
-    cfg.t2Config.loadImpedance = 10000.0f;  // 10k bridging load workaround
     model->setConfig(cfg);
     model->prepareToPlay(sampleRate, kMaxBlock);
     model->setGainPosition(gainPos);

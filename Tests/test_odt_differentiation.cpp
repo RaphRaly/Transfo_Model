@@ -4,17 +4,17 @@
 // Validates harmonic signature, THD, level matching, and click-free switching
 // between the two amplifier topologies in the dual-topology preamp model.
 //
-// Known bugs documented by these tests:
-//   - JE-990 produces H2 > H3 (wrong for push-pull opamp, should be H3 > H2)
-//   - JE-990 is ~19 dB quieter than Neve at the same gain position
-//   - Full-chain Heritage vs Modern level difference is ~24 dB
+// Known limitations documented by these tests:
+//   - JE-990 H2 > H3: VAS (single-ended PNP) dominates distortion signature
+//     → H2 dominant until ClassAB crossover model is enhanced (Sprint B)
+//   - Heritage–Modern level delta: within spec after T2 default fix (Sprint A.2)
 //
 // Test groups:
 //   1. Heritage H2 dominance (Class-A even-harmonic signature)    [PASS]
-//   2. Modern H3 dominance (push-pull odd-harmonic signature)     [FAIL — bug]
-//   3. Heritage vs Modern A/B comparison                          [partial FAIL]
+//   2. Modern H3 dominance (push-pull odd-harmonic signature)     [FAIL — known limitation, see KNOWN_LIMITATIONS.md]
+//   3. Heritage vs Modern A/B comparison                          [partial FAIL — H2/H3 ratio, Sprint B target]
 //   4. THD vs gain sweep (monotonicity)                           [PASS]
-//   5. Full-chain level match                                     [FAIL — bug]
+//   5. Full-chain level match                                     [PASS — fixed by VAS topology correction]
 //   6. Mode switch click-free (no NaN, no click)                  [PASS]
 //
 // Reference: SPRINT_PLAN_PREAMP.md, ANALYSE_ET_DESIGN_Rev2.md Annexe B
@@ -64,7 +64,6 @@ static std::unique_ptr<PreampModel<CPWLLeaf>> createModel(int path, int gainPos)
 {
     auto model = std::make_unique<PreampModel<CPWLLeaf>>();
     auto cfg = PreampConfig::DualTopology();
-    cfg.t2Config.loadImpedance = 10000.0f;  // 10k bridging load workaround
     model->setConfig(cfg);
     model->prepareToPlay(kSampleRate, kMaxBlock);
     model->setGainPosition(gainPos);
@@ -186,8 +185,8 @@ static void test_heritage_h2_dominance()
 static void test_modern_h3_dominance()
 {
     std::printf("\n--- Test 2: Modern H3 > H2 (push-pull signature) ---\n");
-    std::printf("    NOTE: This test documents a known bug (JE-990 H2>H3).\n");
-    std::printf("          Expected to FAIL until Sprint 2 fix.\n");
+    std::printf("    NOTE: Known limitation — VAS H2 dominance (see KNOWN_LIMITATIONS.md).\n");
+    std::printf("          Expected to FAIL until ClassAB crossover model (Sprint B).\n");
 
     HarmonicResult r = measureHarmonics(1, kGainPos, kFreq, kAmplitude);
     printHarmonics("Modern  ", r);
@@ -233,8 +232,8 @@ static void test_heritage_vs_modern_ab()
     // Modern should be H3-dominant (will FAIL due to bug)
     double ratioM = (rM.h3 > 1e-30) ? rM.h2 / rM.h3 : 0.0;
     std::printf("    Modern  H2/H3 ratio: %.3f (expect < 1.0)\n", ratioM);
-    std::printf("    NOTE: Modern H2/H3 < 1.0 check documents known bug.\n");
-    std::printf("          Expected to FAIL until Sprint 2 fix.\n");
+    std::printf("    NOTE: Known limitation — VAS H2 dominance masks ClassAB H3.\n");
+    std::printf("          Expected to FAIL until ClassAB crossover model (Sprint B).\n");
     CHECK(ratioM < 1.0,
           "Modern H2/H3 ratio < 1.0 (odd-harmonic dominance)");
 }
