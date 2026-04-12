@@ -74,7 +74,7 @@ MIC XLR ──[649Ω PAD]──── JT-115K-E (T1)
 
 ```
 PreampModel<NonlinearLeaf>                    [Template Method]
-├── InputStageWDF                             [Composite]
+├── InputStage                             [Composite]
 │   ├── PhantomNetwork (R+R)                  [WDF Adapted Elements]
 │   ├── PadNetwork (649Ω series)              [WDF Adapted Elements]
 │   ├── TransformerCircuitWDF<NL> (T1)        [Existing, reused]
@@ -95,7 +95,7 @@ PreampModel<NonlinearLeaf>                    [Template Method]
 │       ├── LoadIsolator (39Ω + L3=40µH)       [WDF Series]
 │       └── FeedbackNetwork                    [Gain-dependent]
 │
-├── OutputStageWDF                             [Composite]
+├── OutputStage                             [Composite]
 │   ├── CouplingCapacitor (220µF + 4.7µF)      [WDF Adapted Cap]
 │   ├── ABCrossfade                            [Parametric blend]
 │   └── TransformerCircuitWDF<NL> (T2)         [Existing, reused]
@@ -117,7 +117,7 @@ PreampModel<NonlinearLeaf>                    [Template Method]
 | **Strategy** | `IAmplifierPath` → `NeveClassAPath`, `JE990Path` | Commutation A/B sans modifier le pipeline |
 | **Template Method** | `PreampModel::processBlock()` | Structure commune, specialisation par chemin |
 | **CRTP** | `WDOnePort<BJTLeaf>`, `WDOnePort<DiodeLeaf>` | Zero-overhead dispatch pour les WDF elements (existant) |
-| **Composite** | `InputStageWDF`, `OutputStageWDF` | Assemblage de WDF trees en sous-circuits |
+| **Composite** | `InputStage`, `OutputStage` | Assemblage de WDF trees en sous-circuits |
 | **Pipeline** | Input → Amp → Output | Chaine de traitement lineaire avec isolation des stages |
 | **Factory Method** | `PreampConfig::DualTopology()` | Construction de configurations complexes |
 | **Observer** | `GainController` → paths, `PadSwitch` → input | Propagation des changements de parametres |
@@ -468,19 +468,19 @@ Avec pad:  Zs_eff ≈ 148 + 1298 ≈ 1446 Ω   (SM57 + 649Ω x2)
 
 | ID | Task | File | Type | Est | Priorite |
 |----|------|------|------|-----|----------|
-| S2-1 | Creer `InputStageWDF.h` — circuit d'entree complet | `core/include/core/preamp/InputStageWDF.h` | NEW | L | P0 |
-| S2-2 | Calcul Zs_eff (phantom + pad + Zmic) | `InputStageWDF.h` | INCL | M | P0 |
-| S2-3 | Reseau de terminaison (R_term \|\| C_term) en WDF | `InputStageWDF.h` | INCL | M | P0 |
-| S2-4 | Integration T1 via TransformerCircuitWDF existant | `InputStageWDF.h` | INCL | M | P0 |
-| S2-5 | Runtime switch: pad ON/OFF, ratio 1:5/1:10 | `InputStageWDF.h` | INCL | M | P1 |
+| S2-1 | Creer `InputStage.h` — circuit d'entree complet | `core/include/core/preamp/InputStage.h` | NEW | L | P0 |
+| S2-2 | Calcul Zs_eff (phantom + pad + Zmic) | `InputStage.h` | INCL | M | P0 |
+| S2-3 | Reseau de terminaison (R_term \|\| C_term) en WDF | `InputStage.h` | INCL | M | P0 |
+| S2-4 | Integration T1 via TransformerCircuitWDF existant | `InputStage.h` | INCL | M | P0 |
+| S2-5 | Runtime switch: pad ON/OFF, ratio 1:5/1:10 | `InputStage.h` | INCL | M | P1 |
 | S2-6 | Test: reponse frequentielle T1 + terminaison | `Tests/test_input_stage.cpp` | NEW | L | P0 |
 | S2-7 | Test: Zs_eff avec/sans pad, differents micros | `Tests/test_input_stage.cpp` | EXTEND | M | P1 |
 | S2-8 | Register test in CMake | `Tests/CMakeLists.txt` | MODIFY | S | P0 |
 
-### InputStageWDF Design
+### InputStage Design
 
 ```cpp
-class InputStageWDF {
+class InputStage {
 public:
     void prepare(float sampleRate, const InputStageConfig& config);
     void reset();
@@ -937,19 +937,19 @@ class ABCrossfade {
 
 | ID | Task | File | Type | Est | Priorite |
 |----|------|------|------|-----|----------|
-| S5-1 | Creer `OutputStageWDF.h` — couplage AC + T2 | `core/include/core/preamp/OutputStageWDF.h` | NEW | M | P0 |
+| S5-1 | Creer `OutputStage.h` — couplage AC + T2 | `core/include/core/preamp/OutputStage.h` | NEW | M | P0 |
 | S5-2 | Creer `ABCrossfade.h` — crossfade cos²/sin² | `core/include/core/preamp/ABCrossfade.h` | NEW | S | P0 |
-| S5-3 | Integrer T2 via TransformerCircuitWDF existant | `OutputStageWDF.h` | INCL | M | P0 |
-| S5-4 | Modeliser Zout_path → impact sur T2 (impedance source) | `OutputStageWDF.h` | INCL | M | P1 |
+| S5-3 | Integrer T2 via TransformerCircuitWDF existant | `OutputStage.h` | INCL | M | P0 |
+| S5-4 | Modeliser Zout_path → impact sur T2 (impedance source) | `OutputStage.h` | INCL | M | P1 |
 | S5-5 | Test: A/B crossfade sans clicks (zero-crossing analysis) | `Tests/test_output_stage.cpp` | NEW | M | P0 |
 | S5-6 | Test: T2 insertion loss (~-1.1 dB) | `Tests/test_output_stage.cpp` | EXTEND | M | P0 |
 | S5-7 | Test: Zout differentielle ≈ 80-91Ω (T2 dominant) | `Tests/test_output_stage.cpp` | EXTEND | S | P1 |
 | S5-8 | Register test in CMake | `Tests/CMakeLists.txt` | MODIFY | S | P0 |
 
-### OutputStageWDF Design
+### OutputStage Design
 
 ```cpp
-class OutputStageWDF {
+class OutputStage {
 public:
     void prepare(float sampleRate, const TransformerConfig& t2Config);
     void reset();
@@ -1051,13 +1051,13 @@ public:
 
 private:
     // Pipeline stages
-    InputStageWDF inputStage_;
+    InputStage inputStage_;
 
     // Strategy paths (both always prepared, only active one processes)
     NeveClassAPath nevePathA_;
     JE990Path je990PathB_;
 
-    OutputStageWDF outputStage_;
+    OutputStage outputStage_;
 
     // Gain
     GainTable gainTable_;
@@ -1345,7 +1345,7 @@ core/include/core/
 │   ├── PreampConfig.h                   [S0] Config complete
 │   ├── BJTParams.h                      [S0] Parametres Ebers-Moll
 │   ├── GainTable.h                      [S0] 11 positions Rfb
-│   ├── InputStageWDF.h                  [S2] Circuit d'entree
+│   ├── InputStage.h                  [S2] Circuit d'entree
 │   ├── CEStageWDF.h                     [S3] Etage emetteur commun
 │   ├── EFStageWDF.h                     [S3] Etage emetteur-suiveur
 │   ├── NeveClassAPath.h                 [S3] Strategy A
@@ -1355,7 +1355,7 @@ core/include/core/
 │   ├── ClassABOutputWDF.h               [S4] Sortie push-pull
 │   ├── LoadIsolator.h                   [S4] 39Ω + 40µH
 │   ├── JE990Path.h                      [S4] Strategy B
-│   ├── OutputStageWDF.h                 [S5] Sortie + T2
+│   ├── OutputStage.h                 [S5] Sortie + T2
 │   ├── ABCrossfade.h                    [S5] Crossfade A/B
 │   └── PreampModel.h                    [S6] Orchestrateur
 │

@@ -11,8 +11,8 @@ qui avait casse le coeur physique du plugin (J-A, Bertotti, NR BJT).
 - `core/include/core/preamp/EFStageWDF.h`
 - `core/include/core/preamp/NeveClassAPath.h` (revert vers WDF)
 - `core/include/core/preamp/JE990Path.h` (revert vers WDF)
-- `core/include/core/preamp/InputStageWDF.h` (revert vers WDF)
-- `core/include/core/preamp/OutputStageWDF.h` (revert vers WDF)
+- `core/include/core/preamp/InputStage.h` (revert vers WDF)
+- `core/include/core/preamp/OutputStage.h` (revert vers WDF)
 - `Tests/test_neve_stage_gains.cpp` (nouveau diagnostic)
 
 ---
@@ -24,8 +24,8 @@ qui avait casse le coeur physique du plugin (J-A, Bertotti, NR BJT).
    `tanh()` pour faire passer les tests. Le coeur physique du plugin etait
    donc desactive.
 
-2. Restauration du vrai WDF : les 4 modules de signal path (InputStageWDF,
-   NeveClassAPath, JE990Path, OutputStageWDF) ont ete remis en mode WDF
+2. Restauration du vrai WDF : les 4 modules de signal path (InputStage,
+   NeveClassAPath, JE990Path, OutputStage) ont ete remis en mode WDF
    reel. Resultat : 17/19 tests passent, mais `neve_path` montre un
    **offset constant de +15.5 dB** sur toutes les positions de gain.
 

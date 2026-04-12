@@ -57,7 +57,7 @@ Seven strict dependency layers -- `core/` has **zero external dependencies**.
 
 ```
 Plugin (JUCE)
-   +-- Preamp Model          PreampModel<Leaf>, InputStageWDF, OutputStageWDF
+   +-- Preamp Model          PreampModel<Leaf>, InputStage, OutputStage
          +-- Amplifier Paths  NeveClassAPath (Heritage), JE990Path (Modern)
                +-- Transformer Model   TransformerModel<Leaf>, TransformerCircuitWDF
                      +-- WDF Engine     HSIMSolver, MEJunction, TopologicalJunction
@@ -134,8 +134,8 @@ Transfo_Model/
 |   |-- wdf/           WDOnePort, HSIMSolver, MEJunction, TransformerCircuitWDF, BJTLeaf
 |   |-- dsp/           ADAAEngine, OversamplingEngine
 |   |-- model/         TransformerModel, TransformerConfig, Presets, ToleranceModel
-|   +-- preamp/        PreampModel, NeveClassAPath, JE990Path, InputStageWDF,
-|                      OutputStageWDF, CEStageWDF, DiffPairWDF, VASStageWDF,
+|   +-- preamp/        PreampModel, NeveClassAPath, JE990Path, InputStage,
+|                      OutputStage, CEStageWDF, DiffPairWDF, VASStageWDF,
 |                      ClassABOutputWDF, GainTable, ABCrossfade, LoadIsolator
 |
 |-- identification/include/identification/

@@ -112,10 +112,11 @@ target_sources(TransformerModel
         # preamp/
         core/include/core/preamp/IAmplifierPath.h
         core/include/core/preamp/GainTable.h
-        core/include/core/preamp/InputStageWDF.h
+        core/include/core/preamp/InputStage.h
         core/include/core/preamp/CEStageWDF.h
         core/include/core/preamp/EFStageWDF.h
         core/include/core/preamp/NeveClassAPath.h
+        core/include/core/preamp/Neve1063Path.h
         core/include/core/preamp/DiffPairWDF.h
         core/include/core/preamp/CascodeStage.h
         core/include/core/preamp/VASStageWDF.h
@@ -123,7 +124,7 @@ target_sources(TransformerModel
         core/include/core/preamp/LoadIsolator.h
         core/include/core/preamp/JE990Path.h
         core/include/core/preamp/ABCrossfade.h
-        core/include/core/preamp/OutputStageWDF.h
+        core/include/core/preamp/OutputStage.h
         core/include/core/preamp/PreampModel.h
 
         # ── Identification headers ──

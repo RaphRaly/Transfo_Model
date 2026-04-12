@@ -14,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Heritage Mode** -- 3-transistor Class-A path (BC184C/BC214C/BD139) with 11-position gain switch (+10 to +50 dB).
 - **Modern Mode** -- 8-transistor discrete op-amp path (LM-394 diff pair, cascode, VAS, Class-AB output) with load isolation.
 - **Preamp controls**: Gain (11-step), Path (Heritage/Modern), Ratio (1:5/1:10), PAD (-20 dB), Phase invert.
-- **InputStageWDF** -- T1 input transformer with phantom power, pad, and impedance ratio selection.
-- **OutputStageWDF** -- T2 output transformer with cos²/sin² crossfade between amplifier paths.
+- **InputStage** -- T1 input transformer with phantom power, pad, and impedance ratio selection.
+- **OutputStage** -- T2 output transformer with cos²/sin² crossfade between amplifier paths.
 - **BJTLeaf / BJTCompanionModel** -- Ebers-Moll BJT WDF nonlinear element with companion-source linearisation.
 - **WDF preamp stages**: CEStageWDF, EFStageWDF, DiffPairWDF, CascodeStage, VASStageWDF, ClassABOutputWDF.
 - **GainTable** -- 11-position Grayhill switch emulation for feedback resistor selection.
