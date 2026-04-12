@@ -35,6 +35,9 @@ namespace ParamID
     static const juce::String HarrisonPad     = "harrisonPad";       // bool (20dB PAD)
     static const juce::String HarrisonPhase   = "harrisonPhase";     // bool (phase reverse)
     static const juce::String HarrisonSourceZ = "harrisonSourceZ";   // float 50-600 Ohm
+
+    // T2 Output Transformer Load (Sprint C.3)
+    static const juce::String T2Load       = "t2Load";
 }
 
 // ─── Create parameter layout ────────────────────────────────────────────────
@@ -59,17 +62,14 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::ParameterID(ParamID::Mix, 1), "Mix",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
 
-    // Transformer Preset
+    // Transformer Preset (8 factory presets — synced with Presets.h)
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Preset, 1), "Transformer",
         juce::StringArray{
             "Jensen JT-115K-E", "Jensen JT-11ELCF",
             "Neve 10468 Input", "Neve LI1166 Output",
-            "API AP2503", "Lundahl LL1538",
-            "Fender Deluxe OT", "Vox AC30 OT",
-            "UTC HA-100X", "Clean DI",
-            "Vocal Warmth", "Bass Thickener",
-            "Drum Punch", "Guitar Crunch", "Master Glue"},
+            "Clean DI", "Vocal Warmth",
+            "Bass Thickener", "Master Glue"},
         0));
 
     // Processing Mode (P1.1: added 2x OS option)
@@ -139,6 +139,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::ParameterID(ParamID::HarrisonSourceZ, 1), "Source Z",
         juce::NormalisableRange<float>(50.0f, 600.0f, 1.0f), 150.0f,
         juce::AudioParameterFloatAttributes().withLabel("Ohm")));
+
+    // ── T2 Output Transformer Load (Sprint C.3) ─────────────────────────
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID(ParamID::T2Load, 1), "T2 Load",
+        juce::StringArray{"600 Ohm (Broadcast)", "10k Ohm (Bridging)", "47k Ohm (Hi-Z)"},
+        1));  // Default: Bridging (10k)
 
     return { params.begin(), params.end() };
 }

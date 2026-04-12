@@ -54,13 +54,6 @@ private:
 
     ParamSlider inputLevel;
     ParamSlider outputLevel;
-    ParamSlider msSlider;
-    ParamSlider aSlider;
-    ParamSlider kSlider;
-    ParamSlider cSlider;
-    ParamSlider alphaSlider;
-    ParamSlider kEddySlider;
-    ParamSlider kExcessSlider;
 
     // Oversampling combo
     juce::ComboBox osCombo;

@@ -257,21 +257,30 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   addAndMakeVisible(bhScope_);
   addAndMakeVisible(levelMeter_);
 
-  // ── Preset combo (hidden — preamp handles T1/T2) ──
+  // ── Preset combo (8 factory presets — synced with Presets.h) ──
+  presetLabel_.setText("PRESET", juce::dontSendNotification);
+  presetLabel_.setJustificationType(juce::Justification::centred);
+  presetLabel_.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
+  presetLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
+  addAndMakeVisible(presetLabel_);
   presetCombo_.addItemList({
       "Jensen JT-115K-E", "Jensen JT-11ELCF",
       "Neve 10468 Input", "Neve LI1166 Output",
-      "API AP2503", "Lundahl LL1538",
-      "Fender Deluxe OT", "Vox AC30 OT",
-      "UTC HA-100X", "Clean DI",
-      "Vocal Warmth", "Bass Thickener",
-      "Drum Punch", "Guitar Crunch", "Master Glue"}, 1);
+      "Clean DI", "Vocal Warmth",
+      "Bass Thickener", "Master Glue"}, 1);
+  addAndMakeVisible(presetCombo_);
   presetAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Preset, presetCombo_);
 
-  // ── Mode combo (hidden) ──
+  // ── Mode combo ──
+  modeLabel_.setText("MODE", juce::dontSendNotification);
+  modeLabel_.setJustificationType(juce::Justification::centred);
+  modeLabel_.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
+  modeLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
+  addAndMakeVisible(modeLabel_);
   modeCombo_.addItemList({"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)", "Physical (J-A+OS2x)"}, 1);
+  addAndMakeVisible(modeCombo_);
   modeAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processorRef_.getAPVTS(), ParamID::Mode, modeCombo_);
@@ -283,7 +292,7 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   circuitLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
   addAndMakeVisible(circuitLabel_);
 
-  circuitCombo_.addItemList({"O.D.T Balanced Preamp", "Legacy (Transformer)"}, 1);
+  circuitCombo_.addItemList({"O.D.T Balanced Preamp", "Legacy (Transformer)", "Harrison Console"}, 1);
   addAndMakeVisible(circuitCombo_);
   circuitAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
@@ -328,6 +337,33 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   preampRatioAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
       processorRef_.getAPVTS(), ParamID::PreampRatio, preampRatioCombo_);
 
+  // ── T2 Load combo (Preamp mode) ──
+  t2LoadLabel_.setText("T2 LOAD", juce::dontSendNotification);
+  t2LoadLabel_.setJustificationType(juce::Justification::centred);
+  t2LoadLabel_.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
+  t2LoadLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
+  addAndMakeVisible(t2LoadLabel_);
+  t2LoadCombo_.addItemList({"600 Ohm", "10k Ohm", "47k Ohm"}, 1);
+  addAndMakeVisible(t2LoadCombo_);
+  t2LoadAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+      processorRef_.getAPVTS(), ParamID::T2Load, t2LoadCombo_);
+
+  // ── Harrison Console controls ──
+  setupRotary(harrisonMicGain_, ParamID::HarrisonMicGain, "MIC GAIN", SSL::accentAmber);
+  setupRotary(harrisonSourceZ_, ParamID::HarrisonSourceZ, "SOURCE Z", SSL::accentPurple);
+
+  harrisonPad_.setButtonText("PAD");
+  harrisonPad_.setColour(juce::ToggleButton::tickColourId, SSL::accentGreen);
+  addAndMakeVisible(harrisonPad_);
+  harrisonPadAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processorRef_.getAPVTS(), ParamID::HarrisonPad, harrisonPad_);
+
+  harrisonPhase_.setButtonText("PHASE");
+  harrisonPhase_.setColour(juce::ToggleButton::tickColourId, SSL::accentRed);
+  addAndMakeVisible(harrisonPhase_);
+  harrisonPhaseAttach_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processorRef_.getAPVTS(), ParamID::HarrisonPhase, harrisonPhase_);
+
   // ── P1.2: Saturation meter ──
   addAndMakeVisible(satMeter_);
   satLabel_.setText("SAT", juce::dontSendNotification);
@@ -349,6 +385,10 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   setConstrainer(&constrainer_);
   setResizable(true, true);
   setSize(kDefaultW, kDefaultH);
+
+  // ── Initial engine visibility ──
+  updateEngineVisibility(static_cast<int>(
+      processorRef_.getAPVTS().getRawParameterValue(ParamID::Circuit)->load()));
 
   startTimerHz(30);
 }
@@ -482,11 +522,16 @@ void PluginEditor::paint(juce::Graphics &g) {
   drawSectionHeader(g, {colX[0], contentY, colX[1] - colX[0], sectionHeaderH},
                     "INPUT", SSL::accentCyan);
 
-  // PREAMP column
+  // PREAMP / TRANSFORMER / HARRISON column (dynamic title)
   g.setColour(SSL::bgDark);
   g.fillRect(colX[1], contentY, colX[2] - colX[1], contentH);
-  drawSectionHeader(g, {colX[1], contentY, colX[2] - colX[1], sectionHeaderH},
-                    "PREAMP", SSL::accentAmber);
+  {
+    juce::Colour col2Accent = (lastCircuitIndex_ == 1) ? SSL::accentCyan
+                            : (lastCircuitIndex_ == 2) ? SSL::accentGreen
+                            : SSL::accentAmber;
+    drawSectionHeader(g, {colX[1], contentY, colX[2] - colX[1], sectionHeaderH},
+                      column2Title_, col2Accent);
+  }
 
   // OUTPUT column
   g.setColour(SSL::bgDark);
@@ -587,47 +632,90 @@ void PluginEditor::resized() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // COLUMN 2: PREAMP  (Gain + Path/Ratio + PAD/Phase)
+  // COLUMN 2: PREAMP / TRANSFORMER / HARRISON (engine-dependent)
   // ═══════════════════════════════════════════════════════════════════════
   {
     auto col = juce::Rectangle<int>(colX[1] + pad, innerY,
                                      colX[2] - colX[1] - pad * 2, innerH);
+    const int comboRowH = 36;
 
-    // Gain knob (top portion, ~45%)
-    int gainH = (int)(col.getHeight() * 0.45f);
-    auto gainArea = col.removeFromTop(gainH);
-    preampGain_.label.setBounds(gainArea.removeFromTop(14));
-    preampGain_.slider.setBounds(gainArea);
-
-    col.removeFromTop(4);
-
-    // Path combo
-    int comboRowH = 36;
+    if (lastCircuitIndex_ == 0)
     {
-      auto row = col.removeFromTop(comboRowH);
-      preampPathLabel_.setBounds(row.removeFromTop(13));
-      preampPathCombo_.setBounds(row.reduced(2, 1));
+      // ── O.D.T Preamp: Gain knob + Path + Ratio + T2Load + PAD/Phase ──
+      int gainH = (int)(col.getHeight() * 0.35f);
+      auto gainArea = col.removeFromTop(gainH);
+      preampGain_.label.setBounds(gainArea.removeFromTop(14));
+      preampGain_.slider.setBounds(gainArea);
+
+      col.removeFromTop(4);
+
+      {
+        auto row = col.removeFromTop(comboRowH);
+        preampPathLabel_.setBounds(row.removeFromTop(13));
+        preampPathCombo_.setBounds(row.reduced(2, 1));
+      }
+      col.removeFromTop(4);
+      {
+        auto row = col.removeFromTop(comboRowH);
+        preampRatioLabel_.setBounds(row.removeFromTop(13));
+        preampRatioCombo_.setBounds(row.reduced(2, 1));
+      }
+      col.removeFromTop(4);
+      {
+        auto row = col.removeFromTop(comboRowH);
+        t2LoadLabel_.setBounds(row.removeFromTop(13));
+        t2LoadCombo_.setBounds(row.reduced(2, 1));
+      }
+      col.removeFromTop(8);
+      {
+        int btnH = juce::jmin(28, col.getHeight());
+        auto btnRow = col.removeFromTop(btnH);
+        int halfW = btnRow.getWidth() / 2 - 2;
+        preampPad_.setBounds(btnRow.removeFromLeft(halfW));
+        btnRow.removeFromLeft(4);
+        preampPhase_.setBounds(btnRow.removeFromLeft(halfW));
+      }
     }
-
-    col.removeFromTop(4);
-
-    // Ratio combo
+    else if (lastCircuitIndex_ == 1)
     {
-      auto row = col.removeFromTop(comboRowH);
-      preampRatioLabel_.setBounds(row.removeFromTop(13));
-      preampRatioCombo_.setBounds(row.reduced(2, 1));
+      // ── Legacy Transformer: Preset + Mode combos ──
+      col.removeFromTop(8);
+      {
+        auto row = col.removeFromTop(comboRowH);
+        presetLabel_.setBounds(row.removeFromTop(13));
+        presetCombo_.setBounds(row.reduced(2, 1));
+      }
+      col.removeFromTop(8);
+      {
+        auto row = col.removeFromTop(comboRowH);
+        modeLabel_.setBounds(row.removeFromTop(13));
+        modeCombo_.setBounds(row.reduced(2, 1));
+      }
     }
-
-    col.removeFromTop(8);
-
-    // PAD + Phase buttons (side by side)
+    else
     {
-      int btnH = juce::jmin(28, col.getHeight());
-      auto btnRow = col.removeFromTop(btnH);
-      int halfW = btnRow.getWidth() / 2 - 2;
-      preampPad_.setBounds(btnRow.removeFromLeft(halfW));
-      btnRow.removeFromLeft(4);
-      preampPhase_.setBounds(btnRow.removeFromLeft(halfW));
+      // ── Harrison Console: MicGain + SourceZ + PAD/Phase ──
+      int gainH = (int)(col.getHeight() * 0.35f);
+      auto gainArea = col.removeFromTop(gainH);
+      harrisonMicGain_.label.setBounds(gainArea.removeFromTop(14));
+      harrisonMicGain_.slider.setBounds(gainArea);
+
+      col.removeFromTop(4);
+
+      int szH = (int)(col.getHeight() * 0.40f);
+      auto szArea = col.removeFromTop(szH);
+      harrisonSourceZ_.label.setBounds(szArea.removeFromTop(14));
+      harrisonSourceZ_.slider.setBounds(szArea);
+
+      col.removeFromTop(8);
+      {
+        int btnH = juce::jmin(28, col.getHeight());
+        auto btnRow = col.removeFromTop(btnH);
+        int halfW = btnRow.getWidth() / 2 - 2;
+        harrisonPad_.setBounds(btnRow.removeFromLeft(halfW));
+        btnRow.removeFromLeft(4);
+        harrisonPhase_.setBounds(btnRow.removeFromLeft(halfW));
+      }
     }
   }
 
@@ -703,7 +791,59 @@ void PluginEditor::resized() {
   }
 }
 
+// =============================================================================
+// Engine-dependent UI visibility
+// =============================================================================
+
+void PluginEditor::updateEngineVisibility(int circuitIndex) {
+  if (circuitIndex == lastCircuitIndex_)
+    return;
+  lastCircuitIndex_ = circuitIndex;
+
+  // 0 = O.D.T Preamp, 1 = Legacy Transformer, 2 = Harrison Console
+  const bool isPreamp   = (circuitIndex == 0);
+  const bool isLegacy   = (circuitIndex == 1);
+  const bool isHarrison = (circuitIndex == 2);
+
+  // ── Preamp controls ──
+  preampGain_.slider.setVisible(isPreamp);
+  preampGain_.label.setVisible(isPreamp);
+  preampPathLabel_.setVisible(isPreamp);
+  preampPathCombo_.setVisible(isPreamp);
+  preampRatioLabel_.setVisible(isPreamp);
+  preampRatioCombo_.setVisible(isPreamp);
+  preampPad_.setVisible(isPreamp);
+  preampPhase_.setVisible(isPreamp);
+  t2LoadLabel_.setVisible(isPreamp);
+  t2LoadCombo_.setVisible(isPreamp);
+
+  // ── Legacy controls ──
+  presetLabel_.setVisible(isLegacy);
+  presetCombo_.setVisible(isLegacy);
+  modeLabel_.setVisible(isLegacy);
+  modeCombo_.setVisible(isLegacy);
+
+  // ── Harrison controls ──
+  harrisonMicGain_.slider.setVisible(isHarrison);
+  harrisonMicGain_.label.setVisible(isHarrison);
+  harrisonSourceZ_.slider.setVisible(isHarrison);
+  harrisonSourceZ_.label.setVisible(isHarrison);
+  harrisonPad_.setVisible(isHarrison);
+  harrisonPhase_.setVisible(isHarrison);
+
+  // Update column 2 header title
+  column2Title_ = isPreamp ? "PREAMP" : isLegacy ? "TRANSFORMER" : "HARRISON";
+
+  // Trigger relayout + repaint
+  resized();
+  repaint();
+}
+
 void PluginEditor::timerCallback() {
+  // Check engine mode change
+  updateEngineVisibility(static_cast<int>(
+      processorRef_.getAPVTS().getRawParameterValue(ParamID::Circuit)->load()));
+
   // P1.2: Update saturation meter
   float sat = processorRef_.getPeakSaturation();
   satMeter_.setSaturation(sat);

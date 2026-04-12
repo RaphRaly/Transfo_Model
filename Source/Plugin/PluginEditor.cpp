@@ -15,9 +15,7 @@ namespace Colours
 
     // Arc colours per section
     static const juce::Colour arcInput     { 0xFF4FC3F7 };   // cyan
-    static const juce::Colour arcMaterial  { 0xFFF0A500 };   // amber
     static const juce::Colour arcOutput    { 0xFF66BB6A };   // green
-    static const juce::Colour arcDynamic   { 0xFFE57373 };   // red-orange for dynamic losses
 }
 
 // =============================================================================
@@ -146,26 +144,19 @@ void ModernLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label)
 // PluginEditor
 // =============================================================================
 
-static constexpr int defaultW = 900;
-static constexpr int defaultH = 520;
-static constexpr int minW = 650;
-static constexpr int minH = 400;
+static constexpr int defaultW = 500;
+static constexpr int defaultH = 400;
+static constexpr int minW = 350;
+static constexpr int minH = 300;
 
 PluginEditor::PluginEditor(PluginProcessor& p)
     : AudioProcessorEditor(p), processorRef(p)
 {
     setLookAndFeel(&modernLnf);
 
-    // Setup sliders with per-section colours
-    setupSlider(inputLevel,  "inputLevel",  "Input dB",      Colours::arcInput);
-    setupSlider(outputLevel, "outputLevel", "Output dB",     Colours::arcOutput);
-    setupSlider(msSlider,    "ms",          "Ms (A/m)",      Colours::arcMaterial);
-    setupSlider(aSlider,     "a",           "Shape (a)",     Colours::arcMaterial);
-    setupSlider(kSlider,     "k",           "Coercivity",    Colours::arcMaterial);
-    setupSlider(cSlider,     "c",           "Revers. (c)",   Colours::arcMaterial);
-    setupSlider(alphaSlider, "alpha",       "Coupling",      Colours::arcMaterial);
-    setupSlider(kEddySlider,   "kEddy",    "K eddy",        Colours::arcDynamic);
-    setupSlider(kExcessSlider,  "kExcess",  "K excess",      Colours::arcDynamic);
+    // Setup sliders
+    setupSlider(inputLevel,  "inputLevel",  "Input dB",  Colours::arcInput);
+    setupSlider(outputLevel, "outputLevel", "Output dB", Colours::arcOutput);
 
     // Oversampling combo box
     osLabel.setText("Oversampling", juce::dontSendNotification);
@@ -252,12 +243,12 @@ void PluginEditor::paint(juce::Graphics& g)
     auto titleArea = getLocalBounds().removeFromTop(56);
     g.setColour(Colours::titleColour);
     g.setFont(juce::Font(22.0f, juce::Font::bold));
-    g.drawText("Transformer Model", titleArea.reduced(20, 0), juce::Justification::centredLeft);
+    g.drawText("TWISTERION", titleArea.reduced(20, 0), juce::Justification::centredLeft);
 
     // Subtitle
     g.setColour(Colours::sectionTitle.withAlpha(0.6f));
     g.setFont(juce::Font(13.0f));
-    g.drawText("Hysteresis Lab", titleArea.reduced(20, 0), juce::Justification::centredRight);
+    g.drawText("Transformer Saturation", titleArea.reduced(20, 0), juce::Justification::centredRight);
 
     // Draw section panels
     auto area = getLocalBounds().reduced(14);
@@ -266,20 +257,20 @@ void PluginEditor::paint(juce::Graphics& g)
     const int sectionGap = 10;
     const float totalWidth = (float)area.getWidth();
 
-    // Input section (1 knob) ~ 15%
-    auto inputArea = area.removeFromLeft((int)(totalWidth * 0.15f));
+    // Input section (1 knob) ~ 35%
+    auto inputArea = area.removeFromLeft((int)(totalWidth * 0.35f));
     drawSection(g, inputArea, "INPUT");
 
     area.removeFromLeft(sectionGap);
 
-    // Output section (1 knob) ~ 15%
-    auto outputArea = area.removeFromRight((int)(totalWidth * 0.15f));
+    // Output section (1 knob) ~ 35%
+    auto outputArea = area.removeFromLeft((int)(totalWidth * 0.35f));
     drawSection(g, outputArea, "OUTPUT");
 
-    area.removeFromRight(sectionGap);
+    area.removeFromLeft(sectionGap);
 
-    // Material section (5 knobs + combo) ~ remaining
-    drawSection(g, area, "MATERIAL PARAMETERS");
+    // Settings section (oversampling) ~ remaining
+    drawSection(g, area, "SETTINGS");
 }
 
 // =============================================================================
@@ -298,7 +289,7 @@ void PluginEditor::resized()
     const float totalWidth = (float)area.getWidth();
 
     // ----- INPUT section (1 knob) -----
-    auto inputArea = area.removeFromLeft((int)(totalWidth * 0.15f));
+    auto inputArea = area.removeFromLeft((int)(totalWidth * 0.35f));
     inputArea = inputArea.reduced(sectionPadH, sectionPadV);
     inputArea.removeFromTop(titleBarH);
 
@@ -312,7 +303,7 @@ void PluginEditor::resized()
     area.removeFromLeft(sectionGap);
 
     // ----- OUTPUT section (1 knob) -----
-    auto outputArea = area.removeFromRight((int)(totalWidth * 0.15f));
+    auto outputArea = area.removeFromLeft((int)(totalWidth * 0.35f));
     outputArea = outputArea.reduced(sectionPadH, sectionPadV);
     outputArea.removeFromTop(titleBarH);
 
@@ -323,47 +314,17 @@ void PluginEditor::resized()
         outputLevel.slider.setBounds(knobArea);
     }
 
-    area.removeFromRight(sectionGap);
+    area.removeFromLeft(sectionGap);
 
-    // ----- MATERIAL section (5 static + 2 dynamic knobs + combo) -----
-    auto matArea = area.reduced(sectionPadH, sectionPadV);
-    matArea.removeFromTop(titleBarH);
-
-    // Top row: 5 static J-A knobs
-    auto topRow = matArea.removeFromTop(matArea.getHeight() * 2 / 3);
-    ParamSlider* staticSliders[] = { &msSlider, &aSlider, &kSlider, &cSlider, &alphaSlider };
-    const int numStaticKnobs = 5;
-    const int staticKnobW = topRow.getWidth() / numStaticKnobs;
-
-    for (int i = 0; i < numStaticKnobs; ++i)
-    {
-        auto col = topRow.removeFromLeft(staticKnobW);
-        int labelH = juce::jmax(18, col.getHeight() / 8);
-        staticSliders[i]->label.setBounds(col.removeFromTop(labelH));
-        staticSliders[i]->slider.setBounds(col);
-    }
-
-    // Bottom row: 2 dynamic loss knobs + oversampling combo
-    auto dynRow = matArea;
-    const int dynKnobW = dynRow.getWidth() / 3;
+    // ----- SETTINGS section (oversampling combo) -----
+    auto settingsArea = area.reduced(sectionPadH, sectionPadV);
+    settingsArea.removeFromTop(titleBarH);
 
     {
-        auto col = dynRow.removeFromLeft(dynKnobW);
-        int labelH = juce::jmax(18, col.getHeight() / 8);
-        kEddySlider.label.setBounds(col.removeFromTop(labelH));
-        kEddySlider.slider.setBounds(col);
-    }
-
-    {
-        auto col = dynRow.removeFromLeft(dynKnobW);
-        int labelH = juce::jmax(18, col.getHeight() / 8);
-        kExcessSlider.label.setBounds(col.removeFromTop(labelH));
-        kExcessSlider.slider.setBounds(col);
-    }
-
-    // Oversampling combo in remaining space
-    {
-        auto comboArea = dynRow.reduced(4, 4);
+        auto comboArea = settingsArea.reduced(4, 4);
+        // Center vertically
+        int comboH = juce::jmin(60, comboArea.getHeight() / 2);
+        comboArea = comboArea.withSizeKeepingCentre(comboArea.getWidth(), comboH + 24);
         int labelH = juce::jmin(22, comboArea.getHeight() / 2);
         osLabel.setBounds(comboArea.removeFromTop(labelH));
         osCombo.setBounds(comboArea.reduced(comboArea.getWidth() / 6, 2));

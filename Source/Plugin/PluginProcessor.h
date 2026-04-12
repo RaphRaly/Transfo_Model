@@ -7,13 +7,12 @@
 #include "../../core/include/core/magnetics/DynamicLosses.h"
 
 // =============================================================================
-// PluginProcessor — JUCE AudioProcessor for the Phase 1 "Hysteresis Lab" plugin.
+// PluginProcessor — JUCE AudioProcessor for the TWISTERION transformer plugin.
 //
-// Exposes all J-A parameters as automatable plugin parameters.
 // Processing chain: Input Gain → 8x Upsample → Hysteresis → DC Block → Downsample → Output Gain
 //
-// Parameters correspond to real physical quantities — no "Drive" or "Character"
-// knobs. The user controls the magnetic material properties directly.
+// J-A material parameters are set per-preset (not exposed as knobs).
+// User controls: Input Level, Output Level, Oversampling.
 // =============================================================================
 
 class PluginProcessor : public juce::AudioProcessor
@@ -64,14 +63,7 @@ private:
     // Cached parameter values
     std::atomic<float>* inputLevelParam  = nullptr;
     std::atomic<float>* outputLevelParam = nullptr;
-    std::atomic<float>* msParam          = nullptr;
-    std::atomic<float>* aParam           = nullptr;
-    std::atomic<float>* kParam           = nullptr;
-    std::atomic<float>* cParam           = nullptr;
-    std::atomic<float>* alphaParam       = nullptr;
     std::atomic<float>* osOrderParam     = nullptr;
-    std::atomic<float>* kEddyParam     = nullptr;
-    std::atomic<float>* kExcessParam   = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };

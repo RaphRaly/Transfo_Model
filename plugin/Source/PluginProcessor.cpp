@@ -34,6 +34,9 @@ PluginProcessor::PluginProcessor()
     harrisonPadParam_     = apvts_.getRawParameterValue(ParamID::HarrisonPad);
     harrisonPhaseParam_   = apvts_.getRawParameterValue(ParamID::HarrisonPhase);
     harrisonSourceZParam_ = apvts_.getRawParameterValue(ParamID::HarrisonSourceZ);
+
+    // T2 Output Transformer Load (Sprint C.3)
+    t2LoadParam_ = apvts_.getRawParameterValue(ParamID::T2Load);
 }
 
 PluginProcessor::~PluginProcessor() = default;
@@ -219,6 +222,26 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         const bool preampPad    = (preampPadParam_->load() > 0.5f);
         const int preampRatio   = static_cast<int>(preampRatioParam_->load());
         const bool preampPhase  = (preampPhaseParam_->load() > 0.5f);
+
+        // Sprint C.3: T2 load impedance parameter
+        const int t2LoadIndex = static_cast<int>(t2LoadParam_->load());
+        if (t2LoadIndex != lastT2LoadIndex_)
+        {
+            // Map choice index to impedance value
+            float t2LoadOhm = 10000.0f;  // default: bridging
+            if (t2LoadIndex == 0) t2LoadOhm = 600.0f;
+            else if (t2LoadIndex == 2) t2LoadOhm = 47000.0f;
+
+            // Update T2 config and re-prepare output stage for each channel
+            auto t2Cfg = TransformerConfig::Jensen_JT11ELCF();
+            t2Cfg.loadImpedance = t2LoadOhm;
+            for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
+            {
+                preampModel_[ch].getOutputStage().prepare(
+                    static_cast<float>(getSampleRate()), t2Cfg, 5.0f);
+            }
+            lastT2LoadIndex_ = t2LoadIndex;
+        }
 
         for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
         {

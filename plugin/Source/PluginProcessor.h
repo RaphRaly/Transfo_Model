@@ -145,6 +145,10 @@ private:
   std::atomic<float> *harrisonPhaseParam_   = nullptr;
   std::atomic<float> *harrisonSourceZParam_ = nullptr;
 
+  // T2 Output Transformer Load (Sprint C.3)
+  std::atomic<float> *t2LoadParam_ = nullptr;
+  int lastT2LoadIndex_ = 1;  // Track for change detection (default: 10k bridging)
+
   // Dry buffer for Harrison mix processing
   std::vector<float> harrisonDryBuffer_;
 

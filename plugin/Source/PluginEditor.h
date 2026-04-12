@@ -103,6 +103,24 @@ private:
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
       preampPathAttach_, preampRatioAttach_;
 
+  // ── Harrison Console controls ─────────────────────────────────────────
+  RotarySlider harrisonMicGain_, harrisonSourceZ_;
+
+  juce::ToggleButton harrisonPad_, harrisonPhase_;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      harrisonPadAttach_, harrisonPhaseAttach_;
+
+  // ── T2 Load combo (visible in Preamp mode) ──────────────────────────
+  juce::ComboBox t2LoadCombo_;
+  juce::Label t2LoadLabel_;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      t2LoadAttach_;
+
+  // ── Engine-dependent UI visibility ──────────────────────────────────
+  int lastCircuitIndex_ = -1;  // tracks engine changes for show/hide
+  void updateEngineVisibility(int circuitIndex);
+  juce::String column2Title_ = "PREAMP";  // dynamic header for column 2
+
   // ── P1.2: Saturation Meter ──────────────────────────────────────────────
   class SaturationMeter : public juce::Component {
   public:
