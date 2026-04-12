@@ -28,6 +28,10 @@ Tests/passivity_out.txt
 Tests/*.png
 Tests/diag_*.wav
 test6_adaa_vs_direct.csv
+Tests/*.exe
+
+# ─── Stray build artefacts ────────────────────────────────────────────────
+*.obj
 
 # ─── IDE ──────────────────────────────────────────────────────────────────────
 .vs/
