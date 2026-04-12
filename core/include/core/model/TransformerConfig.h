@@ -58,6 +58,17 @@ struct TransformerConfig
     CalibrationMode calibrationMode = CalibrationMode::Artistic;
     float calibrationFreqHz = 1000.0f;  // Reference frequency for Physical mode [Hz]
 
+    // ── Flux Integrator (Problem #4 fix) ────────────────────────────────────
+    // When enabled, replaces H = V × hScale (frequency-independent) with a
+    // leaky integrator that provides B_peak ∝ 1/f (correct transformer physics).
+    // At calibrationFreqHz, behavior is identical to the fixed-hScale model.
+    //
+    // Default OFF — only meaningful in Physical calibration mode where hScale
+    // is derived from Ampère's law.  In Artistic mode, hScale = a×5 is already
+    // tuned for musical saturation; adding the 1/f integrator on top produces
+    // physically meaningless over-saturation at LF (THD > 50% at −20 dBu).
+    bool fluxIntegratorEnabled = false;
+
     // ── Derive N_primary from K_geo and core geometry ────────────────────────
     // K_geo = N² · A_e / l_e  →  N = sqrt(K_geo · l_e / A_e)
     // This is an effective N consistent with the fitted K_geo, not necessarily
@@ -72,7 +83,7 @@ struct TransformerConfig
     // ── Factory: Jensen JT-115K-E ───────────────────────────────────────────
     // Line input transformer. Ratio 1:10. Mu-metal core.
     // Rdc_pri=19.7Ω, Rdc_sec=2465Ω, C_sec_shield=205pF
-    // FR: -0.5dB@20Hz, -0.2dB@20kHz, BW~140kHz, CMRR~110dB@60Hz
+    // FR: -0.5dB@20Hz, -0.2dB@20kHz, BW~90kHz (-3dB), CMRR~110dB@60Hz
     static TransformerConfig Jensen_JT115KE()
     {
         TransformerConfig cfg;
@@ -97,7 +108,7 @@ struct TransformerConfig
 
     // ── Factory: Jensen JT-11ELCF ─────────────────────────────────────────────
     // Line output transformer. Ratio 1:1 bifilar. 50% NiFe core.
-    // Rdc=40Ω/winding, Cw=22nF, BW=0.18Hz-15MHz, THD<0.001%@1kHz/+4dBu
+    // Rdc=40Ω/winding, Cw=22nF, BW=0.18Hz-15MHz, THD=0.028%@20Hz/+4dBu
     // Drives 600Ω loads to +24dBu @20Hz. Insertion loss: -1.1dB.
     static TransformerConfig Jensen_JT11ELCF()
     {
@@ -107,7 +118,7 @@ struct TransformerConfig
         cfg.core          = CoreGeometry::jensenJT11ELCF();
         cfg.windings      = WindingConfig::jensenJT11ELCF();
         cfg.material      = JAParameterSet::output50NiFe();
-        cfg.loadImpedance = 600.0f;     // 600 Ohm line load (secondary)
+        cfg.loadImpedance = 10000.0f;   // 10k bridging load (modern studio standard)
         // K_geo = 5300 [m] (fitted): 50% NiFe 1:1 bifilar, high turns count
         // Produces Lm ~33 H at nominal mu, consistent with f_3dB = 0.18 Hz
         cfg.geometry.K_geo = 5300.0f;
@@ -119,6 +130,18 @@ struct TransformerConfig
         cfg.lcParams.CL    = 0.0f;
         cfg.lcParams.Rz    = 0.0f;         // No Zobel (f_res >> audio)
         cfg.lcParams.Cz    = 0.0f;
+        return cfg;
+    }
+
+    // ── Factory: Harrison Console Mic Pre ────────────────────────────────
+    // Uses Jensen JT-115K-E in Harrison 32-series console configuration.
+    // Same electrical characteristics, different application context:
+    // mic input with 6.8K balanced termination and U20 op-amp gain stage.
+    static TransformerConfig Harrison_Console()
+    {
+        auto cfg = Jensen_JT115KE();
+        cfg.name        = "Harrison Console";
+        cfg.displayName = "Harrison Mic In";
         return cfg;
     }
 
@@ -166,125 +189,6 @@ struct TransformerConfig
         cfg.lcParams.Lleak = 1.0e-3f;
         cfg.lcParams.Cw    = 15e-9f;
         cfg.lcParams.Cp_s  = 30e-12f;
-        return cfg;
-    }
-
-    // ── Factory: API AP2503 ──────────────────────────────────────────────
-    // Output, GO SiFe. 75Ω→600Ω (1:3). Ms=1.5e6 (corrected A1.5).
-    static TransformerConfig API_AP2503()
-    {
-        TransformerConfig cfg;
-        cfg.name        = "API AP2503";
-        cfg.displayName = "Punchy Bus";
-        cfg.core        = CoreGeometry::jensenJT11ELCF();
-        cfg.windings.turnsRatio_N1 = 1;
-        cfg.windings.turnsRatio_N2 = 3;
-        cfg.windings.Rdc_primary   = 10.0f;
-        cfg.windings.Rdc_secondary = 30.0f;
-        cfg.windings.sourceImpedance = 75.0f;
-        cfg.material      = JAParameterSet::defaultSiFe();
-        cfg.loadImpedance = 600.0f;
-        cfg.geometry.K_geo = 100.0f;
-        cfg.lcParams.Lleak = 0.5e-3f;
-        cfg.lcParams.Cw    = 100e-12f;
-        cfg.lcParams.Cp_s  = 20e-12f;
-        return cfg;
-    }
-
-    // ── Factory: Lundahl LL1538 ──────────────────────────────────────────
-    // Mic in, mu-metal amorphous ribbon. K1=9e-5 (16× less eddy than Jensen).
-    // FR 10-100kHz ±0.3dB. THD 0.2%@50Hz/0dBu, 1%@+10dBu.
-    static TransformerConfig Lundahl_LL1538()
-    {
-        TransformerConfig cfg;
-        cfg.name        = "Lundahl LL1538";
-        cfg.displayName = "Crystal Clear";
-        cfg.core        = CoreGeometry::jensenJT115KE();
-        cfg.windings.turnsRatio_N1 = 1;
-        cfg.windings.turnsRatio_N2 = 10;
-        cfg.windings.Rdc_primary   = 44.0f;
-        cfg.windings.Rdc_secondary = 880.0f;
-        cfg.windings.sourceImpedance = 200.0f;
-        cfg.windings.hasFaradayShield = true;
-        cfg.material      = JAParameterSet::defaultLundahlMuMetal();
-        cfg.loadImpedance = 10000.0f;
-        cfg.geometry.K_geo = 60.0f;
-        cfg.lcParams.Lleak = 4.0e-3f;
-        cfg.lcParams.Cw    = 40e-12f;
-        cfg.lcParams.Cp_s  = 8e-12f;
-        cfg.lcParams.Rz    = 5000.0f;
-        cfg.lcParams.Cz    = 180e-12f;
-        return cfg;
-    }
-
-    // ── Factory: Fender Deluxe Reverb OT ─────────────────────────────────
-    // 6.6kΩ AA → 8Ω. M6 CRGO d=0.35mm. Warm breakup character.
-    static TransformerConfig Fender_Deluxe_OT()
-    {
-        TransformerConfig cfg;
-        cfg.name        = "Fender Deluxe OT";
-        cfg.displayName = "Tweed Breakup";
-        cfg.core        = CoreGeometry::jensenJT11ELCF();
-        cfg.windings.turnsRatio_N1 = 29;
-        cfg.windings.turnsRatio_N2 = 1;
-        cfg.windings.Rdc_primary   = 120.0f;
-        cfg.windings.Rdc_secondary = 0.3f;
-        cfg.windings.sourceImpedance = 3300.0f;
-        cfg.windings.plateImpedance  = 3300.0f;
-        cfg.windings.hasFaradayShield = false;
-        cfg.material      = JAParameterSet::defaultFenderSiFe();
-        cfg.loadImpedance = 8.0f;
-        cfg.geometry.K_geo = 15.0f;
-        cfg.lcParams.Lleak = 20e-3f;
-        cfg.lcParams.Cw    = 200e-12f;
-        cfg.lcParams.Cp_s  = 50e-12f;
-        return cfg;
-    }
-
-    // ── Factory: Vox AC30 OT ─────────────────────────────────────────────
-    // 4kΩ AA → 8Ω. CRGO. Chimey clean, grinding overdrive.
-    static TransformerConfig Vox_AC30_OT()
-    {
-        TransformerConfig cfg;
-        cfg.name        = "Vox AC30 OT";
-        cfg.displayName = "Chime & Grind";
-        cfg.core        = CoreGeometry::jensenJT11ELCF();
-        cfg.windings.turnsRatio_N1 = 22;
-        cfg.windings.turnsRatio_N2 = 1;
-        cfg.windings.Rdc_primary   = 90.0f;
-        cfg.windings.Rdc_secondary = 0.2f;
-        cfg.windings.sourceImpedance = 2000.0f;
-        cfg.windings.plateImpedance  = 2000.0f;
-        cfg.windings.hasFaradayShield = false;
-        cfg.material      = JAParameterSet::defaultHammondSiFe();
-        cfg.loadImpedance = 8.0f;
-        cfg.geometry.K_geo = 20.0f;
-        cfg.lcParams.Lleak = 30e-3f;
-        cfg.lcParams.Cw    = 250e-12f;
-        cfg.lcParams.Cp_s  = 60e-12f;
-        return cfg;
-    }
-
-    // ── Factory: UTC HA-100X ─────────────────────────────────────────────
-    // Vintage mic in, mu-metal, high leakage for coloration.
-    static TransformerConfig UTC_HA100X()
-    {
-        TransformerConfig cfg;
-        cfg.name        = "UTC HA-100X";
-        cfg.displayName = "Vintage Character";
-        cfg.core        = CoreGeometry::jensenJT115KE();
-        cfg.windings.turnsRatio_N1 = 1;
-        cfg.windings.turnsRatio_N2 = 10;
-        cfg.windings.Rdc_primary   = 50.0f;
-        cfg.windings.Rdc_secondary = 3000.0f;
-        cfg.windings.sourceImpedance = 600.0f;
-        cfg.material    = JAParameterSet::defaultMuMetal();
-        cfg.material.k  = 150.0f;  // Higher coercivity → more coloration
-        cfg.loadImpedance = 15000.0f;
-        cfg.geometry.K_geo = 30.0f;
-        cfg.lcParams.Lleak = 8.0e-3f;   // High leakage
-        cfg.lcParams.Cw    = 120e-12f;
-        cfg.lcParams.Cp_s  = 25e-12f;
         return cfg;
     }
 
@@ -336,34 +240,6 @@ struct TransformerConfig
         cfg.geometry.K_geo = 80.0f;             // More Lm interaction (vs 50)
         cfg.lcParams.Rz = 10000.0f;             // Looser Zobel → more LC resonance (vs 4700)
         cfg.loadImpedance = 47000.0f;           // Higher load → more bass response (vs 150k)
-        return cfg;
-    }
-
-    static TransformerConfig Drum_Punch()
-    {
-        // API AP2503 optimized for drums: tighter damping for transient fidelity,
-        // lower load for more transformer color, slightly lower K_geo
-        auto cfg = API_AP2503();
-        cfg.name = "Drum Punch";
-        cfg.displayName = "Drum Punch";
-        cfg.loadImpedance = 300.0f;             // Lower load → more saturation (vs 600)
-        cfg.geometry.K_geo = 70.0f;             // Moderate Lm (vs 100)
-        cfg.lcParams.Lleak = 0.8e-3f;           // Slightly higher leakage → HF rolloff (vs 0.5)
-        cfg.windings.sourceImpedance = 50.0f;   // Low output Z → punchy transients (vs 75)
-        return cfg;
-    }
-
-    static TransformerConfig Guitar_Crunch()
-    {
-        // Fender OT optimized for guitar crunch: lower plate Z for earlier breakup,
-        // higher leakage for more coloration, no Faraday shield
-        auto cfg = Fender_Deluxe_OT();
-        cfg.name = "Guitar Crunch";
-        cfg.displayName = "Guitar Crunch";
-        cfg.windings.plateImpedance = 2200.0f;  // Lower plate Z → earlier saturation (vs 3300)
-        cfg.material.a = 60.0f;                 // Sharper knee → crunchier (vs 80)
-        cfg.lcParams.Lleak = 30e-3f;            // High leakage → more character (vs 20)
-        cfg.geometry.K_geo = 10.0f;             // Lower Lm → more bass sag (vs 15)
         return cfg;
     }
 

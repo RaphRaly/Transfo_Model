@@ -77,6 +77,8 @@ struct BJTParams
 
     /// Q1 — First common-emitter stage, NPN small signal
     /// Philips BC184C: hFE 200-800 (typ 400), low noise
+    /// Cje=13pF from datasheet (was 10pF — corrected 2026-04-03)
+    /// Vaf=80V from Zetex BC184BP SPICE (same die as BC107, was 100V — corrected 2026-04-03)
     static BJTParams BC184C()
     {
         BJTParams p;
@@ -84,11 +86,11 @@ struct BJTParams
         p.Bf  = 400.0f;
         p.Br  = 4.0f;
         p.Vt  = 0.02585f;
-        p.Vaf = 100.0f;
+        p.Vaf = 80.0f;
         p.Rb  = 10.0f;
         p.Rc  = 1.0f;
         p.Re  = 0.5f;
-        p.Cje = 10e-12f;
+        p.Cje = 13e-12f;
         p.Cjc = 4e-12f;
         p.polarity = Polarity::NPN;
         return p;
@@ -96,6 +98,7 @@ struct BJTParams
 
     /// Q2 — Second common-emitter stage, PNP complement of BC184C
     /// Philips BC214C: hFE 200-800 (typ 400)
+    /// Vaf=80V, Cje=13pF from Zetex SPICE (same die family, was 100V/10pF — corrected 2026-04-03)
     static BJTParams BC214C()
     {
         BJTParams p;
@@ -103,11 +106,11 @@ struct BJTParams
         p.Bf  = 400.0f;
         p.Br  = 4.0f;
         p.Vt  = 0.02585f;
-        p.Vaf = 100.0f;
+        p.Vaf = 80.0f;
         p.Rb  = 10.0f;
         p.Rc  = 1.0f;
         p.Re  = 0.5f;
-        p.Cje = 10e-12f;
+        p.Cje = 13e-12f;
         p.Cjc = 4e-12f;
         p.polarity = Polarity::PNP;
         return p;
@@ -128,6 +131,73 @@ struct BJTParams
         p.Re  = 0.3f;
         p.Cje = 30e-12f;
         p.Cjc = 30e-12f;
+        p.polarity = Polarity::NPN;
+        return p;
+    }
+
+    // ── Neve 1063 additional transistors (all NPN) ─────────────────────
+
+    /// TR4 — BA183/BA184 N-V input stage, NPN low-noise
+    /// Philips BC109: hFE 200-800 (typ 400), NF ~1.2 dB @ 1kHz, fT ~300 MHz
+    /// Source: Philips BC109 datasheet, TO-18 package
+    /// Cje=13pF from datasheet (was 9pF — corrected 2026-04-03)
+    /// Vaf=80V from Zetex BC109BP SPICE (same die as BC107, was 100V — corrected 2026-04-03)
+    static BJTParams BC109()
+    {
+        BJTParams p;
+        p.Is  = 7e-15f;
+        p.Bf  = 400.0f;
+        p.Br  = 4.0f;
+        p.Vt  = 0.02585f;
+        p.Vaf = 80.0f;
+        p.Rb  = 10.0f;
+        p.Rc  = 1.0f;
+        p.Re  = 0.5f;
+        p.Cje = 13e-12f;
+        p.Cjc = 3.5e-12f;
+        p.polarity = Polarity::NPN;
+        return p;
+    }
+
+    /// TR5/TR6 — BA183/BA184 N-V cascode/buffer/output stages, NPN
+    /// Philips BC107: hFE 110-450 (typ 200), fT ~150 MHz
+    /// Source: Philips BC107 datasheet, TO-18 package
+    /// Vaf=80V from datasheet (was 50V — corrected 2026-04-03)
+    /// Cje=13pF from datasheet (was 8pF — corrected 2026-04-03)
+    static BJTParams BC107()
+    {
+        BJTParams p;
+        p.Is  = 5e-15f;
+        p.Bf  = 200.0f;
+        p.Br  = 3.0f;
+        p.Vt  = 0.02585f;
+        p.Vaf = 80.0f;
+        p.Rb  = 15.0f;
+        p.Rc  = 1.5f;
+        p.Re  = 0.5f;
+        p.Cje = 13e-12f;
+        p.Cjc = 4e-12f;
+        p.polarity = Polarity::NPN;
+        return p;
+    }
+
+    /// TR3 — BA183 A-M output stage, NPN power Class-A
+    /// Motorola BDY61: hFE 40-100 (typ 60), Ic_max=10A, Pd=30W, TO-3
+    /// Operates at ~70mA quiescent in Neve 1063 driving LO1166
+    /// Source: Motorola BDY61 datasheet (abs max corrected 2026-04-03)
+    static BJTParams BDY61()
+    {
+        BJTParams p;
+        p.Is  = 1e-12f;
+        p.Bf  = 60.0f;
+        p.Br  = 2.0f;
+        p.Vt  = 0.02585f;
+        p.Vaf = 40.0f;
+        p.Rb  = 3.0f;
+        p.Rc  = 0.2f;
+        p.Re  = 0.1f;
+        p.Cje = 80e-12f;
+        p.Cjc = 50e-12f;
         p.polarity = Polarity::NPN;
         return p;
     }
