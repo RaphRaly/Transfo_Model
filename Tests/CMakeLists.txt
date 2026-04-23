@@ -14,6 +14,31 @@ target_include_directories(test_hysteresis PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../Source
 )
 
+# ── Numerical stability non-regression harness ─────────────────────────────
+# Sweeps sample rates x input signals (x dynamic loss mix) and asserts: no
+# NaN/Inf, bounded output, NR convergence >= 95%, no discontinuous jumps.
+# Must stay green.
+add_executable(test_hysteresis_stability
+    test_hysteresis_stability.cpp
+)
+target_include_directories(test_hysteresis_stability PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source
+    ${CORE_INCLUDE}
+)
+add_test(NAME hysteresis_stability COMMAND test_hysteresis_stability)
+
+# ── Bertotti coupling non-regression harness ────────────────────────────────
+# Validates the J-A ↔ DynamicLosses coupling (field-separation NR residual).
+# Asserts Bertotti signature (log-log slope of dynamic loop area vs frequency).
+add_executable(test_bertotti_coupling
+    test_bertotti_coupling.cpp
+)
+target_include_directories(test_bertotti_coupling PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Source
+    ${CORE_INCLUDE}
+)
+add_test(NAME bertotti_coupling COMMAND test_bertotti_coupling)
+
 # ── v3 tests — no JUCE dependency ───────────────────────────────────────────
 add_executable(test_cpwl_adaa
     test_cpwl_adaa.cpp

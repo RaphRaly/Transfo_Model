@@ -104,7 +104,7 @@ private:
       preampPathAttach_, preampRatioAttach_;
 
   // ── Harrison Console controls ─────────────────────────────────────────
-  RotarySlider harrisonMicGain_, harrisonSourceZ_;
+  RotarySlider harrisonMicGain_, harrisonSourceZ_, harrisonDynLoss_;
 
   juce::ToggleButton harrisonPad_, harrisonPhase_;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>

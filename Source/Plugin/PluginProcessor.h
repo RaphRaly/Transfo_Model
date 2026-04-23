@@ -64,6 +64,7 @@ private:
     std::atomic<float>* inputLevelParam  = nullptr;
     std::atomic<float>* outputLevelParam = nullptr;
     std::atomic<float>* osOrderParam     = nullptr;
+    std::atomic<float>* dynLossParam     = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };

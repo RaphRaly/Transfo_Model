@@ -286,6 +286,19 @@ public:
   void setLinearMode(bool on) { linearMode_ = on; }
   bool getLinearMode() const { return linearMode_; }
 
+  // ─── Bertotti dynamic loss coefficients (runtime setter) ─────────────────
+  // Updates K1/K2 on both the cascade direct path and the WDF nonlinear leaf
+  // (the latter only when templated on a leaf that carries a DynamicLosses,
+  // i.e. JilesAthertonLeaf — CPWLLeaf is a no-op for the WDF branch).
+  // Called from PluginProcessor to wire a UI slider to Bertotti losses
+  // without re-running setConfig().
+  void setDynamicLossCoefficients(float K1, float K2) {
+    directDynLosses_.setCoefficients(K1, K2);
+    if constexpr (!std::is_same_v<NonlinearLeaf, CPWLLeaf>) {
+      wdfCircuit_.getNonlinearLeaf().getDynamicLosses().setCoefficients(K1, K2);
+    }
+  }
+
   // ─── Monitoring ─────────────────────────────────────────────────────────
   struct MonitorData {
     int lastIterCount = 0;

@@ -34,6 +34,7 @@ PluginProcessor::PluginProcessor()
     harrisonPadParam_     = apvts_.getRawParameterValue(ParamID::HarrisonPad);
     harrisonPhaseParam_   = apvts_.getRawParameterValue(ParamID::HarrisonPhase);
     harrisonSourceZParam_ = apvts_.getRawParameterValue(ParamID::HarrisonSourceZ);
+    harrisonDynLossParam_ = apvts_.getRawParameterValue(ParamID::HarrisonDynLoss);
 
     // T2 Output Transformer Load (Sprint C.3)
     t2LoadParam_ = apvts_.getRawParameterValue(ParamID::T2Load);
@@ -82,6 +83,14 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     }
 
     // Prepare Harrison Console Mic Pre
+    //
+    // Harrison now runs on TransformerModel<JilesAthertonLeaf<LangevinPade>> so
+    // the JT-115K-E mu-metal core is modelled with full J-A hysteresis and
+    // Bertotti dynamic losses (K1/K2 come from JAParameterSet::defaultMuMetal()
+    // inside the preset — setConfig auto-enables dynamic losses when K1>0 or
+    // K2>0). Processing mode is Realtime: no oversampling, no latency on the
+    // mic-pre path. The safety clamp in JilesAthertonLeaf.h:158 keeps the
+    // implicit solver stable at host rate without the OS cushion.
     {
         auto jensenCfg = Presets::getByIndex(0);  // Jensen JT-115K-E
         for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
@@ -272,6 +281,11 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         const bool  hPad     = (harrisonPadParam_->load() > 0.5f);
         const bool  hPhase   = (harrisonPhaseParam_->load() > 0.5f);
         const float sourceZ  = harrisonSourceZParam_->load();
+        const float dynMix   = std::clamp(harrisonDynLossParam_->load(), 0.0f, 1.0f);
+
+        // Bertotti K1/K2 from JT-115K-E preset (d=0.1 mm mu-metal: K1=d²/(12ρ))
+        constexpr float kK1_JT115KE = 1.44e-3f;
+        constexpr float kK2_JT115KE = 0.02f;
 
         const float inputGainLin  = std::pow(10.0f, inputGainDb / 20.0f);
         const float outputGainLin = std::pow(10.0f, outputGainDb / 20.0f);
@@ -282,6 +296,8 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             harrisonMicPre_[ch].setPadEnabled(hPad);
             harrisonMicPre_[ch].setPhaseReverse(hPhase);
             harrisonMicPre_[ch].setSourceImpedance(sourceZ);
+            harrisonTransformer_[ch].setDynamicLossCoefficients(
+                kK1_JT115KE * dynMix, kK2_JT115KE * dynMix);
 
             auto* data = buffer.getWritePointer(ch);
 

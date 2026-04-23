@@ -135,8 +135,13 @@ private:
   std::atomic<float> *preampEnabledParam_ = nullptr;
 
   // Harrison Console Mic Pre (one per channel, stereo)
-  transfo::TransformerModel<transfo::CPWLLeaf> harrisonTransformer_[kMaxChannels];
-  Harrison::MicPre::HarrisonMicPre<transfo::TransformerModel<transfo::CPWLLeaf>>
+  // Uses full J-A + Bertotti engine (not CPWL) so the JT-115K-E material
+  // hysteresis and dynamic losses are audible in the mic-pre path.
+  using HarrisonTransformerT =
+      transfo::TransformerModel<
+          transfo::JilesAthertonLeaf<transfo::LangevinPade>>;
+  HarrisonTransformerT harrisonTransformer_[kMaxChannels];
+  Harrison::MicPre::HarrisonMicPre<HarrisonTransformerT>
       harrisonMicPre_[kMaxChannels];
 
   // Cached Harrison parameter pointers
@@ -144,6 +149,7 @@ private:
   std::atomic<float> *harrisonPadParam_     = nullptr;
   std::atomic<float> *harrisonPhaseParam_   = nullptr;
   std::atomic<float> *harrisonSourceZParam_ = nullptr;
+  std::atomic<float> *harrisonDynLossParam_ = nullptr;
 
   // T2 Output Transformer Load (Sprint C.3)
   std::atomic<float> *t2LoadParam_ = nullptr;

@@ -351,6 +351,7 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   // ── Harrison Console controls ──
   setupRotary(harrisonMicGain_, ParamID::HarrisonMicGain, "MIC GAIN", SSL::accentAmber);
   setupRotary(harrisonSourceZ_, ParamID::HarrisonSourceZ, "SOURCE Z", SSL::accentPurple);
+  setupRotary(harrisonDynLoss_, ParamID::HarrisonDynLoss, "DYNAMICS", SSL::accentGreen);
 
   harrisonPad_.setButtonText("PAD");
   harrisonPad_.setColour(juce::ToggleButton::tickColourId, SSL::accentGreen);
@@ -694,18 +695,25 @@ void PluginEditor::resized() {
     }
     else
     {
-      // ── Harrison Console: MicGain + SourceZ + PAD/Phase ──
-      int gainH = (int)(col.getHeight() * 0.35f);
+      // ── Harrison Console: MicGain + SourceZ + Dynamics + PAD/Phase ──
+      int gainH = (int)(col.getHeight() * 0.28f);
       auto gainArea = col.removeFromTop(gainH);
       harrisonMicGain_.label.setBounds(gainArea.removeFromTop(14));
       harrisonMicGain_.slider.setBounds(gainArea);
 
       col.removeFromTop(4);
 
-      int szH = (int)(col.getHeight() * 0.40f);
+      int szH = (int)(col.getHeight() * 0.32f);
       auto szArea = col.removeFromTop(szH);
       harrisonSourceZ_.label.setBounds(szArea.removeFromTop(14));
       harrisonSourceZ_.slider.setBounds(szArea);
+
+      col.removeFromTop(4);
+
+      int dynH = (int)(col.getHeight() * 0.40f);
+      auto dynArea = col.removeFromTop(dynH);
+      harrisonDynLoss_.label.setBounds(dynArea.removeFromTop(14));
+      harrisonDynLoss_.slider.setBounds(dynArea);
 
       col.removeFromTop(8);
       {
@@ -828,6 +836,8 @@ void PluginEditor::updateEngineVisibility(int circuitIndex) {
   harrisonMicGain_.label.setVisible(isHarrison);
   harrisonSourceZ_.slider.setVisible(isHarrison);
   harrisonSourceZ_.label.setVisible(isHarrison);
+  harrisonDynLoss_.slider.setVisible(isHarrison);
+  harrisonDynLoss_.label.setVisible(isHarrison);
   harrisonPad_.setVisible(isHarrison);
   harrisonPhase_.setVisible(isHarrison);
 

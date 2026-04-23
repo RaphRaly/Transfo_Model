@@ -16,6 +16,7 @@ namespace Colours
     // Arc colours per section
     static const juce::Colour arcInput     { 0xFF4FC3F7 };   // cyan
     static const juce::Colour arcOutput    { 0xFF66BB6A };   // green
+    static const juce::Colour arcDynLoss   { 0xFFF0A500 };   // amber
 }
 
 // =============================================================================
@@ -144,9 +145,9 @@ void ModernLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label)
 // PluginEditor
 // =============================================================================
 
-static constexpr int defaultW = 500;
+static constexpr int defaultW = 620;
 static constexpr int defaultH = 400;
-static constexpr int minW = 350;
+static constexpr int minW = 440;
 static constexpr int minH = 300;
 
 PluginEditor::PluginEditor(PluginProcessor& p)
@@ -155,8 +156,16 @@ PluginEditor::PluginEditor(PluginProcessor& p)
     setLookAndFeel(&modernLnf);
 
     // Setup sliders
-    setupSlider(inputLevel,  "inputLevel",  "Input dB",  Colours::arcInput);
-    setupSlider(outputLevel, "outputLevel", "Output dB", Colours::arcOutput);
+    setupSlider(inputLevel,  "inputLevel",     "Input dB",      Colours::arcInput);
+    setupSlider(outputLevel, "outputLevel",    "Output dB",     Colours::arcOutput);
+    setupSlider(dynLoss,     "dynLossAmount",  "Dynamics",      Colours::arcDynLoss);
+    // Render Dynamics as 0–100 % rather than 0–1 for readability.
+    dynLoss.slider.setTextValueSuffix(" %");
+    dynLoss.slider.textFromValueFunction =
+        [](double v) { return juce::String(static_cast<int>(v * 100.0 + 0.5)); };
+    dynLoss.slider.valueFromTextFunction =
+        [](const juce::String& t) { return t.getDoubleValue() / 100.0; };
+    dynLoss.slider.updateText();
 
     // Oversampling combo box
     osLabel.setText("Oversampling", juce::dontSendNotification);
@@ -257,15 +266,21 @@ void PluginEditor::paint(juce::Graphics& g)
     const int sectionGap = 10;
     const float totalWidth = (float)area.getWidth();
 
-    // Input section (1 knob) ~ 35%
-    auto inputArea = area.removeFromLeft((int)(totalWidth * 0.35f));
+    // Input section ~ 27%
+    auto inputArea = area.removeFromLeft((int)(totalWidth * 0.27f));
     drawSection(g, inputArea, "INPUT");
 
     area.removeFromLeft(sectionGap);
 
-    // Output section (1 knob) ~ 35%
-    auto outputArea = area.removeFromLeft((int)(totalWidth * 0.35f));
+    // Output section ~ 27%
+    auto outputArea = area.removeFromLeft((int)(totalWidth * 0.27f));
     drawSection(g, outputArea, "OUTPUT");
+
+    area.removeFromLeft(sectionGap);
+
+    // Dynamics section (Bertotti losses) ~ 23%
+    auto dynArea = area.removeFromLeft((int)(totalWidth * 0.23f));
+    drawSection(g, dynArea, "DYNAMICS");
 
     area.removeFromLeft(sectionGap);
 
@@ -289,7 +304,7 @@ void PluginEditor::resized()
     const float totalWidth = (float)area.getWidth();
 
     // ----- INPUT section (1 knob) -----
-    auto inputArea = area.removeFromLeft((int)(totalWidth * 0.35f));
+    auto inputArea = area.removeFromLeft((int)(totalWidth * 0.27f));
     inputArea = inputArea.reduced(sectionPadH, sectionPadV);
     inputArea.removeFromTop(titleBarH);
 
@@ -303,7 +318,7 @@ void PluginEditor::resized()
     area.removeFromLeft(sectionGap);
 
     // ----- OUTPUT section (1 knob) -----
-    auto outputArea = area.removeFromLeft((int)(totalWidth * 0.35f));
+    auto outputArea = area.removeFromLeft((int)(totalWidth * 0.27f));
     outputArea = outputArea.reduced(sectionPadH, sectionPadV);
     outputArea.removeFromTop(titleBarH);
 
@@ -312,6 +327,20 @@ void PluginEditor::resized()
         int labelH = juce::jmax(18, knobArea.getHeight() / 8);
         outputLevel.label.setBounds(knobArea.removeFromTop(labelH));
         outputLevel.slider.setBounds(knobArea);
+    }
+
+    area.removeFromLeft(sectionGap);
+
+    // ----- DYNAMICS section (1 knob) -----
+    auto dynArea = area.removeFromLeft((int)(totalWidth * 0.23f));
+    dynArea = dynArea.reduced(sectionPadH, sectionPadV);
+    dynArea.removeFromTop(titleBarH);
+
+    {
+        auto knobArea = dynArea;
+        int labelH = juce::jmax(18, knobArea.getHeight() / 8);
+        dynLoss.label.setBounds(knobArea.removeFromTop(labelH));
+        dynLoss.slider.setBounds(knobArea);
     }
 
     area.removeFromLeft(sectionGap);

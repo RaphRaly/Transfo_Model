@@ -35,6 +35,7 @@ namespace ParamID
     static const juce::String HarrisonPad     = "harrisonPad";       // bool (20dB PAD)
     static const juce::String HarrisonPhase   = "harrisonPhase";     // bool (phase reverse)
     static const juce::String HarrisonSourceZ = "harrisonSourceZ";   // float 50-600 Ohm
+    static const juce::String HarrisonDynLoss = "harrisonDynLoss";   // float 0-1 (Bertotti mix)
 
     // T2 Output Transformer Load (Sprint C.3)
     static const juce::String T2Load       = "t2Load";
@@ -139,6 +140,11 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::ParameterID(ParamID::HarrisonSourceZ, 1), "Source Z",
         juce::NormalisableRange<float>(50.0f, 600.0f, 1.0f), 150.0f,
         juce::AudioParameterFloatAttributes().withLabel("Ohm")));
+
+    // Dynamic Losses (Bertotti K1/K2 mix: 0 = quasi-static, 1 = full preset)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID(ParamID::HarrisonDynLoss, 1), "Dynamics",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
 
     // ── T2 Output Transformer Load (Sprint C.3) ─────────────────────────
     params.push_back(std::make_unique<juce::AudioParameterChoice>(

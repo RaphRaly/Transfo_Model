@@ -54,6 +54,7 @@ private:
 
     ParamSlider inputLevel;
     ParamSlider outputLevel;
+    ParamSlider dynLoss;
 
     // Oversampling combo
     juce::ComboBox osCombo;
