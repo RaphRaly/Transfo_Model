@@ -149,16 +149,16 @@ target_sources(TransformerModel
         plugin/Source/VUMeterComponent.h
         plugin/Source/LevelMeterComponent.h
 
-        # ── Legacy source (Phase 1 — kept for reference) ──
-        Source/Core/HysteresisProcessor.h
-        Source/Core/HysteresisProcessor.cpp
-        Source/Core/HysteresisUtils.h
-        Source/Solver/ImplicitSolver.h
-        Source/Solver/ImplicitSolver.cpp
-        Source/DSP/Oversampling.h
-        Source/DSP/Oversampling.cpp
-        Source/DSP/DCBlocker.h
-        Source/DSP/DCBlocker.cpp
+        # ── Legacy source (Phase 1 — kept under legacy/ for reference) ──
+        legacy/Source/Core/HysteresisProcessor.h
+        legacy/Source/Core/HysteresisProcessor.cpp
+        legacy/Source/Core/HysteresisUtils.h
+        legacy/Source/Solver/ImplicitSolver.h
+        legacy/Source/Solver/ImplicitSolver.cpp
+        legacy/Source/DSP/Oversampling.h
+        legacy/Source/DSP/Oversampling.cpp
+        legacy/Source/DSP/DCBlocker.h
+        legacy/Source/DSP/DCBlocker.cpp
 )
 
 target_include_directories(TransformerModel
@@ -166,7 +166,7 @@ target_include_directories(TransformerModel
         ${CMAKE_CURRENT_SOURCE_DIR}/core/include
         ${CMAKE_CURRENT_SOURCE_DIR}/identification/include
         ${CMAKE_CURRENT_SOURCE_DIR}/plugin/Source
-        ${CMAKE_CURRENT_SOURCE_DIR}/Source
+        ${CMAKE_CURRENT_SOURCE_DIR}/legacy/Source
 )
 
 # ─── Embedded Font (Space Grotesk) ──────────────────────────────────────────

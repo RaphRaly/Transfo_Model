@@ -292,7 +292,7 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   circuitLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
   addAndMakeVisible(circuitLabel_);
 
-  circuitCombo_.addItemList({"O.D.T Balanced Preamp", "Legacy (Transformer)", "Harrison Console"}, 1);
+  circuitCombo_.addItemList({"Double Legacy", "Legacy (Transformer)", "Harrison Console"}, 1);
   addAndMakeVisible(circuitCombo_);
   circuitAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
@@ -643,38 +643,17 @@ void PluginEditor::resized() {
     if (lastCircuitIndex_ == 0)
     {
       // ── O.D.T Preamp: Gain knob + Path + Ratio + T2Load + PAD/Phase ──
-      int gainH = (int)(col.getHeight() * 0.35f);
-      auto gainArea = col.removeFromTop(gainH);
-      preampGain_.label.setBounds(gainArea.removeFromTop(14));
-      preampGain_.slider.setBounds(gainArea);
-
-      col.removeFromTop(4);
-
+      col.removeFromTop(8);
       {
         auto row = col.removeFromTop(comboRowH);
-        preampPathLabel_.setBounds(row.removeFromTop(13));
-        preampPathCombo_.setBounds(row.reduced(2, 1));
+        modeLabel_.setBounds(row.removeFromTop(13));
+        modeCombo_.setBounds(row.reduced(2, 1));
       }
-      col.removeFromTop(4);
-      {
-        auto row = col.removeFromTop(comboRowH);
-        preampRatioLabel_.setBounds(row.removeFromTop(13));
-        preampRatioCombo_.setBounds(row.reduced(2, 1));
-      }
-      col.removeFromTop(4);
+      col.removeFromTop(8);
       {
         auto row = col.removeFromTop(comboRowH);
         t2LoadLabel_.setBounds(row.removeFromTop(13));
         t2LoadCombo_.setBounds(row.reduced(2, 1));
-      }
-      col.removeFromTop(8);
-      {
-        int btnH = juce::jmin(28, col.getHeight());
-        auto btnRow = col.removeFromTop(btnH);
-        int halfW = btnRow.getWidth() / 2 - 2;
-        preampPad_.setBounds(btnRow.removeFromLeft(halfW));
-        btnRow.removeFromLeft(4);
-        preampPhase_.setBounds(btnRow.removeFromLeft(halfW));
       }
     }
     else if (lastCircuitIndex_ == 1)
@@ -808,28 +787,28 @@ void PluginEditor::updateEngineVisibility(int circuitIndex) {
     return;
   lastCircuitIndex_ = circuitIndex;
 
-  // 0 = O.D.T Preamp, 1 = Legacy Transformer, 2 = Harrison Console
-  const bool isPreamp   = (circuitIndex == 0);
+  // 0 = Double Legacy, 1 = Legacy Transformer, 2 = Harrison Console
+  const bool isDoubleLegacy = (circuitIndex == 0);
   const bool isLegacy   = (circuitIndex == 1);
   const bool isHarrison = (circuitIndex == 2);
 
   // ── Preamp controls ──
-  preampGain_.slider.setVisible(isPreamp);
-  preampGain_.label.setVisible(isPreamp);
-  preampPathLabel_.setVisible(isPreamp);
-  preampPathCombo_.setVisible(isPreamp);
-  preampRatioLabel_.setVisible(isPreamp);
-  preampRatioCombo_.setVisible(isPreamp);
-  preampPad_.setVisible(isPreamp);
-  preampPhase_.setVisible(isPreamp);
-  t2LoadLabel_.setVisible(isPreamp);
-  t2LoadCombo_.setVisible(isPreamp);
+  preampGain_.slider.setVisible(false);
+  preampGain_.label.setVisible(false);
+  preampPathLabel_.setVisible(false);
+  preampPathCombo_.setVisible(false);
+  preampRatioLabel_.setVisible(false);
+  preampRatioCombo_.setVisible(false);
+  preampPad_.setVisible(false);
+  preampPhase_.setVisible(false);
+  t2LoadLabel_.setVisible(isDoubleLegacy);
+  t2LoadCombo_.setVisible(isDoubleLegacy);
 
   // ── Legacy controls ──
   presetLabel_.setVisible(isLegacy);
   presetCombo_.setVisible(isLegacy);
-  modeLabel_.setVisible(isLegacy);
-  modeCombo_.setVisible(isLegacy);
+  modeLabel_.setVisible(isDoubleLegacy || isLegacy);
+  modeCombo_.setVisible(isDoubleLegacy || isLegacy);
 
   // ── Harrison controls ──
   harrisonMicGain_.slider.setVisible(isHarrison);
@@ -842,7 +821,9 @@ void PluginEditor::updateEngineVisibility(int circuitIndex) {
   harrisonPhase_.setVisible(isHarrison);
 
   // Update column 2 header title
-  column2Title_ = isPreamp ? "PREAMP" : isLegacy ? "TRANSFORMER" : "HARRISON";
+  column2Title_ = isDoubleLegacy ? "DOUBLE LEGACY"
+                : isLegacy ? "TRANSFORMER"
+                : "HARRISON";
 
   // Trigger relayout + repaint
   resized();
@@ -864,21 +845,37 @@ void PluginEditor::timerCallback() {
   infoPanel_.setSatPct(sat);
   infoPanel_.setLmValue(processorRef_.getLmSmoothed());
 
-  auto preampData = processorRef_.getPreampMonitorData();
+  const auto levels = processorRef_.getEngineLevels();
+  const int circuitIndex = static_cast<int>(
+      processorRef_.getAPVTS().getRawParameterValue(ParamID::Circuit)->load());
 
-  // Feed level meter
-  levelMeter_.setLevels(preampData.inputLevel_dBu, preampData.outputLevel_dBu);
+  levelMeter_.setLevels(levels.inputLevel_dBu, levels.outputLevel_dBu);
 
-  // Text monitor (footer)
   juce::String text;
-  if (preampData.inputLevel_dBu > -100.0f)
+  if (circuitIndex == 2)
   {
-    text = juce::String(preampData.inputLevel_dBu, 1) + " dBu  >  "
-         + juce::String(preampData.outputLevel_dBu, 1) + " dBu"
-         + "   |   " + juce::String(preampData.currentPath == 0 ? "Heritage" : "Modern")
-         + "   |   Gain " + juce::String(preampData.gainPosition);
-    if (preampData.isClipping)
-      text += "   |   CLIP";
+    text = juce::String(levels.inputLevel_dBu, 1) + " dBu  >  "
+         + juce::String(levels.outputLevel_dBu, 1) + " dBu"
+         + "   |   Harrison"
+         + "   |   Mic " + juce::String(harrisonMicGain_.slider.getValue(), 2);
   }
+  else if (circuitIndex == 0)
+  {
+    text = juce::String(levels.inputLevel_dBu, 1) + " dBu  >  "
+         + juce::String(levels.outputLevel_dBu, 1) + " dBu"
+         + "   |   JT-115K-E > JT-11ELCF"
+         + "   |   " + modeCombo_.getText()
+         + "   |   " + t2LoadCombo_.getText();
+  }
+  else
+  {
+    text = juce::String(levels.inputLevel_dBu, 1) + " dBu  >  "
+         + juce::String(levels.outputLevel_dBu, 1) + " dBu"
+         + "   |   " + presetCombo_.getText()
+         + "   |   " + modeCombo_.getText();
+  }
+  if (levels.isClipping)
+    text += "   |   CLIP";
+
   monitorLabel_.setText(text, juce::dontSendNotification);
 }

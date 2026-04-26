@@ -9,8 +9,8 @@
 // ever coming back. Must be green before any release build.
 // =============================================================================
 
-#include "../Source/Core/HysteresisProcessor.h"
-#include "../Source/Core/HysteresisProcessor.cpp"
+#include "../legacy/Source/Core/HysteresisProcessor.h"
+#include "../legacy/Source/Core/HysteresisProcessor.cpp"
 #include "core/magnetics/DynamicLosses.h"
 
 #include <cmath>

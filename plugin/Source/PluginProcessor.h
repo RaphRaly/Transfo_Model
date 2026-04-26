@@ -22,9 +22,10 @@
 #include "../../core/include/core/model/Presets.h"
 #include "../../core/include/core/model/ToleranceModel.h"
 #include "../../core/include/core/model/TransformerModel.h"
-#include "../../core/include/core/preamp/PreampModel.h"
 #include "../../core/include/core/harrison/HarrisonMicPre.h"
 #include "ParameterLayout.h"
+
+#include <atomic>
 
 class PluginProcessor : public juce::AudioProcessor {
 public:
@@ -54,25 +55,62 @@ public:
   void getStateInformation(juce::MemoryBlock &destData) override;
   void setStateInformation(const void *data, int sizeInBytes) override;
 
-  // A2.2: Latency compensation — reports correct latency based on processing mode
+  // A2.2: Latency compensation. Caller passes the active circuit so we can
+  // double the OS halfband round-trip for the cascaded Double Legacy path.
   void updateLatencyReport();
+
+  // Snapshot of input/output peak levels driven by the active engine.
+  // Updated once per processBlock; the editor smooths via LevelMeterComponent.
+  struct EngineLevels {
+    float inputLevel_dBu  = -120.0f;
+    float outputLevel_dBu = -120.0f;
+    bool  isClipping      = false;
+  };
+
+  EngineLevels getEngineLevels() const {
+    EngineLevels lv;
+    lv.inputLevel_dBu  = levelInDbu_.load(std::memory_order_relaxed);
+    lv.outputLevel_dBu = levelOutDbu_.load(std::memory_order_relaxed);
+    lv.isClipping      = isClipping_.load(std::memory_order_relaxed);
+    return lv;
+  }
 
   // P1.2: Peak saturation percentage (0-100) for GUI meter
   float getPeakSaturation() {
-    const int m = static_cast<int>(modeParam_->load());
-    if (m == 0)
+    const int circuitIndex = static_cast<int>(circuitParam_->load());
+    const int modeIndex = static_cast<int>(modeParam_->load());
+
+    if (circuitIndex == 2)
+      return harrisonTransformer_[0].getPeakSaturation();
+
+    if (circuitIndex == 0) {
+      if (modeIndex == 0)
+        return doubleLegacyInputRealtime_[0].getPeakSaturation();
+      return doubleLegacyInputPhysical_[0].getPeakSaturation();
+    }
+
+    if (modeIndex == 0)
       return realtimeModel_[0].getPeakSaturation();
-    else
-      return physicalModel_[0].getPeakSaturation();
+    return physicalModel_[0].getPeakSaturation();
   }
 
   // P1.3: Dynamic Lm readout (Henry) for engineering info panel
   float getLmSmoothed() {
-    const int m = static_cast<int>(modeParam_->load());
-    if (m == 0)
+    const int circuitIndex = static_cast<int>(circuitParam_->load());
+    const int modeIndex = static_cast<int>(modeParam_->load());
+
+    if (circuitIndex == 2)
+      return harrisonTransformer_[0].getLmSmoothed();
+
+    if (circuitIndex == 0) {
+      if (modeIndex == 0)
+        return doubleLegacyInputRealtime_[0].getLmSmoothed();
+      return doubleLegacyInputPhysical_[0].getLmSmoothed();
+    }
+
+    if (modeIndex == 0)
       return realtimeModel_[0].getLmSmoothed();
-    else
-      return physicalModel_[0].getLmSmoothed();
+    return physicalModel_[0].getLmSmoothed();
   }
 
   juce::AudioProcessorValueTreeState &getAPVTS() { return apvts_; }
@@ -80,31 +118,46 @@ public:
   // Monitoring data for editor
   transfo::TransformerModel<transfo::CPWLLeaf>::MonitorData
   getMonitorData() const {
+    const int circuitIndex = static_cast<int>(circuitParam_->load());
+    if (circuitIndex == 0)
+      return doubleLegacyInputRealtime_[0].getMonitorData();
     return realtimeModel_[0].getMonitorData();
   }
 
-  // Preamp monitoring data for editor (Sprint 7)
-  transfo::PreampModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>::MonitorData
-  getPreampMonitorData() const {
-    return preampModel_[0].getMonitorData();
-  }
-
   size_t readBHSamples(transfo::BHSample *dest, size_t maxSamples) {
+    const int circuitIndex = static_cast<int>(circuitParam_->load());
     const int modeIndex = static_cast<int>(modeParam_->load());
+
+    if (circuitIndex == 2)
+      return harrisonTransformer_[0].readBHSamples(dest, maxSamples);
+
+    if (circuitIndex == 0) {
+      if (modeIndex == 0)
+        return doubleLegacyInputRealtime_[0].readBHSamples(dest, maxSamples);
+      return doubleLegacyInputPhysical_[0].readBHSamples(dest, maxSamples);
+    }
+
     if (modeIndex == 0)
       return realtimeModel_[0].readBHSamples(dest, maxSamples);
-    else
-      return physicalModel_[0].readBHSamples(dest, maxSamples);
+    return physicalModel_[0].readBHSamples(dest, maxSamples);
   }
 
 private:
+  using RealtimeTransformerT = transfo::TransformerModel<transfo::CPWLLeaf>;
+  using PhysicalTransformerT =
+      transfo::TransformerModel<
+          transfo::JilesAthertonLeaf<transfo::LangevinPade>>;
+
   juce::AudioProcessorValueTreeState apvts_;
 
   // DSP: one model per channel (stereo)
   static constexpr int kMaxChannels = 2;
-  transfo::TransformerModel<transfo::CPWLLeaf> realtimeModel_[kMaxChannels];
-  transfo::TransformerModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>
-      physicalModel_[kMaxChannels];
+  RealtimeTransformerT realtimeModel_[kMaxChannels];
+  PhysicalTransformerT physicalModel_[kMaxChannels];
+  RealtimeTransformerT doubleLegacyInputRealtime_[kMaxChannels];
+  RealtimeTransformerT doubleLegacyOutputRealtime_[kMaxChannels];
+  PhysicalTransformerT doubleLegacyInputPhysical_[kMaxChannels];
+  PhysicalTransformerT doubleLegacyOutputPhysical_[kMaxChannels];
 
   transfo::ToleranceModel toleranceModel_;
 
@@ -119,27 +172,22 @@ private:
 
   int lastPresetIndex_ = -1;
   int lastModeIndex_ = 0;    // A2.2: Track mode for latency updates
+  int lastModeCircuitIndex_ = -1;
 
   void applyPreset(int presetIndex);
+  void applyDoubleLegacyConfigs(int t2LoadIndex);
+  void prepareLegacyPhysicalModels(float sampleRate, int samplesPerBlock, int osFactor);
+  void prepareDoubleLegacyPhysicalModels(float sampleRate, int samplesPerBlock, int osFactor);
 
-  // Preamp model (one per channel, stereo) — Sprint 7
-  transfo::PreampModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>
-      preampModel_[kMaxChannels];
-
-  // Cached preamp parameter pointers
-  std::atomic<float> *preampGainParam_ = nullptr;
-  std::atomic<float> *preampPathParam_ = nullptr;
-  std::atomic<float> *preampPadParam_ = nullptr;
-  std::atomic<float> *preampRatioParam_ = nullptr;
-  std::atomic<float> *preampPhaseParam_ = nullptr;
-  std::atomic<float> *preampEnabledParam_ = nullptr;
+  // Engine-level peak snapshots, refreshed once per processBlock.
+  std::atomic<float> levelInDbu_{-120.0f};
+  std::atomic<float> levelOutDbu_{-120.0f};
+  std::atomic<bool>  isClipping_{false};
 
   // Harrison Console Mic Pre (one per channel, stereo)
   // Uses full J-A + Bertotti engine (not CPWL) so the JT-115K-E material
   // hysteresis and dynamic losses are audible in the mic-pre path.
-  using HarrisonTransformerT =
-      transfo::TransformerModel<
-          transfo::JilesAthertonLeaf<transfo::LangevinPade>>;
+  using HarrisonTransformerT = PhysicalTransformerT;
   HarrisonTransformerT harrisonTransformer_[kMaxChannels];
   Harrison::MicPre::HarrisonMicPre<HarrisonTransformerT>
       harrisonMicPre_[kMaxChannels];
@@ -157,6 +205,8 @@ private:
 
   // Dry buffer for Harrison mix processing
   std::vector<float> harrisonDryBuffer_;
+  std::vector<float> doubleLegacyDryBuffer_;
+  std::vector<float> doubleLegacyMidBuffer_;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };

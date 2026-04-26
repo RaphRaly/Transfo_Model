@@ -1,8 +1,33 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "../../core/include/core/util/Constants.h"
+#include <algorithm>
 #include <cmath>
 
 using namespace transfo;
+
+namespace {
+float getT2LoadOhms(int t2LoadIndex)
+{
+    if (t2LoadIndex == 0)
+        return 600.0f;
+    if (t2LoadIndex == 2)
+        return 47000.0f;
+    return 10000.0f;
+}
+
+// Block-peak in dBu using the same 0 dBu = 0.7746 Vrms reference as PreampModel.
+float blockPeakDbu(const float* data, int numSamples)
+{
+    float peak = 0.0f;
+    for (int s = 0; s < numSamples; ++s)
+        peak = std::max(peak, std::abs(data[s]));
+    if (peak < 1.0e-12f)
+        return -120.0f;
+    constexpr float kVrefPeak = static_cast<float>(transfo::kDBuRefVrms) * 1.4142135f;
+    return 20.0f * std::log10(peak / kVrefPeak);
+}
+} // namespace
 
 // =============================================================================
 // Constructor / Destructor
@@ -21,14 +46,6 @@ PluginProcessor::PluginProcessor()
     svuParam_        = apvts_.getRawParameterValue(ParamID::SVU);
     circuitParam_    = apvts_.getRawParameterValue(ParamID::Circuit);
 
-    // Preamp parameter pointers (Sprint 7)
-    preampGainParam_    = apvts_.getRawParameterValue(ParamID::PreampGain);
-    preampPathParam_    = apvts_.getRawParameterValue(ParamID::PreampPath);
-    preampPadParam_     = apvts_.getRawParameterValue(ParamID::PreampPad);
-    preampRatioParam_   = apvts_.getRawParameterValue(ParamID::PreampRatio);
-    preampPhaseParam_   = apvts_.getRawParameterValue(ParamID::PreampPhase);
-    preampEnabledParam_ = apvts_.getRawParameterValue(ParamID::PreampEnabled);
-
     // Harrison parameter pointers
     harrisonMicGainParam_ = apvts_.getRawParameterValue(ParamID::HarrisonMicGain);
     harrisonPadParam_     = apvts_.getRawParameterValue(ParamID::HarrisonPad);
@@ -36,7 +53,6 @@ PluginProcessor::PluginProcessor()
     harrisonSourceZParam_ = apvts_.getRawParameterValue(ParamID::HarrisonSourceZ);
     harrisonDynLossParam_ = apvts_.getRawParameterValue(ParamID::HarrisonDynLoss);
 
-    // T2 Output Transformer Load (Sprint C.3)
     t2LoadParam_ = apvts_.getRawParameterValue(ParamID::T2Load);
 }
 
@@ -50,47 +66,36 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     const float sr = static_cast<float>(sampleRate);
     const int numCh = getTotalNumOutputChannels();
 
-    // Generate TMT offsets
     const float tmtAmount = svuParam_->load();
     toleranceModel_.generateRandomOffsets(tmtAmount);
 
-    // Load default preset
     applyPreset(static_cast<int>(presetParam_->load()));
+    applyDoubleLegacyConfigs(static_cast<int>(t2LoadParam_->load()));
 
-    // Prepare all models
     for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
     {
         realtimeModel_[ch].setProcessingMode(ProcessingMode::Realtime);
         realtimeModel_[ch].prepareToPlay(sr, samplesPerBlock);
 
-        // P1.1: Physical models prepared with default 4x OS
-        // (runtime OS factor set per-mode in processBlock)
         physicalModel_[ch].setProcessingMode(ProcessingMode::Physical);
         physicalModel_[ch].setOversamplingFactor(4);
         physicalModel_[ch].prepareToPlay(sr, samplesPerBlock);
+
+        doubleLegacyInputRealtime_[ch].setProcessingMode(ProcessingMode::Realtime);
+        doubleLegacyInputRealtime_[ch].prepareToPlay(sr, samplesPerBlock);
+
+        doubleLegacyOutputRealtime_[ch].setProcessingMode(ProcessingMode::Realtime);
+        doubleLegacyOutputRealtime_[ch].prepareToPlay(sr, samplesPerBlock);
+
+        doubleLegacyInputPhysical_[ch].setProcessingMode(ProcessingMode::Physical);
+        doubleLegacyInputPhysical_[ch].setOversamplingFactor(4);
+        doubleLegacyInputPhysical_[ch].prepareToPlay(sr, samplesPerBlock);
+
+        doubleLegacyOutputPhysical_[ch].setProcessingMode(ProcessingMode::Physical);
+        doubleLegacyOutputPhysical_[ch].setOversamplingFactor(4);
+        doubleLegacyOutputPhysical_[ch].prepareToPlay(sr, samplesPerBlock);
     }
 
-    // Prepare preamp models (Sprint 7)
-    {
-        auto preampCfg = PreampConfig::DualTopology();
-        // T2 now uses spec 600 Ohm load (DynamicParallelAdaptor numerical
-        // stability fix eliminates the previous low-impedance bug).
-        for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
-        {
-            preampModel_[ch].setConfig(preampCfg);
-            preampModel_[ch].prepareToPlay(sr, samplesPerBlock);
-        }
-    }
-
-    // Prepare Harrison Console Mic Pre
-    //
-    // Harrison now runs on TransformerModel<JilesAthertonLeaf<LangevinPade>> so
-    // the JT-115K-E mu-metal core is modelled with full J-A hysteresis and
-    // Bertotti dynamic losses (K1/K2 come from JAParameterSet::defaultMuMetal()
-    // inside the preset — setConfig auto-enables dynamic losses when K1>0 or
-    // K2>0). Processing mode is Realtime: no oversampling, no latency on the
-    // mic-pre path. The safety clamp in JilesAthertonLeaf.h:158 keeps the
-    // implicit solver stable at host rate without the OS cushion.
     {
         auto jensenCfg = Presets::getByIndex(0);  // Jensen JT-115K-E
         for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
@@ -105,7 +110,9 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         harrisonDryBuffer_.resize(static_cast<size_t>(samplesPerBlock), 0.0f);
     }
 
-    // A2.2: Report latency to host
+    doubleLegacyDryBuffer_.resize(static_cast<size_t>(samplesPerBlock), 0.0f);
+    doubleLegacyMidBuffer_.resize(static_cast<size_t>(samplesPerBlock), 0.0f);
+
     updateLatencyReport();
 }
 
@@ -115,7 +122,10 @@ void PluginProcessor::releaseResources()
     {
         realtimeModel_[ch].reset();
         physicalModel_[ch].reset();
-        preampModel_[ch].reset();
+        doubleLegacyInputRealtime_[ch].reset();
+        doubleLegacyOutputRealtime_[ch].reset();
+        doubleLegacyInputPhysical_[ch].reset();
+        doubleLegacyOutputPhysical_[ch].reset();
         harrisonTransformer_[ch].reset();
         harrisonMicPre_[ch].reset();
     }
@@ -143,40 +153,50 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
-    // Read common parameters
     const float inputGainDb  = inputGainParam_->load();
     const float outputGainDb = outputGainParam_->load();
     const float mix          = mixParam_->load();
     const int   circuitIndex = static_cast<int>(circuitParam_->load());
-    // 0 = O.D.T Balanced Preamp, 1 = Legacy (Transformer), 2 = Harrison Console
+    const bool  usesTransformerMode = (circuitIndex == 0 || circuitIndex == 1);
 
-    // A2.2: Non-legacy modes have zero latency — update when switching engines
-    if (circuitIndex != 1 && lastModeIndex_ != -1)
+    // Capture pre-processing input peak (host-side level) before any in-place op.
+    float inPeakDbu = -120.0f;
+    for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
+        inPeakDbu = std::max(inPeakDbu, blockPeakDbu(buffer.getReadPointer(ch), numSamples));
+
+    if (!usesTransformerMode && lastModeIndex_ != -1)
     {
         lastModeIndex_ = -1;
+        lastModeCircuitIndex_ = -1;
         setLatencySamples(0);
+    }
+
+    if (usesTransformerMode)
+    {
+        const int modeIndex = static_cast<int>(modeParam_->load());
+        if (modeIndex != lastModeIndex_ || circuitIndex != lastModeCircuitIndex_)
+        {
+            lastModeIndex_ = modeIndex;
+            lastModeCircuitIndex_ = circuitIndex;
+
+            const int osFactor = (modeIndex == 2) ? 2 : 4;
+            const float sampleRate = static_cast<float>(getSampleRate());
+            const int prepareBlock = getBlockSize();
+
+            if (circuitIndex == 1)
+                prepareLegacyPhysicalModels(sampleRate, prepareBlock, osFactor);
+            else
+                prepareDoubleLegacyPhysicalModels(sampleRate, prepareBlock, osFactor);
+
+            updateLatencyReport();
+        }
     }
 
     if (circuitIndex == 1)
     {
-        // ── Legacy mode: old TransformerModel engine ──────────────────────
         const int presetIndex = static_cast<int>(presetParam_->load());
         const int modeIndex   = static_cast<int>(modeParam_->load());
-
-        // A2.2 + P1.1: Update latency and OS factor when mode changes
-        if (modeIndex != lastModeIndex_)
-        {
-            lastModeIndex_ = modeIndex;
-            // P1.1: mode 1 = OS4x, mode 2 = OS2x
-            const int osFactor = (modeIndex == 2) ? 2 : 4;
-            for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
-            {
-                physicalModel_[ch].setOversamplingFactor(osFactor);
-                physicalModel_[ch].prepareToPlay(
-                    static_cast<float>(getSampleRate()), getBlockSize());
-            }
-            updateLatencyReport();
-        }
+        const bool isRealtime = (modeIndex == 0);
 
         if (presetIndex != lastPresetIndex_)
         {
@@ -184,10 +204,8 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             lastPresetIndex_ = presetIndex;
         }
 
-        // Legacy calibration offsets
         const float legacyInputDb  = inputGainDb - 10.0f;
         const float legacyOutputDb = outputGainDb + 15.0f;
-        const bool isRealtime = (modeIndex == 0);
 
         for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
         {
@@ -215,7 +233,6 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             else
                 physicalModel_[ch].processBlock(data, data, numSamples);
 
-            // Safety: clamp NaN/Inf/denormals to zero (A2.1)
             for (int s = 0; s < numSamples; ++s)
             {
                 if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
@@ -225,50 +242,70 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     }
     else if (circuitIndex == 0)
     {
-        // ── Preamp mode: PreampModel is the main engine ──────────────────
-        const int preampGainPos = static_cast<int>(preampGainParam_->load());
-        const int preampPath    = static_cast<int>(preampPathParam_->load());
-        const bool preampPad    = (preampPadParam_->load() > 0.5f);
-        const int preampRatio   = static_cast<int>(preampRatioParam_->load());
-        const bool preampPhase  = (preampPhaseParam_->load() > 0.5f);
-
-        // Sprint C.3: T2 load impedance parameter
+        const int modeIndex   = static_cast<int>(modeParam_->load());
         const int t2LoadIndex = static_cast<int>(t2LoadParam_->load());
-        if (t2LoadIndex != lastT2LoadIndex_)
-        {
-            // Map choice index to impedance value
-            float t2LoadOhm = 10000.0f;  // default: bridging
-            if (t2LoadIndex == 0) t2LoadOhm = 600.0f;
-            else if (t2LoadIndex == 2) t2LoadOhm = 47000.0f;
+        const bool isRealtime = (modeIndex == 0);
 
-            // Update T2 config and re-prepare output stage for each channel
-            auto t2Cfg = TransformerConfig::Jensen_JT11ELCF();
-            t2Cfg.loadImpedance = t2LoadOhm;
-            for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
-            {
-                preampModel_[ch].getOutputStage().prepare(
-                    static_cast<float>(getSampleRate()), t2Cfg, 5.0f);
-            }
-            lastT2LoadIndex_ = t2LoadIndex;
-        }
+        if (t2LoadIndex != lastT2LoadIndex_)
+            applyDoubleLegacyConfigs(t2LoadIndex);
+
+        const float inputGainLin  = std::pow(10.0f, inputGainDb / 20.0f);
+        const float outputGainLin = std::pow(10.0f, outputGainDb / 20.0f);
+        const auto sz = static_cast<size_t>(numSamples);
+
+        if (doubleLegacyDryBuffer_.size() < sz)
+            doubleLegacyDryBuffer_.resize(sz);
+        if (doubleLegacyMidBuffer_.size() < sz)
+            doubleLegacyMidBuffer_.resize(sz);
 
         for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
         {
-            preampModel_[ch].setGainPosition(preampGainPos);
-            preampModel_[ch].setPath(preampPath);
-            preampModel_[ch].setPadEnabled(preampPad);
-            preampModel_[ch].setRatio(preampRatio);
-            preampModel_[ch].setPhaseInvert(preampPhase);
-            preampModel_[ch].setInputGain(inputGainDb);
-            preampModel_[ch].setOutputGain(outputGainDb);
-            preampModel_[ch].setMix(mix);
-
             auto* data = buffer.getWritePointer(ch);
-            preampModel_[ch].processBlock(data, data, numSamples);
+            std::copy(data, data + numSamples, doubleLegacyDryBuffer_.data());
 
-            // Safety: clamp NaN/Inf/denormals to zero (A2.1)
+            for (int s = 0; s < numSamples; ++s)
+                data[s] *= inputGainLin;
+
+            if (isRealtime)
+            {
+                doubleLegacyInputRealtime_[ch].setUseWdfCircuit(false);
+                doubleLegacyInputRealtime_[ch].setInputGain(0.0f);
+                doubleLegacyInputRealtime_[ch].setOutputGain(0.0f);
+                doubleLegacyInputRealtime_[ch].setMix(1.0f);
+
+                doubleLegacyOutputRealtime_[ch].setUseWdfCircuit(false);
+                doubleLegacyOutputRealtime_[ch].setInputGain(0.0f);
+                doubleLegacyOutputRealtime_[ch].setOutputGain(0.0f);
+                doubleLegacyOutputRealtime_[ch].setMix(1.0f);
+
+                doubleLegacyInputRealtime_[ch].processBlock(
+                    data, doubleLegacyMidBuffer_.data(), numSamples);
+                doubleLegacyOutputRealtime_[ch].processBlock(
+                    doubleLegacyMidBuffer_.data(), data, numSamples);
+            }
+            else
+            {
+                doubleLegacyInputPhysical_[ch].setUseWdfCircuit(false);
+                doubleLegacyInputPhysical_[ch].setInputGain(0.0f);
+                doubleLegacyInputPhysical_[ch].setOutputGain(0.0f);
+                doubleLegacyInputPhysical_[ch].setMix(1.0f);
+
+                doubleLegacyOutputPhysical_[ch].setUseWdfCircuit(false);
+                doubleLegacyOutputPhysical_[ch].setInputGain(0.0f);
+                doubleLegacyOutputPhysical_[ch].setOutputGain(0.0f);
+                doubleLegacyOutputPhysical_[ch].setMix(1.0f);
+
+                doubleLegacyInputPhysical_[ch].processBlock(
+                    data, doubleLegacyMidBuffer_.data(), numSamples);
+                doubleLegacyOutputPhysical_[ch].processBlock(
+                    doubleLegacyMidBuffer_.data(), data, numSamples);
+            }
+
             for (int s = 0; s < numSamples; ++s)
             {
+                data[s] = mix * (data[s] * outputGainLin)
+                        + (1.0f - mix) * doubleLegacyDryBuffer_[static_cast<size_t>(s)];
+
                 if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
                     data[s] = 0.0f;
             }
@@ -276,14 +313,12 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     }
     else
     {
-        // ── Harrison Console Mic Pre ────────────────────────────────────
         const float micGain  = harrisonMicGainParam_->load();
         const bool  hPad     = (harrisonPadParam_->load() > 0.5f);
         const bool  hPhase   = (harrisonPhaseParam_->load() > 0.5f);
         const float sourceZ  = harrisonSourceZParam_->load();
         const float dynMix   = std::clamp(harrisonDynLossParam_->load(), 0.0f, 1.0f);
 
-        // Bertotti K1/K2 from JT-115K-E preset (d=0.1 mm mu-metal: K1=d²/(12ρ))
         constexpr float kK1_JT115KE = 1.44e-3f;
         constexpr float kK2_JT115KE = 0.02f;
 
@@ -300,32 +335,40 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                 kK1_JT115KE * dynMix, kK2_JT115KE * dynMix);
 
             auto* data = buffer.getWritePointer(ch);
-
-            // Save dry signal for mix
-            const auto sz = static_cast<size_t>(numSamples);
-            if (harrisonDryBuffer_.size() < sz)
-                harrisonDryBuffer_.resize(sz);
+            const auto hSz = static_cast<size_t>(numSamples);
+            if (harrisonDryBuffer_.size() < hSz)
+                harrisonDryBuffer_.resize(hSz);
             std::copy(data, data + numSamples, harrisonDryBuffer_.data());
 
-            // Apply input gain
             for (int s = 0; s < numSamples; ++s)
                 data[s] *= inputGainLin;
 
-            // Harrison signal chain: input scaling → transformer → gain stage
             harrisonMicPre_[ch].processBlock(data, numSamples);
 
-            // Apply output gain and dry/wet mix
             for (int s = 0; s < numSamples; ++s)
             {
                 data[s] = mix * (data[s] * outputGainLin)
                         + (1.0f - mix) * harrisonDryBuffer_[static_cast<size_t>(s)];
 
-                // Safety: clamp NaN/Inf/denormals to zero (A2.1)
                 if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
                     data[s] = 0.0f;
             }
         }
     }
+
+    // Publish post-processing peaks for the GUI.
+    float outPeakDbu = -120.0f;
+    float outRawPeak = 0.0f;
+    for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
+    {
+        const float* d = buffer.getReadPointer(ch);
+        outPeakDbu = std::max(outPeakDbu, blockPeakDbu(d, numSamples));
+        for (int s = 0; s < numSamples; ++s)
+            outRawPeak = std::max(outRawPeak, std::abs(d[s]));
+    }
+    levelInDbu_.store(inPeakDbu,  std::memory_order_relaxed);
+    levelOutDbu_.store(outPeakDbu, std::memory_order_relaxed);
+    isClipping_.store(outRawPeak > 1.0f, std::memory_order_relaxed);
 }
 
 // =============================================================================
@@ -338,7 +381,6 @@ void PluginProcessor::applyPreset(int presetIndex)
 
     for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
     {
-        // Apply TMT tolerance for stereo
         auto channel = (ch == 0) ? ToleranceModel::Channel::Left
                                  : ToleranceModel::Channel::Right;
         auto cfg = toleranceModel_.applyToConfig(baseCfg, channel);
@@ -348,18 +390,72 @@ void PluginProcessor::applyPreset(int presetIndex)
     }
 }
 
+void PluginProcessor::applyDoubleLegacyConfigs(int t2LoadIndex)
+{
+    auto inputBase = TransformerConfig::Jensen_JT115KE();
+    auto outputBase = TransformerConfig::Jensen_JT11ELCF();
+    outputBase.loadImpedance = getT2LoadOhms(t2LoadIndex);
+
+    const int numCh = getTotalNumOutputChannels();
+    for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
+    {
+        auto channel = (ch == 0) ? ToleranceModel::Channel::Left
+                                 : ToleranceModel::Channel::Right;
+        auto inputCfg = toleranceModel_.applyToConfig(inputBase, channel);
+        auto outputCfg = toleranceModel_.applyToConfig(outputBase, channel);
+
+        doubleLegacyInputRealtime_[ch].setConfig(inputCfg);
+        doubleLegacyOutputRealtime_[ch].setConfig(outputCfg);
+        doubleLegacyInputPhysical_[ch].setConfig(inputCfg);
+        doubleLegacyOutputPhysical_[ch].setConfig(outputCfg);
+    }
+
+    lastT2LoadIndex_ = t2LoadIndex;
+}
+
+void PluginProcessor::prepareLegacyPhysicalModels(float sampleRate, int samplesPerBlock, int osFactor)
+{
+    const int numCh = getTotalNumOutputChannels();
+    for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
+    {
+        physicalModel_[ch].setOversamplingFactor(osFactor);
+        physicalModel_[ch].prepareToPlay(sampleRate, samplesPerBlock);
+    }
+}
+
+void PluginProcessor::prepareDoubleLegacyPhysicalModels(float sampleRate, int samplesPerBlock, int osFactor)
+{
+    const int numCh = getTotalNumOutputChannels();
+    for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
+    {
+        doubleLegacyInputPhysical_[ch].setOversamplingFactor(osFactor);
+        doubleLegacyInputPhysical_[ch].prepareToPlay(sampleRate, samplesPerBlock);
+
+        doubleLegacyOutputPhysical_[ch].setOversamplingFactor(osFactor);
+        doubleLegacyOutputPhysical_[ch].prepareToPlay(sampleRate, samplesPerBlock);
+    }
+}
+
 // =============================================================================
 // Latency Reporting (A2.2)
 // =============================================================================
 void PluginProcessor::updateLatencyReport()
 {
-    const int modeIndex = static_cast<int>(modeParam_->load());
+    const int circuitIndex = static_cast<int>(circuitParam_->load());
+    const int modeIndex    = static_cast<int>(modeParam_->load());
+
+    // Realtime path is sub-sample (CPWL+ADAA, no OS) for every engine.
     if (modeIndex == 0)
-        setLatencySamples(0);       // Realtime (CPWL+ADAA): < 1 sample, report 0
-    else if (modeIndex == 2)
-        setLatencySamples(13);      // Physical (J-A+OS2x): single halfband = 13 samples
-    else
-        setLatencySamples(39);      // Physical (J-A+OS4x): halfband cascade = 39 samples
+    {
+        setLatencySamples(0);
+        return;
+    }
+
+    // Physical path: round-trip halfband cascade. Double Legacy chains two
+    // TransformerModel instances, each running its own OS, so the latency adds.
+    const int perStage = (modeIndex == 2) ? 13 : 39;  // OS2x or OS4x
+    const int stages   = (circuitIndex == 0) ? 2 : 1;
+    setLatencySamples(perStage * stages);
 }
 
 // =============================================================================

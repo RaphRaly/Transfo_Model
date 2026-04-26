@@ -85,10 +85,10 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         juce::NormalisableRange<float>(0.0f, 5.0f, 0.1f), 2.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // Engine: Preamp (default), Legacy transformer-only, or Harrison Console
+    // Engine: double legacy chain, legacy transformer-only, or Harrison Console
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Circuit, 1), "Engine",
-        juce::StringArray{"O.D.T Balanced Preamp", "Legacy (Transformer)", "Harrison Console"},
+        juce::StringArray{"Double Legacy", "Legacy (Transformer)", "Harrison Console"},
         0));
 
     // ── Preamp parameters (Sprint 7) ──────────────────────────────────────

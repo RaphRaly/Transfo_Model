@@ -271,6 +271,12 @@ add_test(NAME channel_strip                   COMMAND test_channel_strip)
 
 # ── Phase 3 UAD Critique Tests ─────────────────────────────────────────────────
 
+add_executable(test_double_legacy_plugin_path
+    test_double_legacy_plugin_path.cpp
+)
+target_include_directories(test_double_legacy_plugin_path PRIVATE ${CORE_INCLUDE})
+add_test(NAME double_legacy_plugin_path       COMMAND test_double_legacy_plugin_path)
+
 # Sprint A.1: VAS diagnostic (double-degen check)
 add_executable(test_vas_diagnostic test_vas_diagnostic.cpp)
 target_include_directories(test_vas_diagnostic PRIVATE ${CORE_INCLUDE})

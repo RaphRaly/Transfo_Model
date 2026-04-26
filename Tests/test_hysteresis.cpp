@@ -12,8 +12,8 @@
 // and flattens at higher amplitudes.
 // =============================================================================
 
-#include "../Source/Core/HysteresisProcessor.h"
-#include "../Source/Core/HysteresisProcessor.cpp"
+#include "../legacy/Source/Core/HysteresisProcessor.h"
+#include "../legacy/Source/Core/HysteresisProcessor.cpp"
 // Note: we include the .cpp directly to avoid needing a build system
 // for this standalone test.
 

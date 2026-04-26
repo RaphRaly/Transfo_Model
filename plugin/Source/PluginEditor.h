@@ -119,7 +119,7 @@ private:
   // ── Engine-dependent UI visibility ──────────────────────────────────
   int lastCircuitIndex_ = -1;  // tracks engine changes for show/hide
   void updateEngineVisibility(int circuitIndex);
-  juce::String column2Title_ = "PREAMP";  // dynamic header for column 2
+  juce::String column2Title_ = "DOUBLE LEGACY";  // dynamic header for column 2
 
   // ── P1.2: Saturation Meter ──────────────────────────────────────────────
   class SaturationMeter : public juce::Component {
