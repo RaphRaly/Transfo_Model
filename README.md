@@ -1,10 +1,10 @@
 # TWISTERION
 
-> **Powered by HysteriCore** -- Physical magnetic transformer & preamp modelling
+> **Powered by HysteriCore** -- Physical magnetic transformer modelling
 
 ![TWISTERION GUI](TWISTERION_GUI.png)
 
-TWISTERION is a physics-based audio plugin that models magnetic transformer saturation and a dual-topology microphone preamp from first principles. No impulse responses, no static waveshapers -- real Jiles-Atherton hysteresis, Wave Digital Filters, and Antiderivative Antialiasing running in real time.
+TWISTERION is a physics-based audio plugin that models magnetic transformer saturation from first principles. No impulse responses, no static waveshapers -- real Jiles-Atherton hysteresis with Bertotti dynamic losses, an analytical LC biquad for parasitic resonance, and Antiderivative Antialiasing in the realtime path.
 
 ---
 
@@ -13,11 +13,11 @@ TWISTERION is a physics-based audio plugin that models magnetic transformer satu
 | Feature | Details |
 |---|---|
 | **HysteriCore engine** | Proprietary magnetic hysteresis core -- Jiles-Atherton physics + CPWL/ADAA realtime path |
-| **O.D.T Balanced Preamp** | Original Dual Topology -- two transformer stages (T1 input + T2 output) with full preamp circuit |
-| **Heritage Mode** | 3-transistor Class-A path -- warm, colored, soft-clipping character |
-| **Modern Mode** | 8-transistor discrete op-amp path (JE-990) -- linear, musical, high headroom |
-| **Realtime mode** | CPWL + ADAA -- no oversampling, ~9% CPU mono @ 44.1 kHz |
-| **Physical mode** | Full J-A implicit solver + 4x oversampling -- offline bounce quality |
+| **Legacy engine** | Single-transformer mode driven by 8 factory presets (Jensen, Neve-style, voicings) |
+| **Double Legacy engine** | Cascaded T1 (JT-115K-E) -> T2 (JT-11ELCF) with full impedance coupling between stages |
+| **Harrison Console engine** | Mic preamp modelled on the Harrison 32-series: JT-115K-E + U20 NE5532-style gain stage with rail-aware soft-clip and slew limiting |
+| **Realtime mode** | CPWL + ADAA -- no oversampling, low CPU |
+| **Physical mode** | Full implicit Jiles-Atherton solver + 4x (or 2x) polyphase oversampling -- offline bounce quality |
 | **B-H Scope** | Real-time hysteresis loop visualization (lock-free SPSC queue) |
 | **Stereo TMT** | Component tolerance spread L/R for natural stereo width |
 | **Identification pipeline** | CMA-ES + Levenberg-Marquardt -- fit J-A params from measured B-H curves |
@@ -25,45 +25,91 @@ TWISTERION is a physics-based audio plugin that models magnetic transformer satu
 
 ---
 
-## Signal Flow
+## Engines
+
+The plugin exposes three independent engines, switchable in real time:
+
+### Legacy (Transformer)
+
+A single transformer in cascade. Driven by an 8-preset selector
+(Jensen JT-115K-E, JT-11ELCF, Neve 10468 Input, Neve LI1166 Output, plus
+voicings: Clean DI, Vocal Warmth, Bass Thickener, Master Glue).
+
+Per-preset gain calibration via `legacyInputOffsetDb` / `legacyOutputOffsetDb`
+in `TransformerConfig` (defaults `-10 dB` in / `+15 dB` out across all current
+Legacy presets, future per-preset overrides via factory).
+
+### Double Legacy (Cascade)
+
+Two transformers in series:
 
 ```
-MIC/LINE IN
-  |
-  v
-[Input Gain] --> [T1 Input Transformer (HysteriCore)]
-                         |
-            +------------+------------+
-            |                         |
-     Heritage Mode              Modern Mode
-    (3-BJT Class-A)         (8-BJT Discrete Op-Amp)
-     Q1 CE -> Q2 CE           DiffPair -> Cascode
-       -> Q3 EF                -> VAS -> Class-AB
-            |                         |
-            +------[Crossfade]--------+
-                       |
-              [T2 Output Transformer (HysteriCore)]
-                       |
-              [Output Gain] --> [Mix] --> OUT
+IN -> [JT-115K-E (T1)] -> [JT-11ELCF (T2)] -> OUT
 ```
 
-Both paths process in parallel to maintain continuous magnetic flux states. Switching is seamless -- no transients.
+T2 sees as source impedance the secondary DC resistance of T1; T1 sees as load
+the input impedance of T2 (`Rdc_pri_T2 + 2*pi*1kHz*Lp_pri_T2`). This produces
+the medium-bass dip / resonance characteristic of cascading two transformers
+without an inter-stage buffer.
+
+Live T2 load switching: `600 Ohm` (broadcast) / `10k` (bridging, default) /
+`47k` (Hi-Z).
+
+### Harrison Console Mic Pre
+
+JT-115K-E mic input transformer cascaded with a U20 op-amp gain stage modelled
+on the NE5532 in the Harrison 32-series:
+
+```
+MIC IN -> [Z_source -> PAD -> JT-115K-E (J-A + Bertotti)] -> [U20 biquad + tanh + slew limiter] -> OUT
+```
+
+The U20 stage is a 2nd-order biquad derived analytically from KCL at the
+inverting node, BLT-prewarped at the HF compensation pole (~1.59 kHz). After
+the linear filter:
+
+- `tanh` soft-clip at +/-13 V (rail saturation, NE5532 +/-15 V supply minus
+  2 V margin)
+- Slew-rate limit at 9 V/us (typical 5532 datasheet)
+
+Continuous mic gain pot, switchable PAD (-20 dB), phase reverse, source
+impedance (50-600 Ohm), and Bertotti dynamics mix (0 = quasi-static,
+1 = full preset).
+
+---
+
+## Signal Flow (per engine)
+
+The active engines all share the same per-transformer cascade:
+
+```
+x -> [Flux Integrator (1/f, Physical mode)] -> [J-A solveImplicitStep]
+   -> [Bertotti field-separated correction]
+   -> [HP filter (R_source / Lm dynamic)]
+   -> [LC parasitic biquad (analytical BLT, 2nd or 3rd order with Zobel)]
+   -> wet
+```
+
+Mix/gain handled at block level by `processBlockRealtime` /
+`processBlockPhysical`. Physical mode wraps the per-sample cascade inside
+a 2-stage halfband oversampler (39 samples round-trip @ OS4x, 13 @ OS2x).
 
 ---
 
 ## Architecture
 
-Seven strict dependency layers -- `core/` has **zero external dependencies**.
+Three strict dependency layers -- `core/` has **zero external dependencies**.
 
 ```
 Plugin (JUCE)
-   +-- Preamp Model          PreampModel<Leaf>, InputStage, OutputStage
-         +-- Amplifier Paths  NeveClassAPath (Heritage), JE990Path (Modern)
-               +-- Transformer Model   TransformerModel<Leaf>, TransformerCircuitWDF
-                     +-- WDF Engine     HSIMSolver, MEJunction, TopologicalJunction
-                           +-- Magnetics   HysteresisModel, CPWLLeaf, JilesAthertonLeaf
-                                 +-- DSP   ADAAEngine, OversamplingEngine
-                                       +-- Utilities   SIMDMath, SmallMatrix, SPSCQueue
+   +-- Transformer Model        TransformerModel<NonlinearLeaf>
+   |     +-- Magnetics          HysteresisModel, JilesAthertonLeaf, CPWLLeaf,
+   |     |                      DynamicLosses (Bertotti), FluxIntegrator
+   |     +-- DSP                LCResonanceBiquad (BLT, up to 3rd order),
+   |     |                      ADAAEngine, OversamplingEngine
+   |     +-- Utilities          Constants, SmoothedValue, SPSCQueue,
+   |                            SmallMatrix, AlignedBuffer, SIMDMath
+   +-- Harrison Mic Pre         HarrisonMicPre, OpAmpGainStage (U20)
 
 Identification (offline, cold path)
    +-- CMA_ES -> LevenbergMarquardt -> CPWLFitter -> IdentificationPipeline
@@ -71,9 +117,11 @@ Identification (offline, cold path)
 
 ### Processing Modes
 
-**Realtime** (monitoring) -- CPWL directional hysteresis + 1st-order ADAA per WDF leaf. No oversampling. ~18% stereo CPU on a single i7 core.
+**Realtime** (monitoring) -- CPWL directional hysteresis + 1st-order ADAA per
+leaf. No oversampling. Low CPU footprint, suitable for live monitoring.
 
-**Physical** (bounce/render) -- Full implicit Newton-Raphson J-A solver inside each magnetic leaf, 4x polyphase oversampling. ~60% stereo CPU single-core.
+**Physical** (bounce/render) -- Full implicit Newton-Raphson J-A solver,
+2-substep trapezoidal companion model, 4x (or 2x) polyphase oversampling.
 
 ---
 
@@ -81,16 +129,19 @@ Identification (offline, cold path)
 
 | Parameter | Range | Default | Description |
 |---|---|---|---|
+| **Engine** | Double Legacy / Legacy / Harrison Console | Double Legacy | Active processing topology |
+| **Mode** | Realtime / Physical OS4x / Physical OS2x | Realtime | DSP precision vs CPU tradeoff |
 | **Input Gain** | -40 to +20 dB | 0 dB | Drive level into the transformer |
 | **Output Gain** | -40 to +20 dB | 0 dB | Output level compensation |
-| **Mix** | 0 -- 100% | 100% | Dry/wet parallel blend |
-| **SVU** | 0 -- 5% | 2% | Stereo Variation Units (TMT tolerance spread) |
-| **Engine** | O.D.T Balanced Preamp / Legacy | O.D.T | Processing topology |
-| **Preamp Gain** | 0 -- 10 (11-position) | 5 | Stepped gain (+10 to +50 dB) |
-| **Path** | Heritage Mode / Modern | Heritage | Amplifier topology selection |
-| **Ratio** | 1:5 / 1:10 | 1:10 | Input transformer impedance ratio |
-| **PAD** | On / Off | Off | -20 dB input attenuation |
-| **Phase** | Normal / Invert | Normal | Polarity inversion |
+| **Mix** | 0 -- 100 % | 100 % | Dry/wet parallel blend |
+| **Transformer (Legacy)** | 8 factory presets | JT-115K-E | Active preset for Legacy mode |
+| **T2 Load (Double Legacy)** | 600 Ohm / 10k / 47k | 10k | Output transformer secondary load |
+| **SVU** | 0 -- 5 % | 2 % | Stereo Variation Units (TMT tolerance spread L/R) |
+| **Mic Gain (Harrison)** | 0 -- 1 (continuous pot) | 0.5 | U20 alpha pot position |
+| **PAD (Harrison)** | On / Off | Off | -20 dB input attenuation |
+| **Phase (Harrison)** | Normal / Invert | Normal | Polarity inversion |
+| **Source Z (Harrison)** | 50 -- 600 Ohm | 150 Ohm | Mic source impedance |
+| **Dynamics (Harrison)** | 0 -- 1 | 1.0 | Bertotti K1/K2 mix (0 = quasi-static) |
 
 ---
 
@@ -98,29 +149,42 @@ Identification (offline, cold path)
 
 ### HysteriCore -- Magnetic Hysteresis Engine
 
-The core technology. Physically models ferromagnetic hysteresis via the Jiles-Atherton equations (5+2 parameters: Ms, a, k, alpha, c + Bertotti dynamic losses K1/K2). Two execution paths:
-- **Physical**: Full implicit Newton-Raphson ODE solver + 4x polyphase oversampling
-- **Realtime**: CPWL piecewise-linear approximation with analytical 1st-order ADAA -- zero aliasing, zero oversampling overhead
+Physically models ferromagnetic hysteresis via the Jiles-Atherton equations
+(5+2 parameters: Ms, a, k, alpha, c + Bertotti dynamic losses K1/K2). Two
+execution paths:
 
-### MEJunction -- Magneto-Electric WDF Coupling
+- **Physical**: Implicit Newton-Raphson trapezoidal solver with 2x
+  sub-stepping for sample-rate invariance + 4x polyphase oversampling
+- **Realtime**: CPWL piecewise-linear approximation with analytical
+  1st-order ADAA -- low aliasing, no oversampling overhead
 
-Novel WDF element (no equivalent in chowdsp_wdf or academic literature). Converts between electrical wave variables and magnetic wave variables via discretised Faraday's and Ampere's laws with trapezoidal integration and unit-delay memory.
+### LCResonanceBiquad
 
-### O.D.T -- Original Dual Topology Preamp
+Analytical 2nd or 3rd-order biquad modelling the LC parasitic resonance
+(`Lleak`, `Cw`, `Cp_s`, optional Zobel `Rz/Cz`). Bilinear-transformed from
+the loaded circuit transfer function with auto-Zobel Q clamping (Q_max = 5)
+and Cp_s feedforward zero modelling for unshielded transformers.
 
-Two complete amplifier circuits sharing input/output transformer stages:
-- **Heritage**: 3-transistor Class-A cascade (BC184C CE -> BC214C CE -> BD139 EF) with AC-coupled negative feedback. 11-position Grayhill gain switch (+10 to +50 dB).
-- **Modern**: 8-transistor discrete op-amp (LM-394 differential pair -> 2N4250A cascode -> VAS -> MJE-181/171 Class-AB output) with load isolation (39 ohm + 40uH).
+### Bertotti Field Separation
 
-Both paths use analytical closed-loop gain computation (avoids WDF feedback oscillation) and process simultaneously for seamless switching.
+`H_total = H_hyst + K_eddy * dB/dt + K_exc * sign(dB/dt) * |dB/dt|^0.5`. The
+dynamic terms reduce the effective field driving the static J-A model,
+concentrating distortion at low frequencies and providing high-frequency
+transparency -- matching real transformer behavior.
 
-### HSIMSolver
+### Harrison U20 Stage
 
-Hybrid Scattering-Impedance Method. Alternates between wave-domain forward/backward scans and port resistance adaptation. Adaptive interval (every 16 samples) + Sherman-Morrison O(N^2) rank-1 scattering matrix update.
+Closed-form biquad for the NE5532-equivalent op-amp `H(s, alpha)` derived from
+KCL at the U20 inverting node, BLT-prewarped at the HF compensation pole
+(~1.59 kHz). Coefficients computed in double, state in DF2T double, I/O in
+float. Followed by `tanh(y / V_clip)` rail saturation and a sample-by-sample
+slew limiter.
 
 ### LangevinPade [3/3]
 
-The anhysteretic function `L(x) = coth(x) - 1/x` approximated by `x(15+x^2)/(45+6x^2)`. No transcendental calls on the hot path -- ~10x faster than `std::tanh`.
+The anhysteretic function `L(x) = coth(x) - 1/x` approximated by
+`x(15+x^2)/(45+6x^2)`. No transcendental calls on the hot path -- ~10x faster
+than `std::tanh`.
 
 ---
 
@@ -129,14 +193,16 @@ The anhysteretic function `L(x) = coth(x) - 1/x` approximated by `x(15+x^2)/(45+
 ```
 Transfo_Model/
 |-- core/include/core/
-|   |-- util/          SmallMatrix, AlignedBuffer, SPSCQueue, SIMDMath, SmoothedValue
-|   |-- magnetics/     HysteresisModel, CPWLLeaf, JilesAthertonLeaf, DynamicLosses
-|   |-- wdf/           WDOnePort, HSIMSolver, MEJunction, TransformerCircuitWDF, BJTLeaf
-|   |-- dsp/           ADAAEngine, OversamplingEngine
-|   |-- model/         TransformerModel, TransformerConfig, Presets, ToleranceModel
-|   +-- preamp/        PreampModel, NeveClassAPath, JE990Path, InputStage,
-|                      OutputStage, CEStageWDF, DiffPairWDF, VASStageWDF,
-|                      ClassABOutputWDF, GainTable, ABCrossfade, LoadIsolator
+|   |-- util/          Constants, SmallMatrix, AlignedBuffer, SPSCQueue,
+|   |                  SIMDMath, SmoothedValue
+|   |-- magnetics/     HysteresisModel, JilesAthertonLeaf, CPWLLeaf,
+|   |                  DynamicLosses, FluxIntegrator, AnhystereticFunctions
+|   |-- dsp/           ADAAEngine, OversamplingEngine, LCResonanceBiquad
+|   |-- harrison/      HarrisonMicPre, OpAmpGainStage, ComponentValues
+|   +-- model/         TransformerModel, TransformerConfig, Presets,
+|                      ToleranceModel, LCResonanceParams, PresetLoader,
+|                      PresetSerializer, CoreGeometry, WindingConfig,
+|                      TransformerGeometry
 |
 |-- identification/include/identification/
 |   |-- CMA_ES.h                   Global optimizer (log-reparametrised)
@@ -147,16 +213,18 @@ Transfo_Model/
 |   +-- ActiveLearning.h           CMA-ES ensemble -- suggest next measurement
 |
 |-- plugin/Source/
-|   |-- PluginProcessor.h/cpp      Audio engine (dual-mode stereo processing)
-|   |-- PluginEditor.h/cpp         TWISTERION GUI (Space Grotesk, SSL-inspired)
+|   |-- PluginProcessor.h/cpp      Audio engine (3-engine stereo processing)
+|   |-- PluginEditor.h/cpp         TWISTERION GUI (Space Grotesk)
 |   |-- BHScopeComponent.h/cpp     Real-time B-H loop visualization
-|   |-- LevelMeterComponent.h      30-segment stereo LED bargraph
+|   |-- LevelMeterComponent.h      Stereo dBu LED bargraph
+|   |-- VUMeterComponent.h         VU needle meter
 |   +-- ParameterLayout.h          APVTS parameter definitions
 |
 |-- plugin/Resources/              Embedded fonts (Space Grotesk)
-|-- Tests/                         260+ tests (CPWL, passivity, HSIM, preamp, plugin)
+|-- Tests/                         24 CTest targets covering core, plugin paths,
+|                                  Harrison stage, Jensen presets, LC biquad
 |-- data/                          B-H curves JSON, transformer configs
-|-- tools/                         CLI simulator, A/B comparison script
+|-- tools/                         CLI simulator, demo audio generator
 +-- docs/                          SRS, sprint plans, architecture decisions
 ```
 
@@ -164,43 +232,44 @@ Transfo_Model/
 
 ## Build
 
-**Requirements:** CMake 3.22+, C++17 compiler (MSVC 2022 / Clang 14+ / GCC 11+). JUCE 8.0.4 is auto-fetched via FetchContent.
+**Requirements:** CMake 3.22+, C++17 compiler (MSVC 2019+ / Clang 14+ / GCC 11+).
+JUCE 8.0.4 is auto-fetched via FetchContent.
 
 ```sh
-# Build plugin (VST3 + AU + Standalone)
+# Build plugin (VST3 + AU + AAX + Standalone)
 cmake -B build
 cmake --build build --config Release
 
 # Build and run core tests (no JUCE dependency)
-cd Tests
-cmake -B build
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
+cmake -S Tests -B build_tests
+cmake --build build_tests --config Release
+ctest --test-dir build_tests -C Release --output-on-failure
 ```
 
 The `core/` library is **header-only** with zero external dependencies.
 
 ---
 
-## Performance
-
-| Mode | Config | CPU (i7, 44.1 kHz) |
-|---|---|---|
-| Realtime | CPWL + ADAA, no OS | ~9% mono, ~18% stereo |
-| Physical | J-A + OS 4x | ~30% mono, ~60% stereo |
-| Latency | Realtime mode | < 1 ms |
-
----
-
 ## Tests
 
-260+ tests covering:
+24 CTest targets -- all green. Coverage includes:
+
 - ADAA antiderivative continuity and alias suppression
 - CPWL direction switching and passivity enforcement
 - J-A stability, LangevinPade properties, dynamic losses
-- HSIM convergence and spectral radius diagnostics
-- Preamp paths (Heritage/Modern): gain accuracy, frequency response, THD, crossfade
-- Full plugin lifecycle: instantiation, APVTS, mode switching, state save/load, stress tests
+- LC biquad: 20 cases on Jensen presets (flat audio band, Zobel damping,
+  step response Bessel alignment, Q-clamp safety, runtime parameter update,
+  Faraday shield model, datasheet FR validation)
+- Jensen passivity / convergence / harmonics / Bertotti frequency response /
+  CPWL parity vs full J-A
+- Newton-Raphson stress at low H, sample-rate invariance, flux integrator
+  physical/diagnostic modes
+- Harrison mic pre: gain accuracy, frequency response, integration with
+  J-A + Bertotti
+- Plugin lifecycle: instantiation, APVTS, mode switching, state save/load,
+  channel strip, Double Legacy plugin path stress (variable block sizes,
+  T2 load switching, gain sweeps)
+- THD validation, frequency response validation, plugin integration
 
 ---
 
@@ -208,12 +277,11 @@ The `core/` library is **header-only** with zero external dependencies.
 
 - Jiles & Atherton, *J. Magn. Magn. Mater.* 61 (1986) -- J-A hysteresis model
 - Bertotti, *IEEE Trans. Magn.* (1988) -- Dynamic loss separation
+- Baghel & Kulkarni, *IEEE Trans. Magn.* (2014) -- Field separation NR
 - Parker & Valimaki, *IEEE SPL* (2017) -- Antiderivative Antialiasing
-- Chowdhury et al., *arXiv:2210.12554* (2022) -- chowdsp_wdf patterns
-- Werner, *Stanford thesis* -- WDF convergence, spectral radius
-- Polimi thesis -- Multiphysics WD modelling, CPWL passivity
 - Magnetic Shields Ltd -- B-H curves for mu-metal and NiFe-50
-- Jensen datasheets -- JT-115K-E THD validation data
+- Jensen datasheets -- JT-115K-E and JT-11ELCF specifications
+- Harrison Consoles -- 32-series mic preamp schematic (U20 NE5532 stage)
 - Brainworx Patent US 10,725,727 -- TMT stereo tolerance
 
 ---
