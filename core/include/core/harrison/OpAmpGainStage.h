@@ -32,6 +32,7 @@
 // =============================================================================
 
 #include "ComponentValues.h"
+#include "../util/Constants.h"
 #include <cmath>
 #include <algorithm>
 
@@ -66,6 +67,7 @@ public:
     {
         s1_ = 0.0;
         s2_ = 0.0;
+        prevOutput_ = 0.0f;
     }
 
     /// Recalculate biquad coefficients for a given pot position alpha in [0, 1].
@@ -132,13 +134,29 @@ public:
     /// Process a single sample through the biquad (Direct Form II Transposed).
     /// State variables kept in double for numerical robustness under
     /// time-varying coefficients.
+    ///
+    /// After the linear biquad we apply two physically-motivated nonlinearities
+    /// that model the real NE5532-equivalent op-amp U20:
+    ///   1. Soft-clip via tanh at ±kU20Vclip_  (rail saturation, ~±13V)
+    ///   2. Slew-rate limit at kU20SlewRate_   (~9 V/μs typical 5532)
+    /// At small signals these are inert (THD < 0.1% at 1 V peak).
     float processSample(float x)
     {
         const double xd = static_cast<double>(x);
-        const double y = b0_ * xd + s1_;
-        s1_ = b1_ * xd - a1_ * y + s2_;
-        s2_ = b2_ * xd - a2_ * y;
-        return static_cast<float>(y);
+        const double y_lin = b0_ * xd + s1_;
+        s1_ = b1_ * xd - a1_ * y_lin + s2_;
+        s2_ = b2_ * xd - a2_ * y_lin;
+
+        const float y_sat =
+            transfo::softSat(static_cast<float>(y_lin), kU20Vclip_);
+
+        const float maxStep = kU20SlewRate_ / sampleRate_;
+        const float dy = y_sat - prevOutput_;
+        const float y_slewed =
+            prevOutput_ + std::clamp(dy, -maxStep, maxStep);
+        prevOutput_ = y_slewed;
+
+        return y_slewed;
     }
 
     /// Get the asymptotic mid-band gain (f << f_pole) for display purposes.
@@ -179,6 +197,11 @@ private:
     // Direct Form II Transposed state (double for accumulator precision)
     double s1_ = 0.0;
     double s2_ = 0.0;
+
+    // U20 nonlinearity state
+    float prevOutput_ = 0.0f;
+    static constexpr float kU20Vclip_    = 13.0f;     // rails ±15V minus 2V margin
+    static constexpr float kU20SlewRate_ = 9.0e6f;    // V/s (9 V/μs typ. 5532)
 
     float lastAlpha_ = -1.0f;  // force initial coefficient computation
 };

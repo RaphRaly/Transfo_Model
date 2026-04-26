@@ -69,6 +69,17 @@ struct TransformerConfig
     // physically meaningless over-saturation at LF (THD > 50% at −20 dBu).
     bool fluxIntegratorEnabled = false;
 
+    // ── Legacy gain calibration (per-preset) ─────────────────────────────
+    // Offsets applied on top of the Legacy GUI input/output knobs to bring
+    // each preset to a "unity-ish" working point. Defaults to 0 so that
+    // Double Legacy / Harrison cascades (which instantiate the raw factory
+    // configs) are not affected. The Legacy mode in PluginProcessor::
+    // applyPreset() overrides these to -10 / +15 dB across all Legacy
+    // presets (the historical Codex GPT-5.4 calibration). Per-preset
+    // refinement is possible by overriding here in any future factory.
+    float legacyInputOffsetDb  = 0.0f;
+    float legacyOutputOffsetDb = 0.0f;
+
     // ── Derive N_primary from K_geo and core geometry ────────────────────────
     // K_geo = N² · A_e / l_e  →  N = sqrt(K_geo · l_e / A_e)
     // This is an effective N consistent with the fitted K_geo, not necessarily

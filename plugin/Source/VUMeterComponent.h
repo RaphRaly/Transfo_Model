@@ -156,7 +156,7 @@ public:
         const float tickMinorLen = tickMajorLen * 0.55f;
         const float fontSize = juce::jmax(8.0f, juce::jmin(11.0f, faceW * 0.09f));
 
-        g.setFont(juce::Font(fontSize));
+        g.setFont(juce::Font(juce::FontOptions(fontSize)));
 
         for (auto& m : marks)
         {
@@ -186,7 +186,7 @@ public:
                 float ly = pivotY - cosA * labelRadius;
                 auto textArea = juce::Rectangle<float>(lx - 16.0f, ly - fontSize * 0.5f,
                                                         32.0f, fontSize + 2.0f);
-                g.setFont(juce::Font(fontSize));
+                g.setFont(juce::Font(juce::FontOptions(fontSize)));
                 g.setColour(overload ? meterRed_ : scaleColour_);
                 g.drawText(m.text, textArea, juce::Justification::centred, false);
             }
@@ -248,7 +248,7 @@ public:
 
         // --- Label ---
         g.setColour(labelColour_);
-        g.setFont(juce::Font(juce::jmax(10.0f, labelH * 0.80f), juce::Font::bold));
+        g.setFont(juce::Font(juce::FontOptions(juce::jmax(10.0f, labelH * 0.80f)).withStyle("Bold")));
         g.drawText(label_, labelArea, juce::Justification::centred, false);
     }
 

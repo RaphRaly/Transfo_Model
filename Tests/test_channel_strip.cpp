@@ -33,7 +33,7 @@ static void initPhysicalModel(TransformerModel<CPWLLeaf>& model,
     phys.calibrationMode = CalibrationMode::Physical;
     model.setConfig(phys);
     model.setProcessingMode(ProcessingMode::Realtime);
-    model.setUseWdfCircuit(false);
+
     model.setInputGain(0.0f);
     model.setOutputGain(0.0f);
     model.setMix(1.0f);

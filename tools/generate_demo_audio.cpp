@@ -105,7 +105,7 @@ static std::vector<float> processSignal(const std::vector<float>& input,
     TransformerModel<CPWLLeaf> model;
     model.setConfig(Presets::getByIndex(presetIdx));
     model.setProcessingMode(ProcessingMode::Realtime);
-    model.setUseWdfCircuit(false);
+
     model.setInputGain(inputGainDb);
     model.setOutputGain(0.0f);
     model.setMix(1.0f);

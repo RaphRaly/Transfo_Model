@@ -120,7 +120,7 @@ static void testJensenFR()
     TransformerModel<CPWLLeaf> model;
     model.setConfig(TransformerConfig::Jensen_JT115KE());
     model.setProcessingMode(ProcessingMode::Realtime);
-    model.setUseWdfCircuit(false);
+
     model.setInputGain(0.0f);
     model.setOutputGain(0.0f);
     model.setMix(1.0f);
@@ -150,7 +150,7 @@ static void testNeveFR()
     TransformerModel<CPWLLeaf> model;
     model.setConfig(TransformerConfig::Neve_10468_Input());
     model.setProcessingMode(ProcessingMode::Realtime);
-    model.setUseWdfCircuit(false);
+
     model.setInputGain(0.0f);
     model.setOutputGain(0.0f);
     model.setMix(1.0f);
@@ -181,7 +181,7 @@ static void testJensenFR_Physical()
     cfg.calibrationMode = CalibrationMode::Physical;
     model.setConfig(cfg);
     model.setProcessingMode(ProcessingMode::Realtime);
-    model.setUseWdfCircuit(false);
+
     model.setInputGain(0.0f);
     model.setOutputGain(0.0f);
     model.setMix(1.0f);
@@ -244,7 +244,7 @@ static void testFRSweepCSV()
         TransformerModel<CPWLLeaf> model;
         model.setConfig(Presets::getByIndex(p));
         model.setProcessingMode(ProcessingMode::Realtime);
-        model.setUseWdfCircuit(false);
+
         model.setInputGain(0.0f);
         model.setOutputGain(0.0f);
         model.setMix(1.0f);

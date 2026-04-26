@@ -204,8 +204,9 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             lastPresetIndex_ = presetIndex;
         }
 
-        const float legacyInputDb  = inputGainDb - 10.0f;
-        const float legacyOutputDb = outputGainDb + 15.0f;
+        const auto& legacyCfg = realtimeModel_[0].getConfig();
+        const float legacyInputDb  = inputGainDb  + legacyCfg.legacyInputOffsetDb;
+        const float legacyOutputDb = outputGainDb + legacyCfg.legacyOutputOffsetDb;
 
         for (int ch = 0; ch < numChannels && ch < kMaxChannels; ++ch)
         {
@@ -214,14 +215,12 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                 realtimeModel_[ch].setInputGain(legacyInputDb);
                 realtimeModel_[ch].setOutputGain(legacyOutputDb);
                 realtimeModel_[ch].setMix(mix);
-                realtimeModel_[ch].setUseWdfCircuit(false);
             }
             else
             {
                 physicalModel_[ch].setInputGain(legacyInputDb);
                 physicalModel_[ch].setOutputGain(legacyOutputDb);
                 physicalModel_[ch].setMix(mix);
-                physicalModel_[ch].setUseWdfCircuit(false);
             }
         }
 
@@ -232,12 +231,6 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                 realtimeModel_[ch].processBlock(data, data, numSamples);
             else
                 physicalModel_[ch].processBlock(data, data, numSamples);
-
-            for (int s = 0; s < numSamples; ++s)
-            {
-                if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
-                    data[s] = 0.0f;
-            }
         }
     }
     else if (circuitIndex == 0)
@@ -268,12 +261,10 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
             if (isRealtime)
             {
-                doubleLegacyInputRealtime_[ch].setUseWdfCircuit(false);
                 doubleLegacyInputRealtime_[ch].setInputGain(0.0f);
                 doubleLegacyInputRealtime_[ch].setOutputGain(0.0f);
                 doubleLegacyInputRealtime_[ch].setMix(1.0f);
 
-                doubleLegacyOutputRealtime_[ch].setUseWdfCircuit(false);
                 doubleLegacyOutputRealtime_[ch].setInputGain(0.0f);
                 doubleLegacyOutputRealtime_[ch].setOutputGain(0.0f);
                 doubleLegacyOutputRealtime_[ch].setMix(1.0f);
@@ -285,12 +276,10 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             }
             else
             {
-                doubleLegacyInputPhysical_[ch].setUseWdfCircuit(false);
                 doubleLegacyInputPhysical_[ch].setInputGain(0.0f);
                 doubleLegacyInputPhysical_[ch].setOutputGain(0.0f);
                 doubleLegacyInputPhysical_[ch].setMix(1.0f);
 
-                doubleLegacyOutputPhysical_[ch].setUseWdfCircuit(false);
                 doubleLegacyOutputPhysical_[ch].setInputGain(0.0f);
                 doubleLegacyOutputPhysical_[ch].setOutputGain(0.0f);
                 doubleLegacyOutputPhysical_[ch].setMix(1.0f);
@@ -305,9 +294,6 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             {
                 data[s] = mix * (data[s] * outputGainLin)
                         + (1.0f - mix) * doubleLegacyDryBuffer_[static_cast<size_t>(s)];
-
-                if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
-                    data[s] = 0.0f;
             }
         }
     }
@@ -349,9 +335,6 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             {
                 data[s] = mix * (data[s] * outputGainLin)
                         + (1.0f - mix) * harrisonDryBuffer_[static_cast<size_t>(s)];
-
-                if (!std::isfinite(data[s]) || std::abs(data[s]) < 1e-15f)
-                    data[s] = 0.0f;
             }
         }
     }
@@ -377,8 +360,12 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 void PluginProcessor::applyPreset(int presetIndex)
 {
     auto baseCfg = Presets::getByIndex(presetIndex);
-    const int numCh = getTotalNumOutputChannels();
+    // Legacy gain calibration applied uniformly across all Legacy presets.
+    // Per-preset overrides can move into the factory functions later.
+    baseCfg.legacyInputOffsetDb  = -10.0f;
+    baseCfg.legacyOutputOffsetDb = +15.0f;
 
+    const int numCh = getTotalNumOutputChannels();
     for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
     {
         auto channel = (ch == 0) ? ToleranceModel::Channel::Left
@@ -395,6 +382,25 @@ void PluginProcessor::applyDoubleLegacyConfigs(int t2LoadIndex)
     auto inputBase = TransformerConfig::Jensen_JT115KE();
     auto outputBase = TransformerConfig::Jensen_JT11ELCF();
     outputBase.loadImpedance = getT2LoadOhms(t2LoadIndex);
+
+    // Couplage d'impédance T1 ↔ T2 (Sprint 3) :
+    //   - T1 voit comme charge l'impédance d'entrée de T2 (au lieu d'une
+    //     source idéale 150kΩ figée). Approximation statique:
+    //     Z_in_T2 ≈ Rdc_pri_T2 + 2π·1kHz·Lp_pri_T2
+    //   - T2 voit comme source l'impédance de sortie de T1
+    //     (Rdc_sec_T1, négligeable face à Xm_T2 mais propagée pour cohérence)
+    //
+    // Effet audible: avec t2Load = 600Ω (charge faible), creux/résonance
+    // médium-bas autour de 100-200 Hz qui caractérise une cascade sans buffer.
+    {
+        const float xm_t2 = transfo::kTwoPif * 1000.0f
+                          * outputBase.windings.Lp_primary;
+        const float zIn_t2 =
+            outputBase.windings.Rdc_primary + xm_t2;
+        inputBase.loadImpedance = zIn_t2;
+        outputBase.windings.sourceImpedance =
+            inputBase.windings.Rdc_secondary;
+    }
 
     const int numCh = getTotalNumOutputChannels();
     for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)

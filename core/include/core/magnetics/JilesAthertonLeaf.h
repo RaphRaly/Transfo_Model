@@ -44,7 +44,6 @@
 // =============================================================================
 
 #include "../util/Constants.h"
-#include "../wdf/WDOnePort.h"
 #include "DynamicLosses.h"
 #include "HysteresisModel.h"
 #include <algorithm>
@@ -53,7 +52,7 @@
 namespace transfo {
 
 template <typename AnhystType>
-class JilesAthertonLeaf : public WDOnePort<JilesAthertonLeaf<AnhystType>> {
+class JilesAthertonLeaf {
 public:
   JilesAthertonLeaf() = default;
 
@@ -75,22 +74,22 @@ public:
     dynLosses_.setSampleRate(sampleRate);
     dynLosses_.reset();
     updateCachedCoeffs();
-    // Sync Z_port_ so scatterImpl() uses the correct port resistance
-    // in its companion model (not the WDOnePort default of 1.0).
-    this->syncPortImpedance();
+    // Sync Z_port_ so scatter() uses the correct port resistance
+    // in its companion model.
+    Z_port_ = getPortResistance();
   }
 
   void setParameters(const JAParameterSet &params) {
     hystModel_.setParameters(params);
     dynLosses_.setCoefficients(params.K1, params.K2);
     updateCachedCoeffs();
-    this->syncPortImpedance();
+    Z_port_ = getPortResistance();
   }
 
-  // ─── WDF scattering (called by WDOnePort CRTP) ─────────────────────────
-  float scatterImpl(float a_m) {
+  // ─── WDF scattering (legacy entry point, retained for tests) ───────────
+  float scatter(float a_m) {
     const double M_c = hystModel_.getMagnetization();
-    const double Z = static_cast<double>(this->Z_port_);
+    const double Z = static_cast<double>(Z_port_);
     double H_applied;
 
     if (K_geo_ > 0.0f) {
@@ -281,7 +280,7 @@ public:
   }
 
   // ─── Adaptive port resistance ───────────────────────────────────────────
-  float getPortResistanceImpl() const {
+  float getPortResistance() const {
     const double dMdH = hystModel_.getInstantaneousSusceptibility();
     const double suscept = 1.0 + dMdH;
 
@@ -379,6 +378,9 @@ private:
     alpha1_ = Gamma_ / (Lambda_ * kMu0 + kEpsilonD);
     alpha2_ = hystModel_.getParameters().alpha * alpha1_;
   }
+
+  // Port resistance cache (used by the legacy scatter() entry point)
+  float Z_port_ = 1.0f;
 };
 
 } // namespace transfo

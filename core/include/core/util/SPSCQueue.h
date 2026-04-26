@@ -77,10 +77,19 @@ public:
 private:
     static constexpr size_t kMask = Capacity - 1;
 
-    // Separate cache lines to avoid false sharing
+    // Separate cache lines to avoid false sharing.
+    // The alignas(64) deliberately introduces structure padding;
+    // silence MSVC C4324 which flags this as a warning.
+#if defined(_MSC_VER)
+    #pragma warning(push)
+    #pragma warning(disable: 4324)
+#endif
     alignas(64) std::atomic<size_t> head_{0};
     alignas(64) std::atomic<size_t> tail_{0};
     std::array<T, Capacity> buffer_{};
+#if defined(_MSC_VER)
+    #pragma warning(pop)
+#endif
 };
 
 } // namespace transfo

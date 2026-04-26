@@ -24,6 +24,7 @@
 //            nonlinear-lm-and-lc-resonance-extension.md §B.4
 // =============================================================================
 
+#include "../util/Constants.h"
 #include <cmath>
 
 namespace transfo {
@@ -91,8 +92,7 @@ struct LCResonanceParams
     float computeCpsBridgingZeroFreq(float Rs) const
     {
         if (Cp_s <= 0.0f || Rs <= 0.0f) return 0.0f;
-        constexpr float kTwoPi_local = 6.283185307f;
-        return 1.0f / (kTwoPi_local * Cp_s * Rs);
+        return 1.0f / (kTwoPif * Cp_s * Rs);
     }
 
     // Resonant frequency [Hz]
@@ -101,8 +101,7 @@ struct LCResonanceParams
         const float Ct = computeCtotal();
         if (Ct <= 0.0f || Lleak <= 0.0f)
             return 1e6f; // effectively infinite — no resonance
-        constexpr float kTwoPi = 6.283185307f;
-        return 1.0f / (kTwoPi * std::sqrt(Lleak * Ct));
+        return 1.0f / (kTwoPif * std::sqrt(Lleak * Ct));
     }
 
     // Quality factor for the actual circuit topology:

@@ -3,23 +3,20 @@
 // =============================================================================
 // TransformerModel — Top-level audio transformer simulation engine.
 //
-// Orchestrates all components: TransformerCircuitWDF, OversamplingEngine, ToleranceModel.
-// This is the class that the plugin layer calls for audio processing.
+// Orchestrates all components: J-A direct hysteresis, LC parasitic biquad,
+// OversamplingEngine, ToleranceModel. The plugin layer calls this class for
+// audio processing.
 //
 // Two processing modes [v3]:
 //   Physical : J-A complete + OS 4x — for bounce/render offline
 //   Realtime : CPWL directional + ADAA, NO OS — for monitoring
 //
-// [v3] ProcessingMode revised: ADAA replaces OS 2x in Realtime.
-// CPU saving: 30-50% vs v2.
-//
-// Template on NonlinearLeaf allows:
-//   TransformerModel<CPWLLeaf>           → Realtime mode
-//   TransformerModel<JilesAthertonLeaf>  → Physical mode
-//
-// Runtime switch via std::variant in the plugin layer.
+// Template on NonlinearLeaf is now a type discriminator only (Realtime vs
+// Physical instantiation). The active path always uses the cascade
+// J-A → HP → LC biquad — the WDF wave-domain tree was removed in 2026.
 // =============================================================================
 
+#include "../dsp/LCResonanceBiquad.h"
 #include "../dsp/OversamplingEngine.h"
 #include "../magnetics/AnhystereticFunctions.h"
 #include "../magnetics/CPWLLeaf.h"
@@ -28,8 +25,6 @@
 #include "../util/Constants.h"
 #include "../util/SPSCQueue.h"
 #include "../util/SmoothedValue.h"
-#include "../wdf/TransformerCircuitWDF.h"
-#include "../wdf/WDFResonanceFilter.h"
 #include "ToleranceModel.h"
 #include "TransformerConfig.h"
 #include <algorithm>
@@ -85,14 +80,6 @@ public:
     bhDownsampleCounter_ = 0;
 
     configureCircuit();
-
-    // Always prepare unified WDF circuit so it's ready for runtime switching
-    wdfCircuit_.prepare(static_cast<double>(
-        (processingMode_ == ProcessingMode::Physical)
-            ? sampleRate * static_cast<float>(osFactor_)
-            : sampleRate),
-        config_);
-    wdfCircuit_.reset();
   }
 
   // ─── Process Block ──────────────────────────────────────────────────────
@@ -112,28 +99,8 @@ public:
   // Caller must multiply by getTurnsRatio() to get voltage gain.
   float processSample(float x) {
     float wet;
-    if (useWdfCircuit_) {
-      wet = wdfCircuit_.processSample(x);
-
-      // P1.2: Track peak saturation from WDF nonlinear leaf
-      if (!linearMode_) {
-        if constexpr (!std::is_same_v<NonlinearLeaf, CPWLLeaf>) {
-          const double M_wdf = wdfCircuit_.getNonlinearLeaf()
-                                   .getHysteresisModel().getMagnetization();
-          float satR = static_cast<float>(std::abs(M_wdf)
-                       / (static_cast<double>(config_.material.Ms) + 1e-30));
-          if (satR > peakSaturation_) peakSaturation_ = satR;
-        }
-
-        // BH scope data from the nonlinear leaf
-        if (++bhDownsampleCounter_ >= 32) {
-          bhDownsampleCounter_ = 0;
-          auto& leaf = wdfCircuit_.getNonlinearLeaf();
-          bhQueue_.push(BHSample{leaf.getH(), leaf.getB()});
-        }
-      }
-    } else {
-      // === CASCADE CODE (A1.1: J-A → HP → LC) ===
+    {
+      // === CASCADE: J-A → HP → LC ===
       const float x_flux = static_cast<float>(fluxInt_.integrate(
           static_cast<double>(x)));
 
@@ -230,7 +197,7 @@ public:
         if (std::abs(lpState_) < 1e-15f) lpState_ = 0.0f;
         wet = lpState_;
       }
-    } // end !useWdfCircuit_
+    }
 
     return wet;
   }
@@ -240,8 +207,6 @@ public:
   void setSourceImpedance(float Zs) {
     Rsource_ = Zs;
     hpAlpha_ = computeHpAlphaFromLm(lmSmoothed_);
-    if (useWdfCircuit_)
-      wdfCircuit_.setSourceImpedance(static_cast<double>(Zs));
     if (lcEnabled_) {
       float Rs_lc = Zs + config_.windings.Rdc_primary + config_.Rdc_sec_reflected();
       lcFilter_.updateParameters(config_.lcParams, Rs_lc,
@@ -254,10 +219,8 @@ public:
   float getTurnsRatio() const { return config_.windings.turnsRatio(); }
 
   // ─── Magnetizing current approximation ──────────────────────────────────
+  // Cascade approximation: I_m = M * l_e / N
   float getMagnetizingCurrent() const {
-    if (useWdfCircuit_)
-      return wdfCircuit_.getNonlinearLeaf().getKirchhoffI();
-    // Cascade approximation: I_m = M * l_e / N
     float N = config_.estimateNprimary();
     float l_e = config_.core.effectiveLength();
     return (N > 0.0f && l_e > 0.0f)
@@ -266,14 +229,12 @@ public:
   }
 
   // ─── Input impedance approximation ──────────────────────────────────────
+  // Dominated by Xm at mid-frequency (~1kHz)
   float getInputImpedance() const {
-    if (useWdfCircuit_)
-      return wdfCircuit_.getInputImpedance();
-    // Cascade: dominated by Xm at mid-frequency (~1kHz)
     return kTwoPif * 1000.0f * lmSmoothed_;
   }
 
-  // ─── Lm alias (symmetry with TransformerCircuitWDF::getLm()) ────────────
+  // ─── Lm accessor ────────────────────────────────────────────────────────
   float getLm() const { return lmSmoothed_; }
 
   // ─── Parameter control ──────────────────────────────────────────────────
@@ -287,16 +248,9 @@ public:
   bool getLinearMode() const { return linearMode_; }
 
   // ─── Bertotti dynamic loss coefficients (runtime setter) ─────────────────
-  // Updates K1/K2 on both the cascade direct path and the WDF nonlinear leaf
-  // (the latter only when templated on a leaf that carries a DynamicLosses,
-  // i.e. JilesAthertonLeaf — CPWLLeaf is a no-op for the WDF branch).
-  // Called from PluginProcessor to wire a UI slider to Bertotti losses
-  // without re-running setConfig().
+  // Wires a UI slider to Bertotti losses without re-running setConfig().
   void setDynamicLossCoefficients(float K1, float K2) {
     directDynLosses_.setCoefficients(K1, K2);
-    if constexpr (!std::is_same_v<NonlinearLeaf, CPWLLeaf>) {
-      wdfCircuit_.getNonlinearLeaf().getDynamicLosses().setCoefficients(K1, K2);
-    }
   }
 
   // ─── Monitoring ─────────────────────────────────────────────────────────
@@ -349,11 +303,6 @@ public:
   float getBNorm() const { return bNorm_; }
   float getHpAlpha() const { return hpAlpha_; }
 
-  // ─── Unified WDF circuit control ──────────────────────────────────────
-  void setUseWdfCircuit(bool on) { useWdfCircuit_ = on; }
-  bool getUseWdfCircuit() const { return useWdfCircuit_; }
-  TransformerCircuitWDF<NonlinearLeaf>& getWdfCircuit() { return wdfCircuit_; }
-
   void reset() {
     oversampler_.reset();
     bhQueue_.reset();
@@ -364,7 +313,6 @@ public:
     lpState_ = 0.0f;
     lmSmoothed_ = config_.windings.Lp_primary; // Reset to static Lp
     lcFilter_.reset();
-    wdfCircuit_.reset();
     bertottiUpdateCounter_ = 0;  // V2.4
     peakSaturation_ = 0.0f;      // P1.2
   }
@@ -401,17 +349,11 @@ private:
   float hpPrev_ = 0.0f;
 
   // ─── LC resonance post-stage (replaces simple LP) — P1-2 ────────────
-  // WDF-based second-order LC parasitic resonance filter.
+  // Analytical second-order LC parasitic resonance filter (BLT biquad).
   // Models Lleak + Ctotal interaction with optional Zobel damping.
   // Bypasses when Lleak ≈ 0 or Ctotal ≈ 0 (f_res >> audio band).
-  WDFResonanceFilter lcFilter_;
+  LCResonanceBiquad lcFilter_;
   bool lcEnabled_ = false;
-
-  // ─── Unified WDF circuit (Sprint 2) ──────────────────────────────────
-  // When enabled, replaces the cascade HP→J-A→LC with a single
-  // physically-correct WDF tree.  Controlled by useWdfCircuit_.
-  TransformerCircuitWDF<NonlinearLeaf> wdfCircuit_;
-  bool useWdfCircuit_ = false;  // Feature flag — false = cascade (stable), true = WDF
 
   // ─── V2.4: Bertotti dynamic loss → LC Q coupling ──────────────────────
   int bertottiUpdateCounter_ = 0;
@@ -688,9 +630,6 @@ private:
         }
       }
     }
-
-    // ── Unified WDF circuit reconfiguration (always ready for runtime switch) ──
-    wdfCircuit_.prepare(static_cast<double>(procRate), config_);
 
     // Reset filter states
     hpState_ = 0.0f;

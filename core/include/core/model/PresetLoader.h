@@ -650,8 +650,8 @@ private:
 
     // Try to match known transformer core geometries by name
     static bool inferCoreFromKnown(const std::string& name,
-                                   const std::string& materialFamily,
-                                   bool isGapped,
+                                   [[maybe_unused]] const std::string& materialFamily,
+                                   [[maybe_unused]] bool isGapped,
                                    CoreGeometry& geo)
     {
         std::string lower = name;

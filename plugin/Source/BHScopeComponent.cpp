@@ -42,7 +42,7 @@ void BHScopeComponent::paint(juce::Graphics &g) {
   maxB_ = maxB_ * 0.9f + currentMaxB * 0.1f;
 
   // Draw the B-H curve
-  if (kMaxPoints < 2)
+  if constexpr (kMaxPoints < 2)
     return;
 
   juce::Path curve;

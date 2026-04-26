@@ -77,23 +77,19 @@ target_sources(TransformerModel
         core/include/core/magnetics/JAParameterSet.h
         core/include/core/magnetics/HysteresisModel.h
         core/include/core/magnetics/DynamicLosses.h
+        core/include/core/magnetics/FluxIntegrator.h
         core/include/core/magnetics/JilesAthertonLeaf.h
         core/include/core/magnetics/CPWLLeaf.h
 
-        # wdf/
-        core/include/core/wdf/WDOnePort.h
-        core/include/core/wdf/AdaptedElements.h
-        core/include/core/wdf/WDFSeriesAdaptor.h
-        core/include/core/wdf/DynamicParallelAdaptor.h
-        core/include/core/wdf/WDFResonanceFilter.h
-        core/include/core/wdf/TransformerCircuitWDF.h
-        core/include/core/wdf/DiodeLeaf.h
-        core/include/core/wdf/BJTCompanionModel.h
-        core/include/core/wdf/BJTLeaf.h
+        # harrison/
+        core/include/core/harrison/ComponentValues.h
+        core/include/core/harrison/OpAmpGainStage.h
+        core/include/core/harrison/HarrisonMicPre.h
 
         # dsp/ (SIMDMath.h and SmoothedValue.h live in util/ only)
         core/include/core/dsp/ADAAEngine.h
         core/include/core/dsp/OversamplingEngine.h
+        core/include/core/dsp/LCResonanceBiquad.h
 
         # model/
         core/include/core/model/CoreGeometry.h
@@ -106,26 +102,6 @@ target_sources(TransformerModel
         core/include/core/model/Presets.h
         core/include/core/model/PresetLoader.h
         core/include/core/model/PresetSerializer.h
-        core/include/core/model/BJTParams.h
-        core/include/core/model/PreampConfig.h
-
-        # preamp/
-        core/include/core/preamp/IAmplifierPath.h
-        core/include/core/preamp/GainTable.h
-        core/include/core/preamp/InputStage.h
-        core/include/core/preamp/CEStageWDF.h
-        core/include/core/preamp/EFStageWDF.h
-        core/include/core/preamp/NeveClassAPath.h
-        core/include/core/preamp/Neve1063Path.h
-        core/include/core/preamp/DiffPairWDF.h
-        core/include/core/preamp/CascodeStage.h
-        core/include/core/preamp/VASStageWDF.h
-        core/include/core/preamp/ClassABOutputWDF.h
-        core/include/core/preamp/LoadIsolator.h
-        core/include/core/preamp/JE990Path.h
-        core/include/core/preamp/ABCrossfade.h
-        core/include/core/preamp/OutputStage.h
-        core/include/core/preamp/PreampModel.h
 
         # ── Identification headers ──
         identification/include/identification/MeasurementData.h

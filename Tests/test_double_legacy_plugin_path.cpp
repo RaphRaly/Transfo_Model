@@ -70,8 +70,8 @@ struct DoubleLegacyChain
         output.setConfig(outputCfg);
         input.setProcessingMode(mode);
         output.setProcessingMode(mode);
-        input.setUseWdfCircuit(false);
-        output.setUseWdfCircuit(false);
+
+
         input.setInputGain(0.0f);
         input.setOutputGain(0.0f);
         input.setMix(1.0f);

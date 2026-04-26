@@ -73,12 +73,12 @@ static void testConfigRestore()
 
         m1.setConfig(config);
         m1.setProcessingMode(ProcessingMode::Realtime);
-        m1.setUseWdfCircuit(false);
+
         m1.prepareToPlay(sr, blockSize);
 
         m2.setConfig(config);
         m2.setProcessingMode(ProcessingMode::Realtime);
-        m2.setUseWdfCircuit(false);
+
         m2.prepareToPlay(sr, blockSize);
 
         auto input = generateSine(blockSize, 1000.0f, 0.1f, sr);
@@ -134,12 +134,12 @@ static void testPhysicalDeterminism()
 
         m1.setConfig(config);
         m1.setProcessingMode(ProcessingMode::Physical);
-        m1.setUseWdfCircuit(false);
+
         m1.prepareToPlay(sr, blockSize);
 
         m2.setConfig(config);
         m2.setProcessingMode(ProcessingMode::Physical);
-        m2.setUseWdfCircuit(false);
+
         m2.prepareToPlay(sr, blockSize);
 
         auto input = generateSine(blockSize, 1000.0f, 0.1f, sr);
@@ -175,7 +175,7 @@ static void testPresetSwitching()
 
     TransformerModel<CPWLLeaf> model;
     model.setProcessingMode(ProcessingMode::Realtime);
-    model.setUseWdfCircuit(false);
+
 
     // Switch through all presets 3 times rapidly
     for (int round = 0; round < 3; ++round)
@@ -215,7 +215,7 @@ static void testBoundedAmplitude()
         TransformerModel<CPWLLeaf> model;
         model.setConfig(Presets::getByIndex(p));
         model.setProcessingMode(ProcessingMode::Realtime);
-        model.setUseWdfCircuit(false);
+
         model.prepareToPlay(sr, blockSize);
 
         // Drive hard: full scale at 100 Hz
@@ -250,7 +250,7 @@ static void testSampleRateChange()
     TransformerModel<CPWLLeaf> model;
     model.setConfig(Presets::getByIndex(0));
     model.setProcessingMode(ProcessingMode::Realtime);
-    model.setUseWdfCircuit(false);
+
 
     for (float sr : sampleRates)
     {

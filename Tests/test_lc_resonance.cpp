@@ -1,5 +1,5 @@
 // =============================================================================
-// Test: WDFResonanceFilter — LC Parasitic Resonance Validation
+// Test: LCResonanceBiquad — LC Parasitic Resonance Validation
 //
 // Jensen JT-115K-E ONLY test suite, plus P3 validation tests against
 // measured datasheet data.
@@ -29,7 +29,7 @@
 // All tests use the v4 core/ headers — no legacy Source/ code.
 // =============================================================================
 
-#include "../core/include/core/wdf/WDFResonanceFilter.h"
+#include "../core/include/core/dsp/LCResonanceBiquad.h"
 #include "../core/include/core/model/LCResonanceParams.h"
 #include "../core/include/core/model/TransformerConfig.h"
 #include "../core/include/core/util/Constants.h"
@@ -81,7 +81,7 @@ void CHECK_NEAR(double actual, double expected, double tol, const char* msg)
 // Measure peak output of filter at a specific frequency for unit-amplitude sine.
 // The filter is prepared fresh each call. numCycles of the test frequency are
 // generated; measurement starts at numCycles/2 to skip the initial transient.
-float measureGainAtFreq(transfo::WDFResonanceFilter& filter,
+float measureGainAtFreq(transfo::LCResonanceBiquad& filter,
                         const transfo::LCResonanceParams& params,
                         float Rs, float Rload,
                         float sampleRate, float testFreq, int numCycles = 20)
@@ -127,7 +127,7 @@ void test1_finiteOutput()
     float Rs, Rload;
     getJensenParams(lc, Rs, Rload);
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     filter.prepare(192000.0f, lc, Rs, Rload);
 
     bool allFinite = true;
@@ -158,7 +158,7 @@ void test2_resetClearsState()
     lc.Rz = 0.0f;
     lc.Cz = 0.0f;
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     filter.prepare(192000.0f, lc, Rs, Rload);
 
     // Process a burst of signal to excite state
@@ -193,7 +193,7 @@ void test3_jensenFlatAudioBand()
     float Rs, Rload;
     getJensenParams(lc, Rs, Rload);
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     const float sampleRate = 192000.0f;
 
     float gain1k  = measureGainAtFreq(filter, lc, Rs, Rload, sampleRate, 1000.0f);
@@ -223,7 +223,7 @@ void test4_zobelReducesQ()
     float Rs, Rload;
     getJensenParams(lc, Rs, Rload);
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     const float sampleRate = 192000.0f;
 
     // With Zobel (default Jensen params: Rz=4700, Cz=220pF)
@@ -280,7 +280,7 @@ void test5_stepResponseJensen()
     float Rs, Rload;
     getJensenParams(lc, Rs, Rload);
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     filter.prepare(192000.0f, lc, Rs, Rload);
     filter.reset();
 
@@ -324,7 +324,7 @@ void test6_bypassFlat()
 
     transfo::LCResonanceParams lc = transfo::LCResonanceParams::bypass();
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     const float sampleRate = 192000.0f;
     const float Rs = 600.0f;
     const float Rload = 10000.0f;
@@ -381,13 +381,13 @@ void test7_processBlockMatchesSampleLoop()
 
     // Method A: processBlock (input -> output buffer)
     float outputBlock[blockSize];
-    transfo::WDFResonanceFilter filterA;
+    transfo::LCResonanceBiquad filterA;
     filterA.prepare(sampleRate, lc, Rs, Rload);
     filterA.processBlock(input, outputBlock, blockSize);
 
     // Method B: processSample loop
     float outputSample[blockSize];
-    transfo::WDFResonanceFilter filterB;
+    transfo::LCResonanceBiquad filterB;
     filterB.prepare(sampleRate, lc, Rs, Rload);
     for (int i = 0; i < blockSize; ++i)
     {
@@ -413,7 +413,7 @@ void test7_processBlockMatchesSampleLoop()
     for (int i = 0; i < blockSize; ++i)
         bufferInPlace[i] = input[i];
 
-    transfo::WDFResonanceFilter filterC;
+    transfo::LCResonanceBiquad filterC;
     filterC.prepare(sampleRate, lc, Rs, Rload);
     filterC.processBlock(bufferInPlace, blockSize);
 
@@ -454,12 +454,12 @@ void test8_autoZobelQTargeting()
     CHECK(!lc.hasZobel(), "Synthetic params start with no Zobel");
 
     const float sampleRate = 192000.0f;
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
 
     // Verify natural Q is moderate (below kMaxQ) so auto-Zobel won't engage
     float naturalQ = lc.computeQ(Rs, Rload);
     std::cout << "  Natural Q = " << naturalQ << std::endl;
-    CHECK(naturalQ > 1.0f && naturalQ < transfo::WDFResonanceFilter::kMaxQ,
+    CHECK(naturalQ > 1.0f && naturalQ < transfo::LCResonanceBiquad::kMaxQ,
           "Synthetic params Q is moderate (above 1, below kMaxQ)");
 
     // Measure gain near resonance without Zobel
@@ -558,14 +558,14 @@ void test9_qClampSafety()
     float Rs = 10.0f;       // Very low source impedance
     float Rload = 100000.0f; // High load impedance
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     const float sampleRate = 192000.0f;
 
     // Compute natural Q to confirm it's very high
     filter.prepare(sampleRate, lc, Rs, Rload);
     float naturalQ = filter.computeNaturalQ();
     std::cout << "  Natural Q = " << naturalQ << std::endl;
-    CHECK(naturalQ > transfo::WDFResonanceFilter::kMaxQ,
+    CHECK(naturalQ > transfo::LCResonanceBiquad::kMaxQ,
           "Extreme LC params produce Q > kMaxQ (5.0)");
 
     // The filter should have auto-engaged Zobel clamping
@@ -588,7 +588,7 @@ void test9_qClampSafety()
           "Q-clamped step response stays bounded (< 100x)");
 
     // Verify kMaxQ constant value
-    CHECK_NEAR(transfo::WDFResonanceFilter::kMaxQ, 5.0f, 0.001f,
+    CHECK_NEAR(transfo::LCResonanceBiquad::kMaxQ, 5.0f, 0.001f,
                "kMaxQ is 5.0");
 
     // Also test that Jensen moderate Q with Zobel does NOT trigger auto-Zobel
@@ -622,7 +622,7 @@ void test10_runtimeZobelUpdate()
     float Rs = 120.0f;
     float Rload = 5000.0f;
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     const float sampleRate = 192000.0f;
     filter.prepare(sampleRate, lc, Rs, Rload);
 
@@ -738,7 +738,7 @@ void test11_computeNaturalQ()
 {
     std::cout << "\n--- Test 11: computeNaturalQ diagnostics ---" << std::endl;
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     const float sampleRate = 192000.0f;
 
     // Jensen: high-impedance load, Bessel Zobel -> natural Q is high
@@ -776,7 +776,7 @@ void test_p3_1_jensenDatasheetFR()
     float Rs, Rload;
     getJensenParams(lc, Rs, Rload);
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     const float sampleRate = 192000.0f;
 
     // Measure gains at several audio frequencies relative to 1kHz reference
@@ -839,7 +839,7 @@ void test_p3_2_jensenSelfResonance()
     float Rs, Rload;
     getJensenParams(lc, Rs, Rload);
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     filter.prepare(192000.0f, lc, Rs, Rload);
 
     float fres = filter.getResonantFrequency();
@@ -870,7 +870,7 @@ void test_p3_3_jensenStepResponseDatasheet()
     float Rs, Rload;
     getJensenParams(lc, Rs, Rload);
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     filter.prepare(192000.0f, lc, Rs, Rload);
     filter.reset();
 
@@ -955,7 +955,7 @@ void test_p3_4_jensenDCGain()
     std::cout << "  Expected DC gain = " << expectedDC << std::endl;
     std::cout << "  Rs = " << Rs << "  Rload = " << Rload << std::endl;
 
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     filter.prepare(192000.0f, lc, Rs, Rload);
     filter.reset();
 
@@ -1008,7 +1008,7 @@ void test_p3_5_jensenFaradayShield()
     float Rs = cfg.windings.sourceImpedance + cfg.windings.Rdc_primary;
     float Rload = cfg.loadImpedance;
 
-    transfo::WDFResonanceFilter filterOld, filterNew;
+    transfo::LCResonanceBiquad filterOld, filterNew;
     filterOld.prepare(sampleRate, lc, Rs, Rload);
     filterNew.prepare(sampleRate, lc, Rs, Rload, turnsRatio, hasShield);
 
@@ -1065,7 +1065,7 @@ void test_p3_6_jensenZobelBessel()
     //
     // To verify the Zobel *does* damp the resonance when it's representable,
     // we use a high sample rate (1.536 MHz) and compare HF gain near resonance.
-    transfo::WDFResonanceFilter filter;
+    transfo::LCResonanceBiquad filter;
     const float sampleRate = 1536000.0f;
     std::cout << "  Sample rate = " << sampleRate << " Hz (high to represent 290kHz resonance)" << std::endl;
 
@@ -1213,13 +1213,13 @@ void test_p3_8_jensenQComputation()
     CHECK(modelQ > 5.0f,
           "P3-8: Q > 5 (high Rload -> high Q -> needs Zobel)");
 
-    // Verify WDFResonanceFilter::getQFactor() matches computeQ()
-    transfo::WDFResonanceFilter filter;
+    // Verify LCResonanceBiquad::getQFactor() matches computeQ()
+    transfo::LCResonanceBiquad filter;
     filter.prepare(192000.0f, lc, Rs, Rload);
     float filterQ = filter.getQFactor();
-    std::cout << "  WDFResonanceFilter::getQFactor() = " << filterQ << std::endl;
+    std::cout << "  LCResonanceBiquad::getQFactor() = " << filterQ << std::endl;
     CHECK_NEAR(filterQ, modelQ, 0.5,
-               "P3-8: WDFResonanceFilter::getQFactor() matches LCResonanceParams::computeQ()");
+               "P3-8: LCResonanceBiquad::getQFactor() matches LCResonanceParams::computeQ()");
 
     // Edge cases
     {
@@ -1319,7 +1319,7 @@ void test_p3_9_jensenCapacitanceDatasheet()
 int main()
 {
     std::cout << "================================================================" << std::endl;
-    std::cout << "  WDFResonanceFilter — LC Parasitic Resonance Test Suite" << std::endl;
+    std::cout << "  LCResonanceBiquad — LC Parasitic Resonance Test Suite" << std::endl;
     std::cout << "  Jensen JT-115K-E ONLY + P3 Datasheet Validation" << std::endl;
     std::cout << "================================================================" << std::endl;
 

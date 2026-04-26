@@ -30,7 +30,6 @@
 
 #include "../dsp/ADAAEngine.h"
 #include "../util/Constants.h"
-#include "../wdf/WDOnePort.h"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -38,7 +37,7 @@
 
 namespace transfo {
 
-class CPWLLeaf : public WDOnePort<CPWLLeaf> {
+class CPWLLeaf {
 public:
   static constexpr int kMaxSegments = 32;
 
@@ -49,8 +48,9 @@ public:
   float getH() const { return lastH_; }
   float getB() const { return lastB_; }
 
-  // ─── WDF scattering with integrated ADAA [v3] ──────────────────────────
-  float scatterImpl(float a_m) {
+  // ─── WDF-style scattering with integrated ADAA [v3] ────────────────────
+  // Retained as direct entry point for ADAA tests (test_cpwl_adaa.cpp).
+  float scatter(float a_m) {
     // Apply internal scaling for conditioning [v3.1]
     const float a_scaled = a_m * internalScale_;
 
@@ -102,7 +102,7 @@ public:
   }
 
   // ─── Port resistance = slope of current segment ─────────────────────────
-  float getPortResistanceImpl() const {
+  float getPortResistance() const {
     const auto &segments =
         (direction_ == Direction::ASCENDING) ? segs_asc_ : segs_desc_;
     const int numSegs =

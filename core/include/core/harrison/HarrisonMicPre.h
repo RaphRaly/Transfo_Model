@@ -50,7 +50,7 @@ public:
     // ── Lifecycle ────────────────────────────────────────────────────────
 
     /// Prepare for playback. Call once before processing.
-    void prepareToPlay(float sampleRate, int maxBlockSize)
+    void prepareToPlay(float sampleRate, [[maybe_unused]] int maxBlockSize)
     {
         sampleRate_ = sampleRate;
 

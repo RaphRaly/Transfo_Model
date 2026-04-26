@@ -57,7 +57,7 @@ public:
 
         // "L" / "R" labels
         g.setColour(labelColour_);
-        g.setFont(juce::Font(juce::jmax(9.0f, rowH * 0.85f), juce::Font::bold));
+        g.setFont(juce::Font(juce::FontOptions(juce::jmax(9.0f, rowH * 0.85f)).withStyle("Bold")));
         auto lLabel = labelArea.removeFromTop(labelArea.getHeight() * 0.5f);
         auto rLabel = labelArea;
         g.drawText("L", lLabel, juce::Justification::centred, false);
