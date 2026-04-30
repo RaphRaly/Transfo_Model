@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Sprint A2 (Voie C) — Bertotti as opposing dynamic field, pre-J-A.** The
+- **Sprint A2 phase 1 (Voie C) — Bertotti as opposing dynamic field, pre-J-A.** The
   cascade `processSample` now computes `H_dyn(dB/dt)` via predictor + Baghel-
   Kulkarni implicit decoupling `dBdt = dBdt_raw·(1+χ)/(1+G)` (where
   `G = K1·fs·μ₀·χ`), then solves J-A with `H_eff = H_applied − H_dyn`.
@@ -22,10 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DynamicLosses::computeFieldSeparated` marked `[[deprecated]]` — retained
   for tests and identification pipelines, but new code should use
   `computeHfromDBdt` with the Baghel-Kulkarni decoupling pattern.
-- A2 phase 1 keeps the `calibrationMode != Physical` guard on Bertotti
-  activation. Phase 2 will remove the guard and re-calibrate the four
-  Physical-mode tests (`channel_strip`, `thd_validation`,
-  `freq_response_validation`, `fluxint_physical`).
+- **Sprint A2 phase 2 — Bertotti active in Physical calibration mode.**
+  Removed the `calibrationMode != Physical` guard so Jensen Physical presets
+  use the same pre-J-A Bertotti field separation as the other calibration
+  modes. Re-baselined the affected Physical-mode regression tests
+  (`channel_strip`, `thd_validation`, `freq_response_validation`,
+  `fluxint_physical`) against the Bertotti-active, pre-A5 K1/K2 calibration.
 
 ### Added
 

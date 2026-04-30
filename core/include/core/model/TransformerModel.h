@@ -133,13 +133,8 @@ public:
         // shim inherited from cascade post-hoc; à re-fitter en Sprint A5
         // contre datasheet THD/FR.
         //
-        // ⚠️ La garde != Physical reste active en A2 v1 (compatibilité tests
-        //   channel_strip / thd_validation / freq_response_validation pré-
-        //   calibrés sur "Bertotti OFF en Physical"). Phase A2 v2 retirera
-        //   la garde et re-calibrera ces tests.
         double H_eff = static_cast<double>(H_applied);
-        if (directDynLosses_.isEnabled()
-            && config_.calibrationMode != CalibrationMode::Physical) {
+        if (directDynLosses_.isEnabled()) {
           const double M_committed = directHyst_.getMagnetization();
           const double chi_prev = std::max(0.0,
               directHyst_.getInstantaneousSusceptibility());
