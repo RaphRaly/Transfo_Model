@@ -71,6 +71,16 @@ add_executable(test_nonlinear_lm
 )
 target_include_directories(test_nonlinear_lm PRIVATE ${CORE_INCLUDE})
 
+add_executable(test_ja_derivation_canonical
+    test_ja_derivation_canonical.cpp
+)
+target_include_directories(test_ja_derivation_canonical PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_ja_loop_sanity
+    test_ja_loop_sanity.cpp
+)
+target_include_directories(test_ja_loop_sanity PRIVATE ${CORE_INCLUDE})
+
 # ── CTest registration ───────────────────────────────────────────────────────
 enable_testing()
 add_test(NAME cpwl_adaa              COMMAND test_cpwl_adaa)
@@ -79,6 +89,8 @@ add_test(NAME plugin_integration     COMMAND test_plugin_integration)
 add_test(NAME dynamic_losses         COMMAND test_dynamic_losses)
 add_test(NAME lc_resonance            COMMAND test_lc_resonance)
 add_test(NAME nonlinear_lm             COMMAND test_nonlinear_lm)
+add_test(NAME ja_derivation_canonical  COMMAND test_ja_derivation_canonical)
+add_test(NAME ja_loop_sanity            COMMAND test_ja_loop_sanity)
 
 # ── THD Validation Tests (V1.1-V1.3) ──────────────────────────────────────
 add_executable(test_thd_validation
@@ -195,3 +207,37 @@ add_executable(generate_demo_audio
     ../tools/generate_demo_audio.cpp
 )
 target_include_directories(generate_demo_audio PRIVATE ${CORE_INCLUDE})
+
+# ── Sprint 1 Validation Pipeline ─────────────────────────────────────────────
+# Generates baseline THD + FR measurements for Jensen JT-115K-E / JT-11ELCF in
+# both Realtime (Artistic) and Physical calibration modes. Outputs CSVs to
+# data/measurements/. The --smoke variant runs a 3-point subset for CTest.
+add_executable(validate_jensen
+    ../tools/validate_jensen.cpp
+)
+target_include_directories(validate_jensen PRIVATE ${CORE_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Smoke test: confirms the pipeline runs end-to-end and produces CSV files in
+# a temporary subdirectory (does not validate numerical content — Sprint 2's
+# job once the calibration is fixed).
+add_test(NAME validation_smoke
+         COMMAND validate_jensen --smoke
+                 --out-dir "${CMAKE_BINARY_DIR}/validation_smoke"
+                 --date smoke
+         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+# ── Sprint 2 diagnostic ────────────────────────────────────────────────────
+# Measures J-A χ_diff at minor-loop M=0 in steady state; compares to the
+# three analytical-origin candidates (chiEff_code, chiAnEff, chiMinJiles).
+add_executable(diag_chi_diff
+    ../tools/diag_chi_diff.cpp
+)
+target_include_directories(diag_chi_diff PRIVATE ${CORE_INCLUDE})
+
+# Decomposes cascade THD vs Bertotti contribution vs isolated J-A — used to
+# locate which DSP stage produces the bulk of the harmonics on each Jensen
+# datasheet test point.
+add_executable(diag_thd_decompose
+    ../tools/diag_thd_decompose.cpp
+)
+target_include_directories(diag_thd_decompose PRIVATE ${CORE_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR})

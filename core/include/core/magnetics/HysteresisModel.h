@@ -68,10 +68,19 @@ public:
     // ─── Core computation: dM/dH (J-A ODE) ─────────────────────────────────
     // This is f(M, H, delta) from the Jiles-Atherton differential equation.
     //
-    // dM/dH = [(1-c)(Man - M)] / [delta*k - alpha*(Man - M)]
-    //          + c * dMan/dHeff
+    // Convention used here:
+    //   M    = total magnetization state returned by this solver
+    //   Heff = H + alpha*M
+    //   D    = dMan/dHeff
+    //   A    = (Man - M) / (delta*k - alpha*(Man - M))
     //
-    // with implicit coupling denominator: 1 / (1 - alpha * dMdH_total)
+    // The reversible branch Man(Heff) carries the chain factor
+    // dHeff/dH = 1 + alpha*dM/dH. The irreversible branch A already includes
+    // the JA mean-field denominator, so the chain correction must not be
+    // applied globally to A + c*D. Solving
+    //   chi = (1-c)*A + c*D*(1 + alpha*chi)
+    // gives:
+    //   chi = ((1-c)*A + c*D) / (1 - alpha*c*D)
     double computeRHS(double M, double H, int delta) const
     {
         const double Heff = H + params_.alpha * M;
@@ -82,8 +91,8 @@ public:
 
         const double diff = Man - M;
 
-        // Irreversible component (active only when delta*(Man-M) > 0)
-        double dMdH_irrev = 0.0;
+        // Irreversible component (active only when delta*(Man-M) > 0).
+        double chiIrrevRaw = 0.0;
         if (delta * diff > 0.0)
         {
             double denom = delta * params_.k - params_.alpha * diff;
@@ -94,25 +103,22 @@ public:
             if (std::abs(denom) < eps_denom)
                 denom = std::copysign(eps_denom, denom);
 
-            dMdH_irrev = (1.0 - params_.c) * diff / denom;
+            chiIrrevRaw = diff / denom;
 
             // Clamp irrev susceptibility to physically plausible range.
             // Max reasonable χ ≈ 2·Ms/a (well above normal operation).
             const double irrev_max = 2.0 * static_cast<double>(params_.Ms)
                                    / static_cast<double>(params_.a);
-            dMdH_irrev = std::clamp(dMdH_irrev, -irrev_max, irrev_max);
+            chiIrrevRaw = std::clamp(chiIrrevRaw, -irrev_max, irrev_max);
         }
 
-        // Reversible component
-        const double dMdH_rev = params_.c * dManHeff;
-
-        // Total with implicit coupling
-        const double dMdH_total = dMdH_irrev + dMdH_rev;
-        double denominator = 1.0 - params_.alpha * dMdH_total;
+        const double numerator = (1.0 - params_.c) * chiIrrevRaw
+                               + params_.c * dManHeff;
+        double denominator = 1.0 - params_.alpha * params_.c * dManHeff;
         if (std::abs(denominator) < kEpsilonD)
-            denominator = kEpsilonD;
+            denominator = std::copysign(kEpsilonD, denominator == 0.0 ? 1.0 : denominator);
 
-        return dMdH_total / denominator;
+        return numerator / denominator;
     }
 
     // ─── V2.1: Analytical Jacobian d(dM/dH)/dM ────────────────────────────
@@ -138,8 +144,8 @@ public:
         const double dDiff_dM = dManHeff * params_.alpha - 1.0;
 
         // d(irrev)/dM
-        double df_irrev_dM = 0.0;
-        double irrev_val = 0.0;
+        double dChiIrrevRaw_dM = 0.0;
+        double chiIrrevRaw = 0.0;
         if (delta * diff > 0.0)
         {
             double denom = delta * params_.k - params_.alpha * diff;
@@ -148,25 +154,42 @@ public:
             if (std::abs(denom) < eps_denom)
                 denom = std::copysign(eps_denom, denom);
 
-            irrev_val = (1.0 - params_.c) * diff / denom;
+            const double chiUnclamped = diff / denom;
+            chiIrrevRaw = chiUnclamped;
             const double dDenom_dM = -params_.alpha * dDiff_dM;
-            // Quotient rule: d/dM [(1-c)*diff/denom]
-            df_irrev_dM = (1.0 - params_.c)
-                          * (dDiff_dM * denom - diff * dDenom_dM) / (denom * denom);
+            // Quotient rule: d/dM [diff/denom]
+            dChiIrrevRaw_dM = (dDiff_dM * denom - diff * dDenom_dM) / (denom * denom);
+
+            const double irrev_max = 2.0 * static_cast<double>(params_.Ms)
+                                   / static_cast<double>(params_.a);
+            if (chiIrrevRaw > irrev_max)
+            {
+                chiIrrevRaw = irrev_max;
+                dChiIrrevRaw_dM = 0.0;
+            }
+            else if (chiIrrevRaw < -irrev_max)
+            {
+                chiIrrevRaw = -irrev_max;
+                dChiIrrevRaw_dM = 0.0;
+            }
         }
 
-        // d(rev)/dM = c * d²Man/dHeff² * alpha
-        const double df_rev_dM = params_.c * d2ManHeff2 * params_.alpha;
+        // dD/dM = d2Man/dHeff2 * alpha; c is applied in dNumerator_dM.
+        const double dD_dM = d2ManHeff2 * params_.alpha;
 
-        const double df_total_dM = df_irrev_dM + df_rev_dM;
+        const double numerator = (1.0 - params_.c) * chiIrrevRaw
+                               + params_.c * dManHeff;
+        const double dNumerator_dM = (1.0 - params_.c) * dChiIrrevRaw_dM
+                                   + params_.c * dD_dM;
 
-        // Implicit coupling: f_final = f_total / (1 - α·f_total)
-        // df_final/dM = df_total_dM / (1 - α·f_total)²
-        const double f_total = irrev_val + params_.c * dManHeff;
-        double denom_c = 1.0 - params_.alpha * f_total;
-        if (std::abs(denom_c) < 1e-15) denom_c = 1e-15;
+        // Final quotient: chi = numerator / (1 - alpha*c*D).
+        double denominator = 1.0 - params_.alpha * params_.c * dManHeff;
+        if (std::abs(denominator) < 1e-15)
+            denominator = std::copysign(1e-15, denominator == 0.0 ? 1.0 : denominator);
+        const double dDenominator_dM = -params_.alpha * params_.c * dD_dM;
 
-        return df_total_dM / (denom_c * denom_c);
+        return (dNumerator_dM * denominator - numerator * dDenominator_dM)
+             / (denominator * denominator);
     }
 
     // ─── Jacobian: d(dM/dH)/dM ─────────────────────────────────────────────
