@@ -4,7 +4,7 @@
 // Validates the Newton-Raphson solver convergence behavior when driven by
 // a Jensen JT-115K-E mu-metal parameter set.
 //
-// Tests the HysteresisModel<LangevinPade> directly (Physical mode solver):
+// Tests the HysteresisModel<LangevinPade> directly (Artistic mode solver):
 //   - Processes 4096 samples of 1 kHz sine at 0 dBFS (H field sweep)
 //   - Collects iteration count histogram
 //   - Asserts: >= 95% converge in <= 4 iterations

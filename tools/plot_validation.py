@@ -116,7 +116,7 @@ def plot_thd_vs_level(thd_rows, freq_hz, out_path, datasheet=None):
         if abs(r['freq_hz'] - freq_hz) < 0.5:
             by_mode[r['mode']].append((r['level_dbu'], r['thd_percent']))
 
-    colors = {'Realtime': 'tab:blue', 'Physical': 'tab:green'}
+    colors = {'Realtime': 'tab:blue', 'Artistic': 'tab:green'}
     for mode, points in by_mode.items():
         points.sort()
         levels = [p[0] for p in points]
@@ -152,7 +152,7 @@ def plot_thd_vs_freq(thd_rows, level_dbu, out_path, datasheet=None):
         if abs(r['level_dbu'] - level_dbu) < 0.05:
             by_mode[r['mode']].append((r['freq_hz'], r['thd_percent']))
 
-    colors = {'Realtime': 'tab:blue', 'Physical': 'tab:green'}
+    colors = {'Realtime': 'tab:blue', 'Artistic': 'tab:green'}
     for mode, points in by_mode.items():
         points.sort()
         freqs = [p[0] for p in points]
@@ -184,7 +184,7 @@ def plot_fr(fr_rows, title, out_path):
     for mode, freq, mag in fr_rows:
         by_mode[mode].append((freq, mag))
 
-    colors = {'Realtime': 'tab:blue', 'Physical': 'tab:green'}
+    colors = {'Realtime': 'tab:blue', 'Artistic': 'tab:green'}
     for mode, points in by_mode.items():
         points.sort()
         freqs = [p[0] for p in points]

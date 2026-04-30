@@ -33,13 +33,13 @@ static constexpr int kBlockSize = 512;
 
 // ── dBu to linear amplitude ─────────────────────────────────────────────────
 // 0 dBu = 0.775 V RMS.  Map to ~0.1 peak for digital scaling.
-// The model's hScale_ handles physical H-field mapping internally.
+// The model's hScale_ handles Artistic H-field mapping internally.
 static float dBuToAmplitude(float dBu)
 {
     return std::pow(10.0f, dBu / 20.0f) * 0.1f;
 }
 
-// ── dBu to physical amplitude — Jensen TC1 (JT-115K-E) ─────────────────────
+// ── dBu to Artistic amplitude — Jensen TC1 (JT-115K-E) ─────────────────────
 // Converts dBu (source voltage level) to peak amplitude at the transformer
 // primary, accounting for the Test Circuit 1 voltage divider:
 //   Rs = 150 Ω (source impedance)
@@ -61,7 +61,7 @@ static float dBuToAmplitude_TC1(float dBu)
     return Vrms * kSqrt2 * divider;
 }
 
-// ── dBu to physical amplitude — Jensen JT-11ELCF (Test Circuit 1) ───────────
+// ── dBu to Artistic amplitude — Jensen JT-11ELCF (Test Circuit 1) ───────────
 // Datasheet specifies Rs = 0 Ω (op-amp output directly drives primary).
 // No voltage divider: V_pri = V_source.
 // 0 dBu = 0.7746 Vrms → peak = Vrms × √2
@@ -223,7 +223,7 @@ static void testFrequencyDependentTHD()
                 r100.thdPercent / (r10k.thdPercent + 1e-30));
 
     // THD at 100 Hz must be strictly greater than THD at 10 kHz.
-    // The ratio should be well above 1x for any physically correct model.
+    // The ratio should be well above 1x for any physically plausible model.
     CHECK(r100.thdPercent > r10k.thdPercent,
           "JT-115K-E: THD@100Hz > THD@10kHz (Bertotti frequency dependence)");
 }
@@ -262,11 +262,11 @@ static void testHarmonicOrderJensen()
 }
 
 // =============================================================================
-// TEST 5: Jensen JT-115K-E THD — Physical calibration mode
+// TEST 5: Jensen JT-115K-E THD — Artistic calibration mode
 //
-// Uses CalibrationMode::Physical so hScale is derived from Ampere's law.
-// At the reference frequency (1 kHz), the H-field mapping is physically
-// correct (H ∝ V_pri / (2πf·Lm·l_e)), producing very low THD at line level.
+// Uses CalibrationMode::Artistic so hScale is derived from Ampere's law.
+// At the reference frequency (1 kHz), the H-field mapping follows the
+// Ampere-law reference calibration.
 //
 // Known limitations:
 //   - J-A NR solver produces a startup transient (~2 samples) that takes
@@ -275,30 +275,30 @@ static void testHarmonicOrderJensen()
 //   - bNorm uses analytical chiEff which differs ~65% from J-A minor loop
 //     susceptibility (gain ≈ +4 dB instead of 0 dB). THD is measured
 //     relative to fundamental, so absolute gain error doesn't affect %.
-//   - Sprint A2 phase 2 enables Bertotti dynamic losses in Physical mode.
+//   - Sprint A2 phase 2 enables Bertotti dynamic losses in Artistic mode.
 //     The current pre-A5 K1/K2 calibration intentionally becomes the
 //     regression baseline until datasheet fitting is redone.
 // =============================================================================
-static test::THDResult runTHD_Physical(TransformerModel<CPWLLeaf>& model,
+static test::THDResult runTHD_Artistic(TransformerModel<CPWLLeaf>& model,
                                         float freq, float amplitude, float sampleRate)
 {
     // Extended warmup: J-A startup transient needs ~3 seconds to decay
     // through the HP filter (tau_HP ≈ Lm/Rs = 10/170 = 59 ms, need >20 tau).
-    static constexpr int kPhysWarmup = 131072;
-    static constexpr int kPhysAnalysis = 65536;
-    static constexpr int kPhysTotal = kPhysWarmup + kPhysAnalysis;
+    static constexpr int kArtisticWarmup = 131072;
+    static constexpr int kArtisticAnalysis = 65536;
+    static constexpr int kArtisticTotal = kArtisticWarmup + kArtisticAnalysis;
 
     model.reset();
     model.prepareToPlay(sampleRate, kBlockSize);
 
-    std::vector<float> input(static_cast<size_t>(kPhysTotal));
-    std::vector<float> output(static_cast<size_t>(kPhysTotal));
+    std::vector<float> input(static_cast<size_t>(kArtisticTotal));
+    std::vector<float> output(static_cast<size_t>(kArtisticTotal));
 
     const float w = 2.0f * 3.14159265f * freq / sampleRate;
-    for (int i = 0; i < kPhysTotal; ++i)
+    for (int i = 0; i < kArtisticTotal; ++i)
         input[static_cast<size_t>(i)] = amplitude * std::sin(w * static_cast<float>(i));
 
-    int offset = 0, remaining = kPhysTotal;
+    int offset = 0, remaining = kArtisticTotal;
     while (remaining > 0) {
         int block = std::min(remaining, kBlockSize);
         model.processBlock(input.data() + offset, output.data() + offset, block);
@@ -306,61 +306,61 @@ static test::THDResult runTHD_Physical(TransformerModel<CPWLLeaf>& model,
         remaining -= block;
     }
 
-    return test::measureTHD(output.data() + kPhysWarmup,
-                             kPhysAnalysis, freq, sampleRate);
+    return test::measureTHD(output.data() + kArtisticWarmup,
+                             kArtisticAnalysis, freq, sampleRate);
 }
 
-static void testJensen_JT115KE_THD_Physical()
+static void testJensen_JT115KE_THD_Artistic()
 {
-    std::printf("\n=== Jensen JT-115K-E THD — Physical Mode (TC1) ===\n");
+    std::printf("\n=== Jensen JT-115K-E THD — Artistic Mode (TC1) ===\n");
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> model;
     auto cfg = TransformerConfig::Jensen_JT115KE();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     initJensenModel(model, cfg, sr);
 
     // 1 kHz @ -20 dBu. A2 phase 2 Bertotti-active baseline: 6.864040%.
     {
-        auto r = runTHD_Physical(model, 1000.0f, dBuToAmplitude_TC1(-20.0f), sr);
-        std::printf("  1kHz/-20dBu: THD=%.6f%%  (Physical)\n", r.thdPercent);
+        auto r = runTHD_Artistic(model, 1000.0f, dBuToAmplitude_TC1(-20.0f), sr);
+        std::printf("  1kHz/-20dBu: THD=%.6f%%  (Artistic)\n", r.thdPercent);
         CHECK_RANGE(r.thdPercent, 0.0, 8.0,
-                    "JT-115K-E Physical: 1kHz/-20dBu THD < 8%% (Bertotti active)");
+                    "JT-115K-E Artistic: 1kHz/-20dBu THD < 8%% (Bertotti active)");
     }
 
     // 1 kHz @ +4 dBu. A2 phase 2 Bertotti-active baseline: 1.089329%.
     {
-        auto r = runTHD_Physical(model, 1000.0f, dBuToAmplitude_TC1(4.0f), sr);
-        std::printf("  1kHz/+4dBu: THD=%.6f%%  (Physical)\n", r.thdPercent);
+        auto r = runTHD_Artistic(model, 1000.0f, dBuToAmplitude_TC1(4.0f), sr);
+        std::printf("  1kHz/+4dBu: THD=%.6f%%  (Artistic)\n", r.thdPercent);
         CHECK_RANGE(r.thdPercent, 0.0, 2.0,
-                    "JT-115K-E Physical: 1kHz/+4dBu THD < 2%% (Bertotti active)");
+                    "JT-115K-E Artistic: 1kHz/+4dBu THD < 2%% (Bertotti active)");
     }
 
     // 1 kHz @ +18 dBu — high drive
     {
-        auto r = runTHD_Physical(model, 1000.0f, dBuToAmplitude_TC1(18.0f), sr);
-        std::printf("  1kHz/+18dBu: THD=%.6f%%  (Physical)\n", r.thdPercent);
+        auto r = runTHD_Artistic(model, 1000.0f, dBuToAmplitude_TC1(18.0f), sr);
+        std::printf("  1kHz/+18dBu: THD=%.6f%%  (Artistic)\n", r.thdPercent);
         CHECK_RANGE(r.thdPercent, 0.0, 1.0,
-                    "JT-115K-E Physical: 1kHz/+18dBu THD < 1%%");
+                    "JT-115K-E Artistic: 1kHz/+18dBu THD < 1%%");
     }
 }
 
 // =============================================================================
-// TEST 6: Jensen JT-115K-E gain — Physical mode
+// TEST 6: Jensen JT-115K-E gain — Artistic mode
 //
 // Verifies the cascade gain at 1 kHz.  bNorm normalizes for chiEff = 10808,
 // but the J-A minor-loop susceptibility is ~65% higher → gain ≈ +4 dB.
 // This is a known bNorm/minor-loop mismatch to fix in a future sprint.
 // Extended warmup eliminates NR startup transient effect on RMS measurement.
 // =============================================================================
-static void testJensen_JT115KE_Gain_Physical()
+static void testJensen_JT115KE_Gain_Artistic()
 {
-    std::printf("\n=== Jensen JT-115K-E Gain — Physical Mode ===\n");
+    std::printf("\n=== Jensen JT-115K-E Gain — Artistic Mode ===\n");
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> model;
     auto cfg = TransformerConfig::Jensen_JT115KE();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     initJensenModel(model, cfg, sr);
 
     const float freq = 1000.0f;
@@ -405,37 +405,37 @@ static void testJensen_JT115KE_Gain_Physical()
     // With the NR startup fix (dMdH_prev_ initialized to χ_eff), the
     // cascade produces correct unity gain: bNorm normalization is accurate.
     CHECK_RANGE(gain_dB, -2.0, 2.0,
-                "JT-115K-E Physical: gain within ±2 dB at 1kHz/-20dBu");
+                "JT-115K-E Artistic: gain within ±2 dB at 1kHz/-20dBu");
 }
 
 // =============================================================================
-// TEST 7: Jensen JT-11ELCF THD — Physical mode
+// TEST 7: Jensen JT-11ELCF THD — Artistic mode
 //
 // Datasheet (Rs=0, Test Circuit 1):
 //   1 kHz/+4 dBu: THD < 0.001%
 //   20 Hz/+4 dBu: THD = 0.028% typ
 //   Max output:   +24 dBu at 20 Hz (1% THD)
 //
-// Physical mode hScale = N/(2πf·Lm·l_e) = 1036/(2π×1000×33×0.077) ≈ 0.065
+// Artistic mode hScale = N/(2πf·Lm·l_e) = 1036/(2π×1000×33×0.077) ≈ 0.065
 // At +4 dBu: H = 0.065 × 1.74 = 0.113 A/m → H/a = 0.002 (deeply linear)
 // Expected THD: essentially 0% (numerical floor of model)
 // =============================================================================
-static void testJensen_JT11ELCF_THD_Physical()
+static void testJensen_JT11ELCF_THD_Artistic()
 {
-    std::printf("\n=== Jensen JT-11ELCF THD — Physical Mode (TC1, Rs=0) ===\n");
+    std::printf("\n=== Jensen JT-11ELCF THD — Artistic Mode (TC1, Rs=0) ===\n");
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> model;
     auto cfg = TransformerConfig::Jensen_JT11ELCF();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     initJensenModel(model, cfg, sr);
 
     // 1 kHz @ +4 dBu. A2 phase 2 Bertotti-active baseline: 4.384415%.
     {
-        auto r = runTHD_Physical(model, 1000.0f, dBuToAmplitude_ELCF(4.0f), sr);
-        std::printf("  1kHz/+4dBu: THD=%.6f%%  (Physical, datasheet <0.001%%)\n", r.thdPercent);
+        auto r = runTHD_Artistic(model, 1000.0f, dBuToAmplitude_ELCF(4.0f), sr);
+        std::printf("  1kHz/+4dBu: THD=%.6f%%  (Artistic, datasheet <0.001%%)\n", r.thdPercent);
         CHECK_RANGE(r.thdPercent, 0.0, 6.0,
-                    "JT-11ELCF Physical: 1kHz/+4dBu THD < 6%% (Bertotti active)");
+                    "JT-11ELCF Artistic: 1kHz/+4dBu THD < 6%% (Bertotti active)");
     }
 
     // 20 Hz @ +4 dBu — datasheet: 0.028% typ
@@ -444,41 +444,41 @@ static void testJensen_JT11ELCF_THD_Physical()
     // cascade model doesn't scale H with frequency.  So model THD at 20 Hz
     // will be lower than datasheet.  We just verify it's not broken.
     {
-        auto r = runTHD_Physical(model, 20.0f, dBuToAmplitude_ELCF(4.0f), sr);
-        std::printf("  20Hz/+4dBu: THD=%.6f%%  (Physical, datasheet 0.028%%)\n", r.thdPercent);
+        auto r = runTHD_Artistic(model, 20.0f, dBuToAmplitude_ELCF(4.0f), sr);
+        std::printf("  20Hz/+4dBu: THD=%.6f%%  (Artistic, datasheet 0.028%%)\n", r.thdPercent);
         // Cascade hScale is fixed at f_ref=1kHz; does not scale H with 1/f.
         // At 20 Hz the real core sees 50× more flux, but the model doesn't.
         // Dynamic Lm modulation at LF creates additional artifacts.
         // Widen to 2% as regression baseline (datasheet: 0.028%).
         CHECK_RANGE(r.thdPercent, 0.0, 2.0,
-                    "JT-11ELCF Physical: 20Hz/+4dBu THD < 2%%");
+                    "JT-11ELCF Artistic: 20Hz/+4dBu THD < 2%%");
     }
 
     // 1 kHz @ +18 dBu. A2 phase 2 Bertotti-active baseline: 1.516512%.
     {
-        auto r = runTHD_Physical(model, 1000.0f, dBuToAmplitude_ELCF(18.0f), sr);
-        std::printf("  1kHz/+18dBu: THD=%.6f%%  (Physical)\n", r.thdPercent);
+        auto r = runTHD_Artistic(model, 1000.0f, dBuToAmplitude_ELCF(18.0f), sr);
+        std::printf("  1kHz/+18dBu: THD=%.6f%%  (Artistic)\n", r.thdPercent);
         CHECK_RANGE(r.thdPercent, 0.0, 2.5,
-                    "JT-11ELCF Physical: 1kHz/+18dBu THD < 2.5%% (Bertotti active)");
+                    "JT-11ELCF Artistic: 1kHz/+18dBu THD < 2.5%% (Bertotti active)");
     }
 }
 
 // =============================================================================
-// TEST 8: Jensen JT-11ELCF gain — Physical mode
+// TEST 8: Jensen JT-11ELCF gain — Artistic mode
 //
 // Datasheet: insertion loss = -1.1 dB (from 80 Ω Rdc into 600 Ω load).
 // The cascade bNorm normalizes for unity magnetic gain; the Rdc insertion
 // loss is modeled by the LC filter's series resistance path.
 // Expected cascade gain: near 0 dB (bNorm) minus LC insertion loss.
 // =============================================================================
-static void testJensen_JT11ELCF_Gain_Physical()
+static void testJensen_JT11ELCF_Gain_Artistic()
 {
-    std::printf("\n=== Jensen JT-11ELCF Gain — Physical Mode ===\n");
+    std::printf("\n=== Jensen JT-11ELCF Gain — Artistic Mode ===\n");
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> model;
     auto cfg = TransformerConfig::Jensen_JT11ELCF();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     initJensenModel(model, cfg, sr);
 
     const float freq = 1000.0f;
@@ -522,7 +522,7 @@ static void testJensen_JT11ELCF_Gain_Physical()
     // Cascade gain should be near 0 dB (bNorm calibration) minus any LC
     // insertion loss.  Allow ±3 dB to accommodate LC filter effects.
     CHECK_RANGE(gain_dB, -4.0, 2.0,
-                "JT-11ELCF Physical: gain within [-4, +2] dB at 1kHz/+4dBu");
+                "JT-11ELCF Artistic: gain within [-4, +2] dB at 1kHz/+4dBu");
 }
 
 // =============================================================================
@@ -537,10 +537,10 @@ int main()
     testJensen_JT11ELCF_THD();
     testFrequencyDependentTHD();
     testHarmonicOrderJensen();
-    testJensen_JT115KE_THD_Physical();
-    testJensen_JT115KE_Gain_Physical();
-    testJensen_JT11ELCF_THD_Physical();
-    testJensen_JT11ELCF_Gain_Physical();
+    testJensen_JT115KE_THD_Artistic();
+    testJensen_JT115KE_Gain_Artistic();
+    testJensen_JT11ELCF_THD_Artistic();
+    testJensen_JT11ELCF_Gain_Artistic();
 
     return test::printSummary();
 }

@@ -3,7 +3,7 @@
 //
 // Validates that the Newton-Raphson solver no longer diverges at very low
 // applied field strengths (hScale ~ 0.065), which was the root cause of
-// ~1/5000 sample sporadic divergence in Physical mode.
+// ~1/5000 sample sporadic divergence in Artistic mode.
 //
 // Three scenarios:
 //   1. Low-H sine sweep with reversals (hScale = 0.065)

@@ -17,7 +17,7 @@ TWISTERION is a physics-based audio plugin that models magnetic transformer satu
 | **Double Legacy engine** | Cascaded T1 (JT-115K-E) -> T2 (JT-11ELCF) with full impedance coupling between stages |
 | **Harrison Console engine** | Mic preamp modelled on the Harrison 32-series: JT-115K-E + U20 NE5532-style gain stage with rail-aware soft-clip and slew limiting |
 | **Realtime mode** | CPWL + ADAA -- no oversampling, low CPU |
-| **Physical mode** | Full implicit Jiles-Atherton solver + 4x (or 2x) polyphase oversampling -- offline bounce quality |
+| **Artistic mode** | Full implicit Jiles-Atherton solver + Bertotti excess-loss field separation + 4x (or 2x) polyphase oversampling -- offline bounce quality. *Coloring-grade scope — see [`docs/MODEL_LIMITATIONS.md`](docs/MODEL_LIMITATIONS.md).* |
 | **B-H Scope** | Real-time hysteresis loop visualization (lock-free SPSC queue) |
 | **Stereo TMT** | Component tolerance spread L/R for natural stereo width |
 | **Identification pipeline** | CMA-ES + Levenberg-Marquardt -- fit J-A params from measured B-H curves |
@@ -83,16 +83,18 @@ impedance (50-600 Ohm), and Bertotti dynamics mix (0 = quasi-static,
 The active engines all share the same per-transformer cascade:
 
 ```
-x -> [Flux Integrator (1/f, Physical mode)] -> [J-A solveImplicitStep]
-   -> [Bertotti field-separated correction]
+x -> [Flux Integrator (1/f, Artistic mode)] -> [Bertotti H_dyn pre-J-A]
+   -> [J-A solveImplicitStep(H_eff = H_applied - H_dyn)]
    -> [HP filter (R_source / Lm dynamic)]
    -> [LC parasitic biquad (analytical BLT, 2nd or 3rd order with Zobel)]
    -> wet
 ```
 
 Mix/gain handled at block level by `processBlockRealtime` /
-`processBlockPhysical`. Physical mode wraps the per-sample cascade inside
+`processBlockPhysical`. Artistic mode wraps the per-sample cascade inside
 a 2-stage halfband oversampler (39 samples round-trip @ OS4x, 13 @ OS2x).
+The Bertotti dynamic loss is applied as an opposing field pre-J-A
+(field separation, Sprint A2 Voie C) — not as a post-hoc B correction.
 
 ---
 

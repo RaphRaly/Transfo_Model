@@ -22,11 +22,16 @@
 namespace transfo {
 
 // ─── Calibration Mode ─────────────────────────────────────────────────────────
-// Physical : hScale derived from Ampere's law at a reference frequency.
-//            Produces physically correct H field for datasheet validation.
-// Artistic : hScale = a × 5 (original behavior). Deliberately overdrives the
-//            virtual core for musical coloration at normal audio levels.
-enum class CalibrationMode { Artistic, Physical };
+// LegacyColor : historical hScale = a × 5 behavior. Deliberately overdrives
+//               the virtual core for musical coloration at normal audio levels.
+// Artistic    : Ampere-law reference scaling at calibrationFreqHz. This is an
+//               honest coloring-grade calibration, not a predictive coupled
+//               transformer solver.
+enum class CalibrationMode {
+    LegacyColor,
+    Artistic,
+    Physical [[deprecated("Use Artistic; Physical is reserved for a future coupled DAE solver")]] = Artistic
+};
 
 struct TransformerConfig
 {
@@ -55,18 +60,18 @@ struct TransformerConfig
     LCResonanceParams   lcParams;                    // LC parasitic resonance [v4]
 
     // ── Calibration ──────────────────────────────────────────────────────────
-    CalibrationMode calibrationMode = CalibrationMode::Artistic;
-    float calibrationFreqHz = 1000.0f;  // Reference frequency for Physical mode [Hz]
+    CalibrationMode calibrationMode = CalibrationMode::LegacyColor;
+    float calibrationFreqHz = 1000.0f;  // Reference frequency for Artistic calibration [Hz]
 
     // ── Flux Integrator (Problem #4 fix) ────────────────────────────────────
     // When enabled, replaces H = V × hScale (frequency-independent) with a
     // leaky integrator that provides B_peak ∝ 1/f (correct transformer physics).
     // At calibrationFreqHz, behavior is identical to the fixed-hScale model.
     //
-    // Default OFF — only meaningful in Physical calibration mode where hScale
-    // is derived from Ampère's law.  In Artistic mode, hScale = a×5 is already
-    // tuned for musical saturation; adding the 1/f integrator on top produces
-    // physically meaningless over-saturation at LF (THD > 50% at −20 dBu).
+    // Default OFF — only meaningful in Artistic calibration where hScale is
+    // derived from Ampère's law. In LegacyColor calibration, hScale = a×5 is
+    // already tuned for musical saturation; adding the 1/f integrator on top
+    // produces meaningless over-saturation at LF (THD > 50% at −20 dBu).
     bool fluxIntegratorEnabled = false;
 
     // ── Legacy gain calibration (per-preset) ─────────────────────────────

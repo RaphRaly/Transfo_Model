@@ -5,7 +5,7 @@
 //                     with Bertotti dynamic loss extension.
 //
 // This leaf connects the HysteresisModel (magnetic domain) to the WDF
-// circuit (wave domain). Used in Physical mode for maximum accuracy.
+// circuit (wave domain). Used in Artistic mode for maximum accuracy.
 //
 // TWO MODES:
 //

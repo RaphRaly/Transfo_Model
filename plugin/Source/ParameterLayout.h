@@ -18,7 +18,7 @@ namespace ParamID
     static const juce::String OutputGain    = "outputGain";
     static const juce::String Mix           = "mix";
     static const juce::String Preset        = "preset";
-    static const juce::String Mode          = "mode";        // Physical / Realtime
+    static const juce::String Mode          = "mode";        // Artistic / Realtime
     static const juce::String SVU            = "svu";         // Stereo Variation Units
     static const juce::String Circuit        = "circuit";     // Legacy Cascade / WDF Circuit
 
@@ -73,10 +73,10 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
             "Bass Thickener", "Master Glue"},
         0));
 
-    // Processing Mode (P1.1: added 2x OS option)
+    // Processing Mode. APVTS indexes are stable: 0=Realtime, 1=Artistic OS4x, 2=Artistic OS2x.
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID(ParamID::Mode, 1), "Mode",
-        juce::StringArray{"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)", "Physical (J-A+OS2x)"},
+        juce::StringArray{"Realtime (CPWL+ADAA)", "Artistic (J-A+OS4x)", "Artistic (J-A+OS2x)"},
         0));
 
     // SVU — Stereo Variation Units

@@ -171,14 +171,14 @@ static void testNeveFR()
     TEST_ASSERT(nevePassband, "Neve 10468: passband flatness <=+/-1.0dB (100-10kHz)");
 }
 
-static void testJensenFR_Physical()
+static void testJensenFR_Artistic()
 {
-    std::printf("\n=== Jensen JT-115K-E FR — Physical Mode ===\n");
+    std::printf("\n=== Jensen JT-115K-E FR — Artistic Mode ===\n");
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> model;
     auto cfg = TransformerConfig::Jensen_JT115KE();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     model.setConfig(cfg);
     model.setProcessingMode(ProcessingMode::Realtime);
 
@@ -186,31 +186,31 @@ static void testJensenFR_Physical()
     model.setOutputGain(0.0f);
     model.setMix(1.0f);
 
-    // Extended warmup (16k) + measurement (16k) for Physical mode.
+    // Extended warmup (16k) + measurement (16k) for Artistic mode.
     // The dynamic Lm system (τ_HP = Lm/Rs ≈ 59ms ≈ 2600 samples) and
     // NR solver need more settling time than Artistic mode.
     auto points = sweepFR(model, sr, 10.0f, 20000.0f, 40, 16384, 16384);
     normalizeToRef(points);
 
-    // Physical mode: normalized to 1kHz reference.
-    // A2 phase 2 enables Bertotti in Physical mode. The low/mid band remains
+    // Artistic mode: normalized to 1kHz reference.
+    // A2 phase 2 enables Bertotti in Artistic mode. The low/mid band remains
     // flat, while the current pre-A5 K1/K2 calibration adds HF dynamic-loss
     // rolloff (measured -7.62 dB at 13.5 kHz on the A2p2 baseline).
-    bool physicalShape = true;
+    bool ArtisticShape = true;
     for (const auto& p : points) {
         std::printf("  %8.0f Hz: %+.2f dB\n", p.freq, p.magnitude_dB);
         if (p.freq >= 50.0f && p.freq <= 4000.0f) {
-            if (std::abs(p.magnitude_dB) > 1.0f) physicalShape = false;
+            if (std::abs(p.magnitude_dB) > 1.0f) ArtisticShape = false;
         } else if (p.freq > 4000.0f && p.freq <= 15000.0f) {
             if (p.magnitude_dB > 1.0f || p.magnitude_dB < -8.5f)
-                physicalShape = false;
+                ArtisticShape = false;
         }
     }
-    TEST_ASSERT(physicalShape,
-        "Jensen JT-115K-E Physical: A2p2 FR shape (<=1dB to 4kHz, HF rolloff >=-8.5dB to 15kHz)");
+    TEST_ASSERT(ArtisticShape,
+        "Jensen JT-115K-E Artistic: A2p2 FR shape (<=1dB to 4kHz, HF rolloff >=-8.5dB to 15kHz)");
 }
 
-// JT-11ELCF FR Physical: DEFERRED.
+// JT-11ELCF FR Artistic: DEFERRED.
 // hScale=0.065 (output50NiFe) causes sporadic NR solver hiccups at HF
 // that corrupt the short-window RMS measurement. THD and gain tests
 // (131k warmup) pass fine. FR requires either a more robust measurement
@@ -268,8 +268,8 @@ int main()
 
     testJensenFR();
     testNeveFR();
-    testJensenFR_Physical();
-    // testJT11ELCF_FR_Physical();  // Deferred: NR solver hiccups at hScale=0.065
+    testJensenFR_Artistic();
+    // testJT11ELCF_FR_Artistic();  // Deferred: NR solver hiccups at hScale=0.065
     testFRSweepCSV();
 
     return test::printSummary("Frequency Response Validation");

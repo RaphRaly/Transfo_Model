@@ -168,11 +168,11 @@ void test_jt11elcf_passivity_realtime()
         "JT-11ELCF Realtime: RMS_out <= RMS_in * 1.2 at all frequencies");
 }
 
-// ---- Test 3: JT-115K-E Physical (JA) passivity at 1 kHz --------------------
+// ---- Test 3: JT-115K-E Artistic (JA) passivity at 1 kHz --------------------
 
-void test_jt115ke_passivity_physical()
+void test_jt115ke_passivity_Artistic()
 {
-    std::printf("\n=== Jensen JT-115K-E Passivity — Physical (J-A) ===\n");
+    std::printf("\n=== Jensen JT-115K-E Passivity — Artistic (J-A) ===\n");
 
     const float sampleRate = 44100.0f;
     const int numSamples = 2048;
@@ -182,7 +182,7 @@ void test_jt115ke_passivity_physical()
 
     TransformerModel<JilesAthertonLeaf<LangevinPade>> model;
     model.setConfig(TransformerConfig::Jensen_JT115KE());
-    model.setProcessingMode(ProcessingMode::Physical);
+    model.setProcessingMode(ProcessingMode::Artistic);
     model.setInputGain(0.0f);
     model.setOutputGain(0.0f);
     model.setMix(1.0f);
@@ -213,7 +213,7 @@ void test_jt115ke_passivity_physical()
                 rmsIn, rmsOut, ratio);
 
     CHECK(rmsOut <= rmsIn * passivityMargin,
-        "JT-115K-E Physical 1kHz: RMS_out <= RMS_in * 1.2");
+        "JT-115K-E Artistic 1kHz: RMS_out <= RMS_in * 1.2");
 }
 
 // ---- Test 4: Output is finite and non-zero across sweep ---------------------
@@ -284,7 +284,7 @@ int main()
 
     test_jt115ke_passivity_realtime();
     test_jt11elcf_passivity_realtime();
-    test_jt115ke_passivity_physical();
+    test_jt115ke_passivity_Artistic();
     test_output_finite_nonzero();
 
     test::printSummary("test_jensen_passivity");

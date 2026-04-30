@@ -28,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   modes. Re-baselined the affected Physical-mode regression tests
   (`channel_strip`, `thd_validation`, `freq_response_validation`,
   `fluxint_physical`) against the Bertotti-active, pre-A5 K1/K2 calibration.
+- **Sprint A3 — rename `Physical` → `Artistic` + lock honesty.** The
+  calibration-mode token previously called `Physical` is renamed to
+  `Artistic` to reflect the engine's actual scope (coloring grade, not
+  predictive coupled solver). `CalibrationMode::Physical` and
+  `ProcessingMode::Physical` are kept as `[[deprecated]]` aliases for
+  `Artistic` so that v3 APVTS state restores correctly without migration.
+  `ProcessingMode` enum reorganised to expose `Realtime`, `Artistic`
+  (≡ `ArtisticOS4x`) and `ArtisticOS2x`. The plugin's Mode dropdown
+  StringArray relabeled (`"Artistic (J-A+OS4x)"`, `"Artistic (J-A+OS2x)"`).
+  APVTS indexes are stable: 0=Realtime, 1=Artistic OS4x, 2=Artistic OS2x.
+  `test_fluxint_physical` renamed to `test_fluxint_artistic`. The token
+  `Physical` is reserved for the future Sprint A3.5 `PhysicalDAE` engine.
 
 ### Added
 
@@ -37,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Tests/test_bertotti_excess_loss_scaling.cpp` — at constant B_peak, loop
   area ∝ √f and dissipated power ∝ f^1.5 (split corrected per Sprint Plan
   préface 2026-04-29 ; mesuré ≤ 6 % d'erreur sur ratio 50→1000 Hz).
+- `docs/MODEL_LIMITATIONS.md` — explicit honesty disclaimer listing what
+  the engine is **not** (no coupled source/load/core solver, scalar J-A
+  only, Bertotti excess-loss approximation, no copper/leakage explicit
+  coupling, no magnetostriction, no temperature, no DC bias / remanence).
+  Tier classification (coloring-grade ✅, predictive-grade ❌). Reserves
+  `Physical` for the future `PhysicalDAE` Sprint A3.5 engine.
 - **TWISTERION branding** -- renamed from "Transformer Model" with "Powered by HysteriCore" tagline.
 - **O.D.T Balanced Preamp** (Original Dual Topology) -- dual-transformer preamp engine with two amplifier paths.
 - **Heritage Mode** -- 3-transistor Class-A path (BC184C/BC214C/BD139) with 11-position gain switch (+10 to +50 dB).

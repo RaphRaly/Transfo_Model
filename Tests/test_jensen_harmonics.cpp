@@ -121,11 +121,11 @@ void test_jt115ke_odd_dominance_realtime()
         "THD < 35% (bounded saturation at +6 dBFS)");
 }
 
-// ---- Test 2: JT-115K-E odd dominance (Physical / J-A) ----------------------
+// ---- Test 2: JT-115K-E odd dominance (Artistic / J-A) ----------------------
 
-void test_jt115ke_odd_dominance_physical()
+void test_jt115ke_odd_dominance_Artistic()
 {
-    std::printf("\n=== Jensen JT-115K-E Harmonic Order — Physical (J-A) ===\n");
+    std::printf("\n=== Jensen JT-115K-E Harmonic Order — Artistic (J-A) ===\n");
 
     const float sampleRate = 44100.0f;
     const int numSamples = 8192;
@@ -135,7 +135,7 @@ void test_jt115ke_odd_dominance_physical()
     // Heap-allocate to avoid stack overflow
     auto model = std::make_unique<TransformerModel<JilesAthertonLeaf<LangevinPade>>>();
     model->setConfig(TransformerConfig::Jensen_JT115KE());
-    model->setProcessingMode(ProcessingMode::Physical);
+    model->setProcessingMode(ProcessingMode::Artistic);
     model->setInputGain(0.0f);
     model->setOutputGain(0.0f);
     model->setMix(1.0f);
@@ -178,13 +178,13 @@ void test_jt115ke_odd_dominance_physical()
     double h4_dB = toDB(hl.h4);
 
     CHECK(h3_dB > h2_dB + 6.0,
-        "Physical: H3 > H2 + 6 dB (odd dominance)");
+        "Artistic: H3 > H2 + 6 dB (odd dominance)");
     CHECK(h5_dB > h4_dB + 6.0,
-        "Physical: H5 > H4 + 6 dB (odd dominance)");
+        "Artistic: H5 > H4 + 6 dB (odd dominance)");
     CHECK(hl.thdPercent > 0.01,
-        "Physical: THD > 0.01%");
+        "Artistic: THD > 0.01%");
     CHECK(hl.thdPercent < 35.0,
-        "Physical: THD < 35% (bounded saturation at +6 dBFS)");
+        "Artistic: THD < 35% (bounded saturation at +6 dBFS)");
 }
 
 // ---- Test 3: THD increases with drive level ---------------------------------
@@ -256,7 +256,7 @@ int main()
     std::printf("================================================================\n");
 
     test_jt115ke_odd_dominance_realtime();
-    test_jt115ke_odd_dominance_physical();
+    test_jt115ke_odd_dominance_Artistic();
     test_thd_vs_drive();
 
     test::printSummary("test_jensen_harmonics");

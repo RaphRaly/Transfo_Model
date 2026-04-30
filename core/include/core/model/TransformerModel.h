@@ -7,12 +7,12 @@
 // OversamplingEngine, ToleranceModel. The plugin layer calls this class for
 // audio processing.
 //
-// Two processing modes [v3]:
-//   Physical : J-A complete + OS 4x — for bounce/render offline
-//   Realtime : CPWL directional + ADAA, NO OS — for monitoring
+// Two processing families [v3]:
+//   Artistic : J-A cascade + OS 4x/2x — high-quality coloring path
+//   Realtime : CPWL directional + ADAA, NO OS — monitoring path
 //
 // Template on NonlinearLeaf is now a type discriminator only (Realtime vs
-// Physical instantiation). The active path always uses the cascade
+// Artistic instantiation). The active path always uses the cascade
 // J-A → HP → LC biquad — the WDF wave-domain tree was removed in 2026.
 // =============================================================================
 
@@ -35,9 +35,16 @@
 namespace transfo {
 
 enum class ProcessingMode {
-  Physical, // J-A complete, OS 4x — for bounce/render offline
-  Realtime  // CPWL directional + ADAA, NO OS — monitoring [v3]
+  Realtime = 0,      // CPWL directional + ADAA, NO OS — monitoring [v3]
+  Artistic = 1,      // J-A cascade + OS 4x — high-quality coloring path
+  ArtisticOS4x = Artistic,
+  ArtisticOS2x = 2,
+  Physical [[deprecated("Use Artistic/ArtisticOS4x; Physical is reserved for a future coupled DAE solver")]] = Artistic
 };
+
+inline bool usesArtisticOversampling(ProcessingMode mode) {
+  return mode != ProcessingMode::Realtime;
+}
 
 struct BHSample {
   float h = 0.0f;
@@ -55,15 +62,21 @@ public:
     configureCircuit();
   }
 
-  void setProcessingMode(ProcessingMode mode) { processingMode_ = mode; }
+  void setProcessingMode(ProcessingMode mode) {
+    processingMode_ = mode;
+    if (mode == ProcessingMode::ArtisticOS2x)
+      osFactor_ = 2;
+    else if (usesArtisticOversampling(mode))
+      osFactor_ = kOversamplingArtistic;
+  }
 
   // ─── Prepare ────────────────────────────────────────────────────────────
   void prepareToPlay(float sampleRate, int maxBlockSize) {
     sampleRate_ = sampleRate;
     maxBlockSize_ = maxBlockSize;
 
-    if (processingMode_ == ProcessingMode::Physical) {
-      // Physical: OS 2x or 4x (P1.1: configurable via setOversamplingFactor)
+    if (usesArtisticOversampling(processingMode_)) {
+      // Artistic: OS 2x or 4x (P1.1: configurable via setOversamplingFactor)
       const int osFact = osFactor_;
       oversampler_.prepare(sampleRate, maxBlockSize, osFact);
     }
@@ -88,8 +101,8 @@ public:
       // [v3] Realtime: ADAA in CPWLLeaf, NO oversampling
       processBlockRealtime(input, output, numSamples);
     } else {
-      // Physical: OS 4x
-      processBlockPhysical(input, output, numSamples);
+      // Artistic: OS 2x/4x
+      processBlockArtistic(input, output, numSamples);
     }
   }
 
@@ -372,11 +385,11 @@ private:
 
   float sampleRate_ = kDefaultSampleRate;
   int maxBlockSize_ = 512;
-  int osFactor_ = kOversamplingPhysical;  // P1.1: 2 or 4
+  int osFactor_ = kOversamplingArtistic;  // P1.1: 2 or 4
 
   SPSCQueue<BHSample, 2048> bhQueue_;
   int bhDownsampleCounter_ = 0;
-  std::vector<float> dryBuffer_;  // Pre-allocated buffer for dry signal (Physical mode)
+  std::vector<float> dryBuffer_;  // Pre-allocated buffer for dry signal (Artistic mode)
 
   // ─── Direct J-A processing (cascade fallback path) ─────────────────────
   HysteresisModel<LangevinPade> directHyst_;
@@ -469,8 +482,8 @@ private:
     }
   }
 
-  // ─── Physical processing — direct J-A bypass + OS 4x ─────────────────────
-  void processBlockPhysical(const float *input, float *output, int numSamples) {
+  // ─── Artistic processing — direct J-A cascade + OS 2x/4x ──────────────────
+  void processBlockArtistic(const float *input, float *output, int numSamples) {
     float *osBuffer = oversampler_.getOversampledBuffer();
     const int osSize = oversampler_.getOversampledSize(numSamples);
 
@@ -504,7 +517,7 @@ private:
   // ─── Configure the WDF circuit from TransformerConfig ───────────────────
   void configureCircuit() {
     // ─── Direct J-A model (cascade fallback path) ──────────────────────────
-    float procRate = (processingMode_ == ProcessingMode::Physical)
+    float procRate = usesArtisticOversampling(processingMode_)
                          ? sampleRate_ * static_cast<float>(osFactor_)
                          : sampleRate_;
     if (procRate <= 0.0f) procRate = kDefaultSampleRate;
@@ -519,20 +532,20 @@ private:
     directDynLosses_.reset();
 
     // Flux integrator (Problem #4): freq-dependent saturation via 1/f pre-emphasis.
-    // Only meaningful in Physical calibration mode where hScale is derived from
-    // Ampère's law.  In Artistic mode, hScale = a×5 already provides musical
-    // saturation; stacking the 1/f integrator would produce ~50× over-drive at
-    // 20 Hz (THD > 50% even at −20 dBu — see diag 2026-03-29).
+    // Only meaningful in Artistic calibration where hScale is derived from
+    // Ampère's law. In LegacyColor calibration, hScale = a×5 already provides
+    // musical saturation; stacking the 1/f integrator would produce ~50×
+    // over-drive at 20 Hz (THD > 50% even at −20 dBu — see diag 2026-03-29).
     fluxInt_.configure(static_cast<double>(procRate),
                        static_cast<double>(config_.calibrationFreqHz));
     const bool useFluxInt = config_.fluxIntegratorEnabled
-                         && (config_.calibrationMode == CalibrationMode::Physical);
+                         && (config_.calibrationMode == CalibrationMode::Artistic);
     fluxInt_.setEnabled(useFluxInt);
     fluxInt_.reset();
 
     // Scaling: digital amplitude → H field [A/m]
-    if (config_.calibrationMode == CalibrationMode::Physical) {
-      // Physics-based: Ampere's law at reference frequency f_ref.
+    if (config_.calibrationMode == CalibrationMode::Artistic) {
+      // Artistic reference scaling: Ampere's law at reference frequency f_ref.
       //   I_m = V / (2πf · Lm)     magnetizing current from primary voltage
       //   H   = N · I_m / l_e      Ampere's law in magnetic circuit
       //   ⇒ hScale = N / (2πf_ref · Lm · l_e)   [A/m per V_peak]
@@ -554,7 +567,7 @@ private:
         hScale_ = config_.material.a * 5.0f;  // Fallback
       }
     } else {
-      // Artistic mode: deliberate overdrive for musical coloration.
+      // LegacyColor mode: deliberate overdrive for musical coloration.
       // 'a' parameter controls the B-H curve knee location.
       hScale_ = config_.material.a * 5.0f;
     }

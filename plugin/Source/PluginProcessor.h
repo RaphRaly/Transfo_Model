@@ -4,11 +4,11 @@
 // PluginProcessor — JUCE AudioProcessor for the Transformer Model plugin.
 //
 // v3 Architecture: uses TransformerModel<CPWLLeaf> for Realtime mode
-// and TransformerModel<JilesAthertonLeaf> for Physical mode.
+// and TransformerModel<JilesAthertonLeaf> for Artistic mode.
 //
 // Processing chain:
 //   Realtime:  Input → TransformerModel (CPWL+ADAA, no OS) → Output
-//   Physical:  Input → TransformerModel (J-A, OS 4x) → Output
+//   Artistic:  Input → TransformerModel (J-A, OS 4x/2x) → Output
 //
 // Stereo TMT: slightly different configs per channel for analog spread.
 // =============================================================================
@@ -86,12 +86,12 @@ public:
     if (circuitIndex == 0) {
       if (modeIndex == 0)
         return doubleLegacyInputRealtime_[0].getPeakSaturation();
-      return doubleLegacyInputPhysical_[0].getPeakSaturation();
+      return doubleLegacyInputArtistic_[0].getPeakSaturation();
     }
 
     if (modeIndex == 0)
       return realtimeModel_[0].getPeakSaturation();
-    return physicalModel_[0].getPeakSaturation();
+    return artisticModel_[0].getPeakSaturation();
   }
 
   // P1.3: Dynamic Lm readout (Henry) for engineering info panel
@@ -105,12 +105,12 @@ public:
     if (circuitIndex == 0) {
       if (modeIndex == 0)
         return doubleLegacyInputRealtime_[0].getLmSmoothed();
-      return doubleLegacyInputPhysical_[0].getLmSmoothed();
+      return doubleLegacyInputArtistic_[0].getLmSmoothed();
     }
 
     if (modeIndex == 0)
       return realtimeModel_[0].getLmSmoothed();
-    return physicalModel_[0].getLmSmoothed();
+    return artisticModel_[0].getLmSmoothed();
   }
 
   juce::AudioProcessorValueTreeState &getAPVTS() { return apvts_; }
@@ -134,17 +134,17 @@ public:
     if (circuitIndex == 0) {
       if (modeIndex == 0)
         return doubleLegacyInputRealtime_[0].readBHSamples(dest, maxSamples);
-      return doubleLegacyInputPhysical_[0].readBHSamples(dest, maxSamples);
+      return doubleLegacyInputArtistic_[0].readBHSamples(dest, maxSamples);
     }
 
     if (modeIndex == 0)
       return realtimeModel_[0].readBHSamples(dest, maxSamples);
-    return physicalModel_[0].readBHSamples(dest, maxSamples);
+    return artisticModel_[0].readBHSamples(dest, maxSamples);
   }
 
 private:
   using RealtimeTransformerT = transfo::TransformerModel<transfo::CPWLLeaf>;
-  using PhysicalTransformerT =
+  using ArtisticTransformerT =
       transfo::TransformerModel<
           transfo::JilesAthertonLeaf<transfo::LangevinPade>>;
 
@@ -153,11 +153,11 @@ private:
   // DSP: one model per channel (stereo)
   static constexpr int kMaxChannels = 2;
   RealtimeTransformerT realtimeModel_[kMaxChannels];
-  PhysicalTransformerT physicalModel_[kMaxChannels];
+  ArtisticTransformerT artisticModel_[kMaxChannels];
   RealtimeTransformerT doubleLegacyInputRealtime_[kMaxChannels];
   RealtimeTransformerT doubleLegacyOutputRealtime_[kMaxChannels];
-  PhysicalTransformerT doubleLegacyInputPhysical_[kMaxChannels];
-  PhysicalTransformerT doubleLegacyOutputPhysical_[kMaxChannels];
+  ArtisticTransformerT doubleLegacyInputArtistic_[kMaxChannels];
+  ArtisticTransformerT doubleLegacyOutputArtistic_[kMaxChannels];
 
   transfo::ToleranceModel toleranceModel_;
 
@@ -176,8 +176,8 @@ private:
 
   void applyPreset(int presetIndex);
   void applyDoubleLegacyConfigs(int t2LoadIndex);
-  void prepareLegacyPhysicalModels(float sampleRate, int samplesPerBlock, int osFactor);
-  void prepareDoubleLegacyPhysicalModels(float sampleRate, int samplesPerBlock, int osFactor);
+  void prepareLegacyArtisticModels(float sampleRate, int samplesPerBlock, int osFactor);
+  void prepareDoubleLegacyArtisticModels(float sampleRate, int samplesPerBlock, int osFactor);
 
   // Engine-level peak snapshots, refreshed once per processBlock.
   std::atomic<float> levelInDbu_{-120.0f};
@@ -187,7 +187,7 @@ private:
   // Harrison Console Mic Pre (one per channel, stereo)
   // Uses full J-A + Bertotti engine (not CPWL) so the JT-115K-E material
   // hysteresis and dynamic losses are audible in the mic-pre path.
-  using HarrisonTransformerT = PhysicalTransformerT;
+  using HarrisonTransformerT = ArtisticTransformerT;
   HarrisonTransformerT harrisonTransformer_[kMaxChannels];
   Harrison::MicPre::HarrisonMicPre<HarrisonTransformerT>
       harrisonMicPre_[kMaxChannels];

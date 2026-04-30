@@ -195,10 +195,10 @@ add_executable(test_flux_integrator test_flux_integrator.cpp)
 target_include_directories(test_flux_integrator PRIVATE ${CORE_INCLUDE})
 add_test(NAME flux_integrator                    COMMAND test_flux_integrator)
 
-# ── FluxIntegrator Physical Mode Regression ───────────────────────────────────
-add_executable(test_fluxint_physical test_fluxint_physical.cpp)
-target_include_directories(test_fluxint_physical PRIVATE ${CORE_INCLUDE})
-add_test(NAME fluxint_physical                    COMMAND test_fluxint_physical)
+# ── FluxIntegrator Artistic Mode Regression ───────────────────────────────────
+add_executable(test_fluxint_artistic test_fluxint_artistic.cpp)
+target_include_directories(test_fluxint_artistic PRIVATE ${CORE_INCLUDE})
+add_test(NAME fluxint_artistic                    COMMAND test_fluxint_artistic)
 
 # ── Harrison Console Mic Pre Tests ──────────────────────────────────────────
 add_executable(test_harrison_micpre test_harrison_micpre.cpp)
@@ -223,7 +223,7 @@ target_include_directories(generate_demo_audio PRIVATE ${CORE_INCLUDE})
 
 # ── Sprint 1 Validation Pipeline ─────────────────────────────────────────────
 # Generates baseline THD + FR measurements for Jensen JT-115K-E / JT-11ELCF in
-# both Realtime (Artistic) and Physical calibration modes. Outputs CSVs to
+# both Realtime (Artistic) and Artistic calibration modes. Outputs CSVs to
 # data/measurements/. The --smoke variant runs a 3-point subset for CTest.
 add_executable(validate_jensen
     ../tools/validate_jensen.cpp

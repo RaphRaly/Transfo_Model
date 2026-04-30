@@ -3,7 +3,7 @@
 //
 // Signal chain: JT-115K-E (mic input, 1:10) → wire gain → JT-11ELCF (line out, 1:1)
 //
-// Validates that two TransformerModel instances chain correctly in Physical
+// Validates that two TransformerModel instances chain correctly in Artistic
 // mode, producing reasonable gain, low THD, and stable output.
 // This is the simplest possible dual-transformer topology test.
 //
@@ -25,12 +25,12 @@ using namespace transfo;
 
 static constexpr int kBlockSize = 512;
 
-// ── Helper: configure a Physical mode transformer in-place ─────────────────
-static void initPhysicalModel(TransformerModel<CPWLLeaf>& model,
+// ── Helper: configure a Artistic mode transformer in-place ─────────────────
+static void initArtisticModel(TransformerModel<CPWLLeaf>& model,
                                const TransformerConfig& cfg, float sampleRate)
 {
     auto phys = cfg;
-    phys.calibrationMode = CalibrationMode::Physical;
+    phys.calibrationMode = CalibrationMode::Artistic;
     model.setConfig(phys);
     model.setProcessingMode(ProcessingMode::Realtime);
 
@@ -84,8 +84,8 @@ static void testChainGain()
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> inputModel, outputModel;
-    initPhysicalModel(inputModel, TransformerConfig::Jensen_JT115KE(), sr);
-    initPhysicalModel(outputModel, TransformerConfig::Jensen_JT11ELCF(), sr);
+    initArtisticModel(inputModel, TransformerConfig::Jensen_JT115KE(), sr);
+    initArtisticModel(outputModel, TransformerConfig::Jensen_JT11ELCF(), sr);
 
     const float freq = 1000.0f;
     const float amplitude = 0.1f;  // Small signal
@@ -121,7 +121,7 @@ static void testChainGain()
 
     double gain_dB = 20.0 * std::log10(outRms / (inRms + 1e-30));
     std::printf("  Chain gain @1kHz: %+.2f dB\n", gain_dB);
-    std::printf("  (Input: JT-115K-E Physical, Output: JT-11ELCF Physical)\n");
+    std::printf("  (Input: JT-115K-E Artistic, Output: JT-11ELCF Artistic)\n");
 
     // Both transformers are bNorm-normalized to ~0 dB individually.
     // Measured: +5.4 dB — the combined dynamic Lm interaction of two
@@ -140,8 +140,8 @@ static void testChainTHD()
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> inputModel, outputModel;
-    initPhysicalModel(inputModel, TransformerConfig::Jensen_JT115KE(), sr);
-    initPhysicalModel(outputModel, TransformerConfig::Jensen_JT11ELCF(), sr);
+    initArtisticModel(inputModel, TransformerConfig::Jensen_JT115KE(), sr);
+    initArtisticModel(outputModel, TransformerConfig::Jensen_JT11ELCF(), sr);
 
     const float freq = 1000.0f;
     const float amplitude = 0.1f;
@@ -171,7 +171,7 @@ static void testChainTHD()
     std::printf("  H1: %.2f dB, H2: %.2f dB, H3: %.2f dB\n",
                 r.harmonicDB[0], r.harmonicDB[1], r.harmonicDB[2]);
 
-    // A2 phase 2 enables Bertotti in Physical mode. A single Physical
+    // A2 phase 2 enables Bertotti in Artistic mode. A single Artistic
     // transformer is already nonlinear with the pre-A5 K1/K2 calibration;
     // the two-stage chain measured 35.244776% during A2 phase 2 collection.
     CHECK_RANGE(r.thdPercent, 0.0, 40.0,
@@ -187,8 +187,8 @@ static void testChainStability()
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> inputModel, outputModel;
-    initPhysicalModel(inputModel, TransformerConfig::Jensen_JT115KE(), sr);
-    initPhysicalModel(outputModel, TransformerConfig::Jensen_JT11ELCF(), sr);
+    initArtisticModel(inputModel, TransformerConfig::Jensen_JT115KE(), sr);
+    initArtisticModel(outputModel, TransformerConfig::Jensen_JT11ELCF(), sr);
 
     const int numSamples = 44100;  // 1 second
     std::vector<float> input(static_cast<size_t>(numSamples));
@@ -234,8 +234,8 @@ static void testChainWithGain()
 
     const float sr = 44100.0f;
     TransformerModel<CPWLLeaf> inputModel, outputModel;
-    initPhysicalModel(inputModel, TransformerConfig::Jensen_JT115KE(), sr);
-    initPhysicalModel(outputModel, TransformerConfig::Jensen_JT11ELCF(), sr);
+    initArtisticModel(inputModel, TransformerConfig::Jensen_JT115KE(), sr);
+    initArtisticModel(outputModel, TransformerConfig::Jensen_JT11ELCF(), sr);
 
     const float freq = 1000.0f;
     const float amplitude = 0.01f;  // Low level mic signal

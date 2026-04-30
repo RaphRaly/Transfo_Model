@@ -61,7 +61,7 @@ public:
         // Fix 1: Initialize dMdH_prev_ to the linear-region susceptibility
         // χ_eff at the demagnetized origin (H=0, M=0).  Without this,
         // dMdH_prev_=0 halves the first trapezoidal step and causes NR
-        // divergence at sample 2 in Physical mode (small H).
+        // divergence at sample 2 in Artistic mode (small H).
         dMdH_prev_ = computeRHS(0.0, 0.0, 1);
     }
 

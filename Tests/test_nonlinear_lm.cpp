@@ -2,10 +2,10 @@
 // Test: Nonlinear Lm (Dynamic Magnetizing Inductance) — Jensen JT-115K-E
 //
 // Sprint 4 validation tests for the dynamic Lm feature (S2).
-// Uses the PhysicalModel (JilesAtherton) to exercise the full J-A
+// Uses the ArtisticModel (JilesAtherton) to exercise the full J-A
 // susceptibility → mu_inc → Lm → HP cutoff pipeline.
 //
-// Physical grounding (Jensen JT-115K-E / HyMu80):
+// Artistic grounding (Jensen JT-115K-E / HyMu80):
 //   - HP -3 dB ≈ 2.5 Hz (Lp ~10 H, Rs 170 Ω) → 50 Hz is quasi-flat
 //   - FR at -20 dBu: 20 Hz ≈ -0.5 dB, 50 Hz ≈ -0.08 dB (Jensen app note)
 //   - µ_inc U-shape (Rayleigh + J-A): low level → µ_init < µ_max,
@@ -113,12 +113,12 @@ float dBuToAmplitude(float dBu)
     return std::pow(10.0f, dBu / 20.0f);
 }
 
-using PhysicalModel = transfo::TransformerModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>;
+using ArtisticModel = transfo::TransformerModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>;
 using RealtimeModel = transfo::TransformerModel<transfo::CPWLLeaf>;
 
 // Measure RMS output of a model for a given sine frequency and amplitude.
 // Phase-continuous sine across warm-up + measurement blocks.
-double measureGain(PhysicalModel& model, float freq, float amplitude,
+double measureGain(ArtisticModel& model, float freq, float amplitude,
                    float sampleRate, int blockSize, int warmupBlocks = 10)
 {
     std::vector<float> input(blockSize);
@@ -153,8 +153,8 @@ double measureRelativeGain(const transfo::TransformerConfig& cfg, float testFreq
                            int blockSize, int warmupBlocks = 15, bool linearMode = false)
 {
     // Measure reference frequency
-    PhysicalModel modelRef;
-    modelRef.setProcessingMode(transfo::ProcessingMode::Physical);
+    ArtisticModel modelRef;
+    modelRef.setProcessingMode(transfo::ProcessingMode::Artistic);
     modelRef.setLinearMode(linearMode);
     modelRef.setConfig(cfg);
     modelRef.prepareToPlay(sampleRate, blockSize);
@@ -164,8 +164,8 @@ double measureRelativeGain(const transfo::TransformerConfig& cfg, float testFreq
     double rmsRef = measureGain(modelRef, refFreq, amplitude, sampleRate, blockSize, warmupBlocks);
 
     // Measure test frequency
-    PhysicalModel modelTest;
-    modelTest.setProcessingMode(transfo::ProcessingMode::Physical);
+    ArtisticModel modelTest;
+    modelTest.setProcessingMode(transfo::ProcessingMode::Artistic);
     modelTest.setLinearMode(linearMode);
     modelTest.setConfig(cfg);
     modelTest.prepareToPlay(sampleRate, blockSize);
@@ -210,7 +210,7 @@ void test1_level_dependent_freq_response()
     // 1a. At 0 dBu (nominal): 50 Hz should be quasi-flat (Jensen spec: ~-0.08 dB)
     //     Allow generous margin for discrete model: within 3 dB of reference.
     //     The J-A model at 0 dBu enters the nonlinear knee, reducing µ_inc
-    //     and raising HP cutoff slightly — up to ~2.5 dB attenuation is physical.
+    //     and raising HP cutoff slightly — up to ~2.5 dB attenuation is Artistic.
     CHECK(relGain50Hz[3] > -3.0,
           "0 dBu: 50Hz within 3 dB of 1kHz (Jensen HP -3dB at ~2.5 Hz)");
 
@@ -340,8 +340,8 @@ void test2_feature_flag_off()
 
     // 2c. Verify the model still works correctly with K_geo=0
     {
-        PhysicalModel model;
-        model.setProcessingMode(transfo::ProcessingMode::Physical);
+        ArtisticModel model;
+        model.setProcessingMode(transfo::ProcessingMode::Artistic);
         model.setConfig(cfgStatic);
         model.prepareToPlay(sr, blockSize);
         model.setInputGain(0.0f);
@@ -371,8 +371,8 @@ void test3_transient_stability()
     const int blockSize = 512;
     const int totalBlocks = 40; // ~0.46 seconds
 
-    PhysicalModel model;
-    model.setProcessingMode(transfo::ProcessingMode::Physical);
+    ArtisticModel model;
+    model.setProcessingMode(transfo::ProcessingMode::Artistic);
     model.setConfig(transfo::Presets::Jensen_JT115KE());
     model.prepareToPlay(sr, blockSize);
     model.setInputGain(0.0f);
@@ -451,7 +451,7 @@ void test3_transient_stability()
 
         float residual = peakAbs(output.data(), blockSize);
         std::cout << "    Residual after silence: " << residual << std::endl;
-        // HyMu80 remanence Br ~0.35-0.5 T is physical; residual 0.1-0.7 is
+        // HyMu80 remanence Br ~0.35-0.5 T is Artistic; residual 0.1-0.7 is
         // credible for an isolated transformer block without output DC-blocking.
         // Bertotti dynamic losses add damping that slightly increases residual.
         CHECK(residual < 0.7f, "Kick drum: bounded decay (residual < 0.7, HyMu80 remanence)");
@@ -472,8 +472,8 @@ void test4_lm_smoothing()
     const float sr = 44100.0f;
     const int blockSize = 512;
 
-    PhysicalModel model;
-    model.setProcessingMode(transfo::ProcessingMode::Physical);
+    ArtisticModel model;
+    model.setProcessingMode(transfo::ProcessingMode::Artistic);
     model.setConfig(transfo::Presets::Jensen_JT115KE());
     model.prepareToPlay(sr, blockSize);
     model.setInputGain(0.0f);
@@ -504,7 +504,7 @@ void test4_lm_smoothing()
     }
     std::cout << "    Max jump quiet→loud: " << maxJumpUp << std::endl;
     // Jensen doesn't constrain per-sample continuity; 2.0 is a comfort
-    // threshold against audible glitches, not a physical spec.
+    // threshold against audible glitches, not a Artistic spec.
     CHECK(maxJumpUp < 2.0f,
           "Quiet→loud: smoothed transition (max jump < 2.0)");
 

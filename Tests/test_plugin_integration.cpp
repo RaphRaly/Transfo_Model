@@ -7,7 +7,7 @@
 // Test groups:
 //   1. TransformerModel lifecycle (construct, prepare, process)
 //   2. Preset switching (all 5 presets, hot-swap, distinct output)
-//   3. Mode switching (Realtime vs Physical)
+//   3. Mode switching (Realtime vs Artistic)
 //   4. Parameter ranges (gain, mix, SVU extremes)
 //   5. Stress tests (tiny/large buffers, DC, hot signal)
 //   6. B-H Queue (SPSC queue receives data after processing)
@@ -107,7 +107,7 @@ void generateSine(float* buf, int n, float freq, float sampleRate, float amplitu
 // ---- Type aliases for readability -------------------------------------------
 
 using RealtimeModel = transfo::TransformerModel<transfo::CPWLLeaf>;
-using PhysicalModel = transfo::TransformerModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>;
+using ArtisticModel = transfo::TransformerModel<transfo::JilesAthertonLeaf<transfo::LangevinPade>>;
 
 // =============================================================================
 // 1. TransformerModel Lifecycle Tests
@@ -124,12 +124,12 @@ void test1_lifecycle()
     }
     CHECK(true, "RealtimeModel construct/destruct without crash");
 
-    // 1b. Construction/destruction without crash (Physical)
+    // 1b. Construction/destruction without crash (Artistic)
     {
-        PhysicalModel model;
+        ArtisticModel model;
         (void)model;
     }
-    CHECK(true, "PhysicalModel construct/destruct without crash");
+    CHECK(true, "ArtisticModel construct/destruct without crash");
 
     // 1c. prepareToPlay at different sample rates
     float sampleRates[] = { 44100.0f, 48000.0f, 88200.0f, 96000.0f };
@@ -140,8 +140,8 @@ void test1_lifecycle()
         rtModel.setConfig(transfo::Presets::Jensen_JT115KE());
         rtModel.prepareToPlay(sr, 512);
 
-        PhysicalModel phModel;
-        phModel.setProcessingMode(transfo::ProcessingMode::Physical);
+        ArtisticModel phModel;
+        phModel.setProcessingMode(transfo::ProcessingMode::Artistic);
         phModel.setConfig(transfo::Presets::Jensen_JT115KE());
         phModel.prepareToPlay(sr, 512);
 
@@ -301,7 +301,7 @@ void test2_preset_switching()
 
 void test3_mode_switching()
 {
-    std::cout << "\n=== TEST 3: Mode Switching (Realtime vs Physical) ===" << std::endl;
+    std::cout << "\n=== TEST 3: Mode Switching (Realtime vs Artistic) ===" << std::endl;
 
     const int N = 512;
     const float sr = 44100.0f;
@@ -328,11 +328,11 @@ void test3_mode_switching()
         CHECK(allFinite(output.data(), N), "Realtime mode output is finite");
     }
 
-    // 3b. Physical mode produces non-null output
-    double physicalRms = 0.0;
+    // 3b. Artistic mode produces non-null output
+    double ArtisticRms = 0.0;
     {
-        PhysicalModel model;
-        model.setProcessingMode(transfo::ProcessingMode::Physical);
+        ArtisticModel model;
+        model.setProcessingMode(transfo::ProcessingMode::Artistic);
         model.setConfig(cfg);
         model.prepareToPlay(sr, N);
         model.setInputGain(0.0f);
@@ -344,17 +344,17 @@ void test3_mode_switching()
         std::vector<float> output(N);
 
         model.processBlock(buf.data(), output.data(), N);
-        physicalRms = rms(output.data(), N);
-        CHECK(physicalRms > 1e-6, "Physical mode produces non-zero output");
-        CHECK(allFinite(output.data(), N), "Physical mode output is finite");
+        ArtisticRms = rms(output.data(), N);
+        CHECK(ArtisticRms > 1e-6, "Artistic mode produces non-zero output");
+        CHECK(allFinite(output.data(), N), "Artistic mode output is finite");
     }
 
     // 3c. Both modes produce output (summary)
     std::cout << "    Realtime RMS: " << realtimeRms << std::endl;
-    std::cout << "    Physical RMS: " << physicalRms << std::endl;
+    std::cout << "    Artistic RMS: " << ArtisticRms << std::endl;
 
     // Both should be non-zero, but they may differ in character
-    CHECK(realtimeRms > 1e-8 && physicalRms > 1e-8,
+    CHECK(realtimeRms > 1e-8 && ArtisticRms > 1e-8,
           "Both modes produce measurable output");
 }
 
@@ -571,10 +571,10 @@ void test5_stress()
         CHECK(allFinite(output.data(), 512), "Hot signal (+20dBFS + 20dB gain): no Inf/NaN");
     }
 
-    // 5e. Physical mode stress: 1-sample buffer
+    // 5e. Artistic mode stress: 1-sample buffer
     {
-        PhysicalModel model;
-        model.setProcessingMode(transfo::ProcessingMode::Physical);
+        ArtisticModel model;
+        model.setProcessingMode(transfo::ProcessingMode::Artistic);
         model.setConfig(cfg);
         model.prepareToPlay(sr, 1);
         model.setInputGain(0.0f);
@@ -584,13 +584,13 @@ void test5_stress()
         float input = 0.3f;
         float output = 0.0f;
         model.processBlock(&input, &output, 1);
-        CHECK(std::isfinite(output), "Physical mode 1-sample: output is finite");
+        CHECK(std::isfinite(output), "Artistic mode 1-sample: output is finite");
     }
 
-    // 5f. Physical mode stress: large buffer
+    // 5f. Artistic mode stress: large buffer
     {
-        PhysicalModel model;
-        model.setProcessingMode(transfo::ProcessingMode::Physical);
+        ArtisticModel model;
+        model.setProcessingMode(transfo::ProcessingMode::Artistic);
         model.setConfig(cfg);
         model.prepareToPlay(sr, 4096);
         model.setInputGain(0.0f);
@@ -602,13 +602,13 @@ void test5_stress()
         std::vector<float> output(4096);
 
         model.processBlock(buf.data(), output.data(), 4096);
-        CHECK(allFinite(output.data(), 4096), "Physical mode 4096-sample: all output finite");
+        CHECK(allFinite(output.data(), 4096), "Artistic mode 4096-sample: all output finite");
     }
 
-    // 5g. DC in Physical mode
+    // 5g. DC in Artistic mode
     {
-        PhysicalModel model;
-        model.setProcessingMode(transfo::ProcessingMode::Physical);
+        ArtisticModel model;
+        model.setProcessingMode(transfo::ProcessingMode::Artistic);
         model.setConfig(cfg);
         model.prepareToPlay(sr, 1024);
         model.setInputGain(0.0f);
@@ -621,10 +621,10 @@ void test5_stress()
         for (int block = 0; block < 10; ++block)
             model.processBlock(input.data(), output.data(), 1024);
 
-        CHECK(allFinite(output.data(), 1024), "Physical mode DC: output is finite after 10 blocks");
+        CHECK(allFinite(output.data(), 1024), "Artistic mode DC: output is finite after 10 blocks");
         float peak = peakAbs(output.data(), 1024);
-        CHECK(peak < 100.0f, "Physical mode DC: no divergence (peak < 100)");
-        std::cout << "    Physical DC peak after 10 blocks: " << peak << std::endl;
+        CHECK(peak < 100.0f, "Artistic mode DC: no divergence (peak < 100)");
+        std::cout << "    Artistic DC peak after 10 blocks: " << peak << std::endl;
     }
 }
 
@@ -707,10 +707,10 @@ void test6_bh_queue()
         CHECK(allBHFinite, "Realtime model: all BH samples are finite");
     }
 
-    // 6d. Physical model also produces BH samples
+    // 6d. Artistic model also produces BH samples
     {
-        PhysicalModel model;
-        model.setProcessingMode(transfo::ProcessingMode::Physical);
+        ArtisticModel model;
+        model.setProcessingMode(transfo::ProcessingMode::Artistic);
         model.setConfig(transfo::Presets::Jensen_JT115KE());
         model.prepareToPlay(44100.0f, 1024);
         model.setInputGain(0.0f);
@@ -726,9 +726,9 @@ void test6_bh_queue()
         transfo::BHSample bhBuf[128];
         size_t count = model.readBHSamples(bhBuf, 128);
 
-        // Physical mode downsamples by 128, so with 1024*4=4096 OS samples, ~32 BH samples
-        CHECK(count > 0, "Physical model: BH queue has samples after processing");
-        std::cout << "    Physical BH samples read: " << count << std::endl;
+        // Artistic mode downsamples by 128, so with 1024*4=4096 OS samples, ~32 BH samples
+        CHECK(count > 0, "Artistic model: BH queue has samples after processing");
+        std::cout << "    Artistic BH samples read: " << count << std::endl;
     }
 
     // 6e. Queue reset works
@@ -810,12 +810,12 @@ void test7_multiblock_consistency()
 }
 
 // =============================================================================
-// 8. All presets in Physical mode (additional coverage)
+// 8. All presets in Artistic mode (additional coverage)
 // =============================================================================
 
-void test8_physical_mode_all_presets()
+void test8_Artistic_mode_all_presets()
 {
-    std::cout << "\n=== TEST 8: All Presets in Physical Mode ===" << std::endl;
+    std::cout << "\n=== TEST 8: All Presets in Artistic Mode ===" << std::endl;
 
     const int N = 256;
     const float sr = 44100.0f;
@@ -823,8 +823,8 @@ void test8_physical_mode_all_presets()
 
     for (int p = 0; p < numPresets; ++p)
     {
-        PhysicalModel model;
-        model.setProcessingMode(transfo::ProcessingMode::Physical);
+        ArtisticModel model;
+        model.setProcessingMode(transfo::ProcessingMode::Artistic);
         model.setConfig(transfo::Presets::getByIndex(p));
         model.prepareToPlay(sr, N);
         model.setInputGain(0.0f);
@@ -837,12 +837,12 @@ void test8_physical_mode_all_presets()
 
         model.processBlock(buf.data(), output.data(), N);
 
-        std::string msg = "Physical preset " + std::to_string(p) + " (" +
+        std::string msg = "Artistic preset " + std::to_string(p) + " (" +
                           transfo::Presets::getNameByIndex(p) + "): finite output";
         CHECK(allFinite(output.data(), N), msg.c_str());
 
         double r = rms(output.data(), N);
-        std::string msg2 = "Physical preset " + std::to_string(p) + ": non-zero RMS=" +
+        std::string msg2 = "Artistic preset " + std::to_string(p) + ": non-zero RMS=" +
                            std::to_string(r);
         CHECK(r > 1e-8, msg2.c_str());
     }
@@ -865,7 +865,7 @@ int main()
     test5_stress();
     test6_bh_queue();
     test7_multiblock_consistency();
-    test8_physical_mode_all_presets();
+    test8_Artistic_mode_all_presets();
 
     std::cout << "\n================================================================" << std::endl;
     std::cout << "  Results: " << g_pass << " passed, " << g_fail << " failed" << std::endl;

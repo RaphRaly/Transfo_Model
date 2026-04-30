@@ -4,7 +4,7 @@
 // Standalone diagnostic that dumps FR sweep, THD vs level, THD vs frequency,
 // harmonic spectrum, and cross-mode HF comparison for Jensen JT-115K-E.
 //
-// Run BEFORE writing PhysicsFlux test thresholds. Output is plain text tables
+// Run BEFORE writing ArtisticFlux test thresholds. Output is plain text tables
 // to stdout, one measurement per line, easily parseable.
 //
 // Usage: test_fluxint_diag.exe
@@ -44,20 +44,20 @@ static TransformerConfig makeConfigFlux()
     return cfg;
 }
 
-// Physical calibration + FluxInt ON — the correct combination per Perplexity analysis
-static TransformerConfig makeConfigPhysFlux()
+// Artistic calibration + FluxInt ON — the correct combination per Perplexity analysis
+static TransformerConfig makeConfigArtisticFlux()
 {
     auto cfg = TransformerConfig::Jensen_JT115KE();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     cfg.fluxIntegratorEnabled = true;
     return cfg;
 }
 
-// Physical calibration + FluxInt OFF — baseline for comparison
-static TransformerConfig makeConfigPhysFlat()
+// Artistic calibration + FluxInt OFF — baseline for comparison
+static TransformerConfig makeConfigArtisticFlat()
 {
     auto cfg = TransformerConfig::Jensen_JT115KE();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     cfg.fluxIntegratorEnabled = false;
     return cfg;
 }
@@ -335,7 +335,7 @@ int main()
 {
     std::printf("================================================================\n");
     std::printf("  FluxIntegrator Exploration Diagnostic\n");
-    std::printf("  Jensen JT-115K-E — FlatLm vs PhysicsFlux\n");
+    std::printf("  Jensen JT-115K-E — FlatLm vs ArtisticFlux\n");
     std::printf("================================================================\n\n");
 
     auto cfgFlat = makeConfigFlatLm();
@@ -394,57 +394,57 @@ int main()
     diagNonlinearLmGain("FLUX", cfgFlux);
 
     // ============================================================
-    // PHYSICAL MODE DIAGNOSTICS (correct FluxInt context)
+    // Artistic MODE DIAGNOSTICS (correct FluxInt context)
     // ============================================================
-    auto cfgPhysFlux = makeConfigPhysFlux();
-    auto cfgPhysFlat = makeConfigPhysFlat();
+    auto cfgArtisticFlux = makeConfigArtisticFlux();
+    auto cfgArtisticFlat = makeConfigArtisticFlat();
 
     std::printf("\n\n================================================================\n");
-    std::printf("  PHYSICAL MODE: FlatLm vs PhysicsFlux\n");
+    std::printf("  Artistic MODE: FlatLm vs ArtisticFlux\n");
     std::printf("================================================================\n\n");
 
-    // 10. Physical FR Sweep
-    std::printf("--- Physical FR Sweep at -20 dBu ---\n");
-    diagFRSweep("PHYS_FLAT", cfgPhysFlat);
+    // 10. Artistic FR Sweep
+    std::printf("--- Artistic FR Sweep at -20 dBu ---\n");
+    diagFRSweep("ART_FLAT", cfgArtisticFlat);
     std::printf("\n");
-    diagFRSweep("PHYS_FLUX", cfgPhysFlux);
+    diagFRSweep("ART_FLUX", cfgArtisticFlux);
 
-    // 11. Physical THD vs Level at 20 Hz
-    std::printf("\n--- Physical THD vs Level at 20 Hz ---\n");
-    diagTHDvsLevel_20Hz("PHYS_FLAT", cfgPhysFlat);
+    // 11. Artistic THD vs Level at 20 Hz
+    std::printf("\n--- Artistic THD vs Level at 20 Hz ---\n");
+    diagTHDvsLevel_20Hz("ART_FLAT", cfgArtisticFlat);
     std::printf("\n");
-    diagTHDvsLevel_20Hz("PHYS_FLUX", cfgPhysFlux);
+    diagTHDvsLevel_20Hz("ART_FLUX", cfgArtisticFlux);
 
-    // 12. Physical THD vs Level at 1 kHz
-    std::printf("\n--- Physical THD vs Level at 1 kHz ---\n");
-    diagTHDvsLevel_1kHz("PHYS_FLAT", cfgPhysFlat);
+    // 12. Artistic THD vs Level at 1 kHz
+    std::printf("\n--- Artistic THD vs Level at 1 kHz ---\n");
+    diagTHDvsLevel_1kHz("ART_FLAT", cfgArtisticFlat);
     std::printf("\n");
-    diagTHDvsLevel_1kHz("PHYS_FLUX", cfgPhysFlux);
+    diagTHDvsLevel_1kHz("ART_FLUX", cfgArtisticFlux);
 
-    // 13. Physical THD vs Frequency at +4 dBu
-    std::printf("\n--- Physical THD vs Frequency at +4 dBu ---\n");
-    diagTHDvsFreq("PHYS_FLAT", cfgPhysFlat);
+    // 13. Artistic THD vs Frequency at +4 dBu
+    std::printf("\n--- Artistic THD vs Frequency at +4 dBu ---\n");
+    diagTHDvsFreq("ART_FLAT", cfgArtisticFlat);
     std::printf("\n");
-    diagTHDvsFreq("PHYS_FLUX", cfgPhysFlux);
+    diagTHDvsFreq("ART_FLUX", cfgArtisticFlux);
 
-    // 14. Physical Harmonic Spectrum
-    std::printf("\n--- Physical Harmonic Spectrum at 0 dBu ---\n");
-    diagHarmonicSpectrum("PHYS_FLAT", cfgPhysFlat);
+    // 14. Artistic Harmonic Spectrum
+    std::printf("\n--- Artistic Harmonic Spectrum at 0 dBu ---\n");
+    diagHarmonicSpectrum("ART_FLAT", cfgArtisticFlat);
     std::printf("\n");
-    diagHarmonicSpectrum("PHYS_FLUX", cfgPhysFlux);
+    diagHarmonicSpectrum("ART_FLUX", cfgArtisticFlux);
 
-    // 15. Physical cross-mode HF
-    std::printf("\n--- Physical Cross-Mode HF at -20 dBu ---\n");
+    // 15. Artistic cross-mode HF
+    std::printf("\n--- Artistic Cross-Mode HF at -20 dBu ---\n");
     {
         const float amp = dBuToAmplitude(-20.0f);
         const float freqs[] = {1000, 5000, 10000, 20000};
         for (float f : freqs) {
             TransformerModel<CPWLLeaf> mFlat, mFlux;
-            initModel(mFlat, cfgPhysFlat);
-            initModel(mFlux, cfgPhysFlux);
+            initModel(mFlat, cfgArtisticFlat);
+            initModel(mFlux, cfgArtisticFlux);
             float gFlat = measureGainDB(mFlat, f, amp);
             float gFlux = measureGainDB(mFlux, f, amp);
-            std::printf("[PHYS_CROSS_MODE] freq_hz=%.0f  flat=%.4f  flux=%.4f  delta=%.4f\n",
+            std::printf("[ART_CROSS_MODE] freq_hz=%.0f  flat=%.4f  flux=%.4f  delta=%.4f\n",
                         f, gFlat, gFlux, gFlux - gFlat);
         }
     }

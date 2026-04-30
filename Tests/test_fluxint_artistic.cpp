@@ -1,7 +1,7 @@
 // =============================================================================
-// test_fluxint_physical.cpp — FluxIntegrator regression in Physical mode
+// test_fluxint_artistic.cpp — FluxIntegrator regression in Artistic mode
 //
-// Lightweight guard for the FluxIntegrator/Bertotti interaction in Physical
+// Lightweight guard for the FluxIntegrator/Bertotti interaction in Artistic
 // calibration mode. In the linear no-Bertotti case the integrator and matched
 // differentiator are transparent at calibrationFreqHz. With A2 phase 2,
 // Bertotti is evaluated between those stages, so FLAT and FLUX intentionally
@@ -11,9 +11,9 @@
 //   1. FR(20 Hz) relative to 1 kHz stays in the A2p2 measured envelopes
 //   2. FLAT->FLUX FR deltas stay bounded at 20 Hz, 1 kHz, and 10 kHz
 //   3. FLAT->FLUX THD deltas stay bounded at 20 Hz and 1 kHz
-//   4. FluxInt gating remains OFF in Artistic mode
+//   4. FluxInt gating remains OFF in LegacyColor calibration
 //
-// Does NOT validate absolute THD against Jensen datasheets. Physical-mode
+// Does NOT validate absolute THD against Jensen datasheets. Artistic-mode
 // K1/K2 fitting is deferred to Sprint A5.
 //
 // Jensen JT-115K-E datasheet references:
@@ -47,18 +47,18 @@ static float dBuToAmplitude(float dBu)
 
 // ── Dual config factories ────────────────────────────────────────────────────
 
-static TransformerConfig makePhysFlat()
+static TransformerConfig makeArtisticFlat()
 {
     auto cfg = TransformerConfig::Jensen_JT115KE();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     cfg.fluxIntegratorEnabled = false;
     return cfg;
 }
 
-static TransformerConfig makePhysFlux()
+static TransformerConfig makeArtisticFlux()
 {
     auto cfg = TransformerConfig::Jensen_JT115KE();
-    cfg.calibrationMode = CalibrationMode::Physical;
+    cfg.calibrationMode = CalibrationMode::Artistic;
     cfg.fluxIntegratorEnabled = true;
     return cfg;
 }
@@ -141,18 +141,18 @@ static double measureTHDpct(TransformerModel<CPWLLeaf>& model,
 }
 
 // =============================================================================
-// TEST 1: FR(20 Hz) within A2 phase 2 Physical/Bertotti envelopes
+// TEST 1: FR(20 Hz) within A2 phase 2 Artistic/Bertotti envelopes
 // =============================================================================
 static void test_fr_20hz_jensen_window()
 {
-    std::printf("\n=== FluxInt Physical: FR(20 Hz) A2p2 Envelope ===\n");
+    std::printf("\n=== FluxInt Artistic: FR(20 Hz) A2p2 Envelope ===\n");
 
     const float amp = dBuToAmplitude(-20.0f);
 
     // Measure both configs, normalize to 1 kHz
     const std::pair<const char*, TransformerConfig> cases[] = {
-        {"PHYS_FLAT", makePhysFlat()},
-        {"PHYS_FLUX", makePhysFlux()}
+        {"ART_FLAT", makeArtisticFlat()},
+        {"ART_FLUX", makeArtisticFlux()}
     };
     const double minRel20[] = {-0.80, 1.00};
     const double maxRel20[] = {-0.50, 1.30};
@@ -178,7 +178,7 @@ static void test_fr_20hz_jensen_window()
 // =============================================================================
 static void test_flat_flux_fr_delta()
 {
-    std::printf("\n=== FluxInt Physical: FLAT→FLUX FR Delta ===\n");
+    std::printf("\n=== FluxInt Artistic: FLAT→FLUX FR Delta ===\n");
 
     const float amp = dBuToAmplitude(-20.0f);
     const float freqs[] = {20.0f, 1000.0f, 10000.0f};
@@ -187,8 +187,8 @@ static void test_flat_flux_fr_delta()
 
     for (int i = 0; i < 3; ++i) {
         TransformerModel<CPWLLeaf> mFlat, mFlux;
-        initModel(mFlat, makePhysFlat());
-        initModel(mFlux, makePhysFlux());
+        initModel(mFlat, makeArtisticFlat());
+        initModel(mFlux, makeArtisticFlux());
 
         double gFlat = measureGainDB(mFlat, freqs[i], amp);
         double gFlux = measureGainDB(mFlux, freqs[i], amp);
@@ -209,15 +209,15 @@ static void test_flat_flux_fr_delta()
 // =============================================================================
 static void test_flat_flux_thd_delta()
 {
-    std::printf("\n=== FluxInt Physical: FLAT→FLUX THD Delta ===\n");
+    std::printf("\n=== FluxInt Artistic: FLAT→FLUX THD Delta ===\n");
 
     const float amp = dBuToAmplitude(-20.0f);
 
     // 20 Hz
     {
         TransformerModel<CPWLLeaf> mFlat, mFlux;
-        initModel(mFlat, makePhysFlat());
-        initModel(mFlux, makePhysFlux());
+        initModel(mFlat, makeArtisticFlat());
+        initModel(mFlux, makeArtisticFlux());
 
         double thdFlat = measureTHDpct(mFlat, 20.0f, amp);
         double thdFlux = measureTHDpct(mFlux, 20.0f, amp);
@@ -231,8 +231,8 @@ static void test_flat_flux_thd_delta()
     // 1 kHz
     {
         TransformerModel<CPWLLeaf> mFlat, mFlux;
-        initModel(mFlat, makePhysFlat());
-        initModel(mFlux, makePhysFlux());
+        initModel(mFlat, makeArtisticFlat());
+        initModel(mFlux, makeArtisticFlux());
 
         double thdFlat = measureTHDpct(mFlat, 1000.0f, amp);
         double thdFlux = measureTHDpct(mFlux, 1000.0f, amp);
@@ -245,40 +245,40 @@ static void test_flat_flux_thd_delta()
 }
 
 // =============================================================================
-// TEST 4: FluxInt gating — must be OFF in Artistic mode
+// TEST 4: FluxInt gating — must be OFF in LegacyColor calibration
 // =============================================================================
 static void test_fluxint_gating()
 {
-    std::printf("\n=== FluxInt Gating: OFF in Artistic, ON in Physical ===\n");
+    std::printf("\n=== FluxInt Gating: OFF in LegacyColor, ON in Artistic ===\n");
 
     const float amp = dBuToAmplitude(-20.0f);
 
-    // Artistic mode: even with fluxIntegratorEnabled=true, FluxInt must be gated off
-    // by configureCircuit() because hScale_artistic would cause massive LF oversaturation.
-    auto cfgArtistic = TransformerConfig::Jensen_JT115KE();
-    cfgArtistic.calibrationMode = CalibrationMode::Artistic;
-    cfgArtistic.fluxIntegratorEnabled = true;  // Request ON, but should be gated off
+    // LegacyColor calibration: even with fluxIntegratorEnabled=true, FluxInt must
+    // be gated off because hScale=a*5 would cause massive LF oversaturation.
+    auto cfgLegacy = TransformerConfig::Jensen_JT115KE();
+    cfgLegacy.calibrationMode = CalibrationMode::LegacyColor;
+    cfgLegacy.fluxIntegratorEnabled = true;  // Request ON, but should be gated off
 
-    auto cfgArtisticOff = TransformerConfig::Jensen_JT115KE();
-    cfgArtisticOff.calibrationMode = CalibrationMode::Artistic;
-    cfgArtisticOff.fluxIntegratorEnabled = false;
+    auto cfgLegacyOff = TransformerConfig::Jensen_JT115KE();
+    cfgLegacyOff.calibrationMode = CalibrationMode::LegacyColor;
+    cfgLegacyOff.fluxIntegratorEnabled = false;
 
     TransformerModel<CPWLLeaf> mOn, mOff;
-    initModel(mOn, cfgArtistic);
-    initModel(mOff, cfgArtisticOff);
+    initModel(mOn, cfgLegacy);
+    initModel(mOff, cfgLegacyOff);
 
     // If gating works, both should produce identical FR at 20 Hz
     double gOn  = measureGainDB(mOn,  20.0f, amp);
     double gOff = measureGainDB(mOff, 20.0f, amp);
     double delta = std::abs(gOn - gOff);
 
-    std::printf("  Artistic FluxInt=true:  FR(20Hz)=%+.4f dB\n", gOn);
-    std::printf("  Artistic FluxInt=false: FR(20Hz)=%+.4f dB\n", gOff);
+    std::printf("  LegacyColor FluxInt=true:  FR(20Hz)=%+.4f dB\n", gOn);
+    std::printf("  LegacyColor FluxInt=false: FR(20Hz)=%+.4f dB\n", gOff);
     std::printf("  Delta: %.6f dB\n", delta);
 
     // Identical within numerical noise (< 0.001 dB)
     CHECK(delta < 0.001,
-          "Artistic mode: FluxInt gated OFF (delta < 0.001 dB regardless of flag)");
+          "LegacyColor calibration: FluxInt gated OFF (delta < 0.001 dB regardless of flag)");
 }
 
 // =============================================================================
@@ -287,8 +287,8 @@ static void test_fluxint_gating()
 int main()
 {
     std::printf("================================================================\n");
-    std::printf("  FluxIntegrator Physical Mode Regression Test\n");
-    std::printf("  Jensen JT-115K-E — FLAT vs FLUX in Physical calibration\n");
+    std::printf("  FluxIntegrator Artistic Mode Regression Test\n");
+    std::printf("  Jensen JT-115K-E — FLAT vs FLUX in Artistic calibration\n");
     std::printf("================================================================\n");
 
     test_fr_20hz_jensen_window();
@@ -296,5 +296,5 @@ int main()
     test_flat_flux_thd_delta();
     test_fluxint_gating();
 
-    return test::printSummary("FluxInt Physical Regression");
+    return test::printSummary("FluxInt Artistic Regression");
 }

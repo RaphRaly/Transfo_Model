@@ -2,7 +2,7 @@
 // Test: CPWL vs Langevin Parity for Jensen Transformers
 //
 // Compares TransformerModel<CPWLLeaf> (Realtime) against
-// TransformerModel<JilesAthertonLeaf<LangevinPade>> (Physical) to verify
+// TransformerModel<JilesAthertonLeaf<LangevinPade>> (Artistic) to verify
 // that the CPWL approximation produces comparable results:
 //
 //   - THD difference < 3 dB (factor of ~1.4 between modes)
@@ -86,10 +86,10 @@ void test_thd_parity_jt115ke()
     float rmsCPWL = computeRMS(cpwlOutput.data(), numSamples);
     cpwlModel.reset(); // Free before allocating next model
 
-    // ---- Langevin (Physical) path ----
+    // ---- Langevin (Artistic) path ----
     auto jaModel = std::make_unique<TransformerModel<JilesAthertonLeaf<LangevinPade>>>();
     jaModel->setConfig(config);
-    jaModel->setProcessingMode(ProcessingMode::Physical);
+    jaModel->setProcessingMode(ProcessingMode::Artistic);
     jaModel->setInputGain(0.0f);
     jaModel->setOutputGain(0.0f);
     jaModel->setMix(1.0f);
@@ -211,7 +211,7 @@ void test_rms_parity_multifreq()
         // Langevin (heap-allocate)
         auto jaModel = std::make_unique<TransformerModel<JilesAthertonLeaf<LangevinPade>>>();
         jaModel->setConfig(config);
-        jaModel->setProcessingMode(ProcessingMode::Physical);
+        jaModel->setProcessingMode(ProcessingMode::Artistic);
         jaModel->setInputGain(0.0f);
         jaModel->setOutputGain(0.0f);
         jaModel->setMix(1.0f);
@@ -294,7 +294,7 @@ void test_parity_jt11elcf()
     // Langevin (heap-allocate)
     auto jaModel = std::make_unique<TransformerModel<JilesAthertonLeaf<LangevinPade>>>();
     jaModel->setConfig(config);
-    jaModel->setProcessingMode(ProcessingMode::Physical);
+    jaModel->setProcessingMode(ProcessingMode::Artistic);
     jaModel->setInputGain(0.0f);
     jaModel->setOutputGain(0.0f);
     jaModel->setMix(1.0f);

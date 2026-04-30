@@ -77,9 +77,9 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         realtimeModel_[ch].setProcessingMode(ProcessingMode::Realtime);
         realtimeModel_[ch].prepareToPlay(sr, samplesPerBlock);
 
-        physicalModel_[ch].setProcessingMode(ProcessingMode::Physical);
-        physicalModel_[ch].setOversamplingFactor(4);
-        physicalModel_[ch].prepareToPlay(sr, samplesPerBlock);
+        artisticModel_[ch].setProcessingMode(ProcessingMode::ArtisticOS4x);
+        artisticModel_[ch].setOversamplingFactor(4);
+        artisticModel_[ch].prepareToPlay(sr, samplesPerBlock);
 
         doubleLegacyInputRealtime_[ch].setProcessingMode(ProcessingMode::Realtime);
         doubleLegacyInputRealtime_[ch].prepareToPlay(sr, samplesPerBlock);
@@ -87,13 +87,13 @@ void PluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         doubleLegacyOutputRealtime_[ch].setProcessingMode(ProcessingMode::Realtime);
         doubleLegacyOutputRealtime_[ch].prepareToPlay(sr, samplesPerBlock);
 
-        doubleLegacyInputPhysical_[ch].setProcessingMode(ProcessingMode::Physical);
-        doubleLegacyInputPhysical_[ch].setOversamplingFactor(4);
-        doubleLegacyInputPhysical_[ch].prepareToPlay(sr, samplesPerBlock);
+        doubleLegacyInputArtistic_[ch].setProcessingMode(ProcessingMode::ArtisticOS4x);
+        doubleLegacyInputArtistic_[ch].setOversamplingFactor(4);
+        doubleLegacyInputArtistic_[ch].prepareToPlay(sr, samplesPerBlock);
 
-        doubleLegacyOutputPhysical_[ch].setProcessingMode(ProcessingMode::Physical);
-        doubleLegacyOutputPhysical_[ch].setOversamplingFactor(4);
-        doubleLegacyOutputPhysical_[ch].prepareToPlay(sr, samplesPerBlock);
+        doubleLegacyOutputArtistic_[ch].setProcessingMode(ProcessingMode::ArtisticOS4x);
+        doubleLegacyOutputArtistic_[ch].setOversamplingFactor(4);
+        doubleLegacyOutputArtistic_[ch].prepareToPlay(sr, samplesPerBlock);
     }
 
     {
@@ -121,11 +121,11 @@ void PluginProcessor::releaseResources()
     for (int ch = 0; ch < kMaxChannels; ++ch)
     {
         realtimeModel_[ch].reset();
-        physicalModel_[ch].reset();
+        artisticModel_[ch].reset();
         doubleLegacyInputRealtime_[ch].reset();
         doubleLegacyOutputRealtime_[ch].reset();
-        doubleLegacyInputPhysical_[ch].reset();
-        doubleLegacyOutputPhysical_[ch].reset();
+        doubleLegacyInputArtistic_[ch].reset();
+        doubleLegacyOutputArtistic_[ch].reset();
         harrisonTransformer_[ch].reset();
         harrisonMicPre_[ch].reset();
     }
@@ -184,9 +184,9 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             const int prepareBlock = getBlockSize();
 
             if (circuitIndex == 1)
-                prepareLegacyPhysicalModels(sampleRate, prepareBlock, osFactor);
+                prepareLegacyArtisticModels(sampleRate, prepareBlock, osFactor);
             else
-                prepareDoubleLegacyPhysicalModels(sampleRate, prepareBlock, osFactor);
+                prepareDoubleLegacyArtisticModels(sampleRate, prepareBlock, osFactor);
 
             updateLatencyReport();
         }
@@ -218,9 +218,9 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             }
             else
             {
-                physicalModel_[ch].setInputGain(legacyInputDb);
-                physicalModel_[ch].setOutputGain(legacyOutputDb);
-                physicalModel_[ch].setMix(mix);
+                artisticModel_[ch].setInputGain(legacyInputDb);
+                artisticModel_[ch].setOutputGain(legacyOutputDb);
+                artisticModel_[ch].setMix(mix);
             }
         }
 
@@ -230,7 +230,7 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             if (isRealtime)
                 realtimeModel_[ch].processBlock(data, data, numSamples);
             else
-                physicalModel_[ch].processBlock(data, data, numSamples);
+                artisticModel_[ch].processBlock(data, data, numSamples);
         }
     }
     else if (circuitIndex == 0)
@@ -276,17 +276,17 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             }
             else
             {
-                doubleLegacyInputPhysical_[ch].setInputGain(0.0f);
-                doubleLegacyInputPhysical_[ch].setOutputGain(0.0f);
-                doubleLegacyInputPhysical_[ch].setMix(1.0f);
+                doubleLegacyInputArtistic_[ch].setInputGain(0.0f);
+                doubleLegacyInputArtistic_[ch].setOutputGain(0.0f);
+                doubleLegacyInputArtistic_[ch].setMix(1.0f);
 
-                doubleLegacyOutputPhysical_[ch].setInputGain(0.0f);
-                doubleLegacyOutputPhysical_[ch].setOutputGain(0.0f);
-                doubleLegacyOutputPhysical_[ch].setMix(1.0f);
+                doubleLegacyOutputArtistic_[ch].setInputGain(0.0f);
+                doubleLegacyOutputArtistic_[ch].setOutputGain(0.0f);
+                doubleLegacyOutputArtistic_[ch].setMix(1.0f);
 
-                doubleLegacyInputPhysical_[ch].processBlock(
+                doubleLegacyInputArtistic_[ch].processBlock(
                     data, doubleLegacyMidBuffer_.data(), numSamples);
-                doubleLegacyOutputPhysical_[ch].processBlock(
+                doubleLegacyOutputArtistic_[ch].processBlock(
                     doubleLegacyMidBuffer_.data(), data, numSamples);
             }
 
@@ -373,7 +373,7 @@ void PluginProcessor::applyPreset(int presetIndex)
         auto cfg = toleranceModel_.applyToConfig(baseCfg, channel);
 
         realtimeModel_[ch].setConfig(cfg);
-        physicalModel_[ch].setConfig(cfg);
+        artisticModel_[ch].setConfig(cfg);
     }
 }
 
@@ -412,33 +412,33 @@ void PluginProcessor::applyDoubleLegacyConfigs(int t2LoadIndex)
 
         doubleLegacyInputRealtime_[ch].setConfig(inputCfg);
         doubleLegacyOutputRealtime_[ch].setConfig(outputCfg);
-        doubleLegacyInputPhysical_[ch].setConfig(inputCfg);
-        doubleLegacyOutputPhysical_[ch].setConfig(outputCfg);
+        doubleLegacyInputArtistic_[ch].setConfig(inputCfg);
+        doubleLegacyOutputArtistic_[ch].setConfig(outputCfg);
     }
 
     lastT2LoadIndex_ = t2LoadIndex;
 }
 
-void PluginProcessor::prepareLegacyPhysicalModels(float sampleRate, int samplesPerBlock, int osFactor)
+void PluginProcessor::prepareLegacyArtisticModels(float sampleRate, int samplesPerBlock, int osFactor)
 {
     const int numCh = getTotalNumOutputChannels();
     for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
     {
-        physicalModel_[ch].setOversamplingFactor(osFactor);
-        physicalModel_[ch].prepareToPlay(sampleRate, samplesPerBlock);
+        artisticModel_[ch].setOversamplingFactor(osFactor);
+        artisticModel_[ch].prepareToPlay(sampleRate, samplesPerBlock);
     }
 }
 
-void PluginProcessor::prepareDoubleLegacyPhysicalModels(float sampleRate, int samplesPerBlock, int osFactor)
+void PluginProcessor::prepareDoubleLegacyArtisticModels(float sampleRate, int samplesPerBlock, int osFactor)
 {
     const int numCh = getTotalNumOutputChannels();
     for (int ch = 0; ch < numCh && ch < kMaxChannels; ++ch)
     {
-        doubleLegacyInputPhysical_[ch].setOversamplingFactor(osFactor);
-        doubleLegacyInputPhysical_[ch].prepareToPlay(sampleRate, samplesPerBlock);
+        doubleLegacyInputArtistic_[ch].setOversamplingFactor(osFactor);
+        doubleLegacyInputArtistic_[ch].prepareToPlay(sampleRate, samplesPerBlock);
 
-        doubleLegacyOutputPhysical_[ch].setOversamplingFactor(osFactor);
-        doubleLegacyOutputPhysical_[ch].prepareToPlay(sampleRate, samplesPerBlock);
+        doubleLegacyOutputArtistic_[ch].setOversamplingFactor(osFactor);
+        doubleLegacyOutputArtistic_[ch].prepareToPlay(sampleRate, samplesPerBlock);
     }
 }
 
@@ -457,7 +457,7 @@ void PluginProcessor::updateLatencyReport()
         return;
     }
 
-    // Physical path: round-trip halfband cascade. Double Legacy chains two
+    // Artistic path: round-trip halfband cascade. Double Legacy chains two
     // TransformerModel instances, each running its own OS, so the latency adds.
     const int perStage = (modeIndex == 2) ? 13 : 39;  // OS2x or OS4x
     const int stages   = (circuitIndex == 0) ? 2 : 1;

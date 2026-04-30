@@ -1,7 +1,7 @@
 #pragma once
 
 // =============================================================================
-// OversamplingEngine — Oversampling for Physical mode (OS 4x).
+// OversamplingEngine — Oversampling for Artistic mode (OS 4x).
 //
 // [v3.2] Corrected: Cascaded 2-stage halfband architecture.
 //
@@ -122,7 +122,7 @@ class OversamplingEngine
 public:
     OversamplingEngine() = default;
 
-    void prepare(float sampleRate, int maxBlockSize, int factor = kOversamplingPhysical)
+    void prepare(float sampleRate, int maxBlockSize, int factor = kOversamplingArtistic)
     {
         factor_ = factor;
         originalRate_ = sampleRate;
@@ -184,9 +184,9 @@ public:
     }
 
 private:
-    int   factor_ = kOversamplingPhysical;
+    int   factor_ = kOversamplingArtistic;
     float originalRate_ = kDefaultSampleRate;
-    float oversampledRate_ = kDefaultSampleRate * kOversamplingPhysical;
+    float oversampledRate_ = kDefaultSampleRate * kOversamplingArtistic;
 
     // Two cascade stages: [0]=first, [1]=second
     HalfbandFilter upFilters_[2];

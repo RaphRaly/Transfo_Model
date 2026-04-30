@@ -2,8 +2,8 @@
 // validate_jensen.cpp — Sprint 1 baseline measurement pipeline.
 //
 // Sweeps the Jensen JT-115K-E and JT-11ELCF reference points required by
-// docs/VALIDATION_REPORT.md, in BOTH calibration modes (Artistic/Realtime and
-// Physical), and writes results to data/measurements/<file>_<date>.csv.
+// docs/VALIDATION_REPORT.md, in BOTH calibration modes (LegacyColor/Realtime
+// and Artistic), and writes results to data/measurements/<file>_<date>.csv.
 //
 // Outputs:
 //   data/measurements/thd_JT115KE_<YYYY-MM-DD>.csv
@@ -46,10 +46,10 @@ namespace {
 constexpr int kBlockSize          = 512;
 constexpr int kRealtimeWarmup     = 8192;
 constexpr int kRealtimeAnalysis   = 65536;
-constexpr int kPhysicalWarmup     = 131072;
-constexpr int kPhysicalAnalysis   = 65536;
+constexpr int kArtisticWarmup     = 131072;
+constexpr int kArtisticAnalysis   = 65536;
 constexpr int kFRWarmupRealtime   = 8192;
-constexpr int kFRWarmupPhysical   = 65536;
+constexpr int kFRWarmupArtistic   = 65536;
 constexpr int kFRMinAnalysis      = 16384;
 constexpr float kSampleRate       = 44100.0f;
 
@@ -64,7 +64,7 @@ float dBuToAmplitudeDigital(float dBu) {
     return std::pow(10.0f, dBu / 20.0f) * 0.1f;
 }
 
-// ── dBu → physical V_peak at primary, JT-115K-E TC1 ────────────────────────
+// ── dBu → Artistic V_peak at primary, JT-115K-E TC1 ────────────────────────
 // Test Circuit 1: Rs = 150 Ω, Z_in ≈ Rdc + Rload_reflected.
 // Mirrors Tests/test_thd_validation.cpp::dBuToAmplitude_TC1.
 float dBuToAmplitude_TC1(float dBu) {
@@ -79,7 +79,7 @@ float dBuToAmplitude_TC1(float dBu) {
     return Vrms * kSqrt2 * divider;
 }
 
-// ── dBu → physical V_peak at primary, JT-11ELCF (Rs = 0) ───────────────────
+// ── dBu → Artistic V_peak at primary, JT-11ELCF (Rs = 0) ───────────────────
 float dBuToAmplitude_ELCF(float dBu) {
     constexpr float kVrms0dBu = 0.7746f;
     constexpr float kSqrt2    = 1.41421356f;
@@ -88,19 +88,19 @@ float dBuToAmplitude_ELCF(float dBu) {
 }
 
 enum class Preset { JT115KE, JT11ELCF };
-enum class Mode   { Realtime, Physical };
+enum class Mode   { Realtime, Artistic };
 
 const char* presetTag(Preset p)  { return p == Preset::JT115KE ? "JT115KE" : "JT11ELCF"; }
 const char* presetName(Preset p) { return p == Preset::JT115KE ? "Jensen JT-115K-E" : "Jensen JT-11ELCF"; }
-const char* modeTag(Mode m)      { return m == Mode::Realtime ? "Realtime" : "Physical"; }
+const char* modeTag(Mode m)      { return m == Mode::Realtime ? "Realtime" : "Artistic"; }
 
 TransformerConfig makeConfig(Preset p, Mode m) {
     TransformerConfig cfg = (p == Preset::JT115KE)
         ? TransformerConfig::Jensen_JT115KE()
         : TransformerConfig::Jensen_JT11ELCF();
-    cfg.calibrationMode = (m == Mode::Physical)
-        ? CalibrationMode::Physical
-        : CalibrationMode::Artistic;
+    cfg.calibrationMode = (m == Mode::Artistic)
+        ? CalibrationMode::Artistic
+        : CalibrationMode::LegacyColor;
     return cfg;
 }
 
@@ -122,7 +122,7 @@ PointResult runPoint(Preset p, Mode m, float freq, float dBu) {
     TransformerModel<CPWLLeaf> model;
     model.setConfig(makeConfig(p, m));
     model.setProcessingMode(m == Mode::Realtime ? ProcessingMode::Realtime
-                                                 : ProcessingMode::Physical);
+                                                 : ProcessingMode::Artistic);
     model.setInputGain(0.0f);
     model.setOutputGain(0.0f);
     model.setMix(1.0f);
@@ -130,8 +130,8 @@ PointResult runPoint(Preset p, Mode m, float freq, float dBu) {
     model.reset();
     model.prepareToPlay(kSampleRate, kBlockSize);
 
-    const int warmup   = (m == Mode::Realtime) ? kRealtimeWarmup   : kPhysicalWarmup;
-    const int analysis = (m == Mode::Realtime) ? kRealtimeAnalysis : kPhysicalAnalysis;
+    const int warmup   = (m == Mode::Realtime) ? kRealtimeWarmup   : kArtisticWarmup;
+    const int analysis = (m == Mode::Realtime) ? kRealtimeAnalysis : kArtisticAnalysis;
     const int total    = warmup + analysis;
 
     const float amplitude = dBuToAmplitude(p, m, dBu);
@@ -172,13 +172,13 @@ std::vector<FRPoint> runFRSweep(Preset p, Mode m, double fLo, double fHi, int nP
     TransformerModel<CPWLLeaf> model;
     model.setConfig(makeConfig(p, m));
     model.setProcessingMode(m == Mode::Realtime ? ProcessingMode::Realtime
-                                                 : ProcessingMode::Physical);
+                                                 : ProcessingMode::Artistic);
     model.setInputGain(0.0f);
     model.setOutputGain(0.0f);
     model.setMix(1.0f);
     model.prepareToPlay(kSampleRate, kBlockSize);
 
-    const int warmup = (m == Mode::Realtime) ? kFRWarmupRealtime : kFRWarmupPhysical;
+    const int warmup = (m == Mode::Realtime) ? kFRWarmupRealtime : kFRWarmupArtistic;
     const float amplitude = dBuToAmplitude(p, m, kFRLevel_dBu);
 
     auto measureAt = [&](double freq) -> double {
@@ -322,7 +322,7 @@ void writeFRCsv(const std::filesystem::path& path, Preset p,
 std::vector<THDPoint> jt115ke_points(bool smoke) {
     std::vector<THDPoint> base;
     // 5 datasheet points × 2 modes = 10 rows
-    for (Mode m : {Mode::Realtime, Mode::Physical}) {
+    for (Mode m : {Mode::Realtime, Mode::Artistic}) {
         base.push_back({m, 20.0f,    -20.0f});
         base.push_back({m, 20.0f,    -2.5f });
         base.push_back({m, 20.0f,    +1.2f });
@@ -330,13 +330,13 @@ std::vector<THDPoint> jt115ke_points(bool smoke) {
         base.push_back({m, 1000.0f,  +4.0f });
     }
     if (!smoke) return base;
-    // Smoke: one Realtime + one Physical = 2 rows
+    // Smoke: one Realtime + one Artistic = 2 rows
     return { base[0], base[5] };
 }
 
 std::vector<THDPoint> jt11elcf_points(bool smoke) {
     std::vector<THDPoint> base;
-    for (Mode m : {Mode::Realtime, Mode::Physical}) {
+    for (Mode m : {Mode::Realtime, Mode::Artistic}) {
         base.push_back({m, 1000.0f, +4.0f });
         base.push_back({m, 50.0f,   +4.0f });
         base.push_back({m, 20.0f,   +4.0f });
@@ -401,7 +401,7 @@ int main(int argc, char* argv[]) {
         std::filesystem::path p = std::filesystem::path(outDir)
             / ("fr_JT115KE_" + dateStr + ".csv");
         std::vector<Mode> modes = smoke ? std::vector<Mode>{Mode::Realtime}
-                                         : std::vector<Mode>{Mode::Realtime, Mode::Physical};
+                                         : std::vector<Mode>{Mode::Realtime, Mode::Artistic};
         writeFRCsv(p, Preset::JT115KE, modes, fLo, fHi, nPts);
         std::printf("Wrote %s\n", p.string().c_str());
     }
@@ -410,7 +410,7 @@ int main(int argc, char* argv[]) {
         std::filesystem::path p = std::filesystem::path(outDir)
             / ("fr_JT11ELCF_" + dateStr + ".csv");
         std::vector<Mode> modes = smoke ? std::vector<Mode>{Mode::Realtime}
-                                         : std::vector<Mode>{Mode::Realtime, Mode::Physical};
+                                         : std::vector<Mode>{Mode::Realtime, Mode::Artistic};
         writeFRCsv(p, Preset::JT11ELCF, modes, fLo, fHi, nPts);
         std::printf("Wrote %s\n", p.string().c_str());
     }

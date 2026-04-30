@@ -117,10 +117,10 @@ static void testConfigRestore()
     }
 }
 
-// ── Test: Physical mode determinism ─────────────────────────────────────────
-static void testPhysicalDeterminism()
+// ── Test: Artistic mode determinism ─────────────────────────────────────────
+static void testArtisticDeterminism()
 {
-    TEST_SECTION("Physical Mode Determinism");
+    TEST_SECTION("Artistic Mode Determinism");
 
     const float sr = 44100.0f;
     const int blockSize = 256;
@@ -133,12 +133,12 @@ static void testPhysicalDeterminism()
         TransformerModel<JilesAthertonLeaf<LangevinPade>> m1, m2;
 
         m1.setConfig(config);
-        m1.setProcessingMode(ProcessingMode::Physical);
+        m1.setProcessingMode(ProcessingMode::Artistic);
 
         m1.prepareToPlay(sr, blockSize);
 
         m2.setConfig(config);
-        m2.setProcessingMode(ProcessingMode::Physical);
+        m2.setProcessingMode(ProcessingMode::Artistic);
 
         m2.prepareToPlay(sr, blockSize);
 
@@ -153,13 +153,13 @@ static void testPhysicalDeterminism()
             if (d > maxDiff) maxDiff = d;
         }
         TEST_ASSERT(maxDiff < 1e-5f,
-            (std::string(name) + " Physical: non-deterministic").c_str());
+            (std::string(name) + " Artistic: non-deterministic").c_str());
 
         bool hasNaN = false;
         for (size_t i = 0; i < out1.size(); ++i)
             if (!std::isfinite(out1[i])) hasNaN = true;
         TEST_ASSERT(!hasNaN,
-            (std::string(name) + " Physical: NaN").c_str());
+            (std::string(name) + " Artistic: NaN").c_str());
 
         std::printf("  [%d] %-24s OK (maxDiff=%.2e)\n", p, name, maxDiff);
     }
@@ -277,7 +277,7 @@ int main()
     std::printf("=====================================\n");
 
     testConfigRestore();
-    testPhysicalDeterminism();
+    testArtisticDeterminism();
     testPresetSwitching();
     testBoundedAmplitude();
     testSampleRateChange();

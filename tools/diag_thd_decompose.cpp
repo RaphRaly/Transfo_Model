@@ -47,15 +47,15 @@ namespace {
 
 constexpr int   kBlockSize        = 512;
 constexpr int   kRealtimeWarmup   = 8192;
-constexpr int   kPhysicalWarmup   = 131072;
+constexpr int   kArtisticWarmup   = 131072;
 constexpr int   kAnalysis         = 65536;
 constexpr float kSampleRate       = 44100.0f;
 
 enum class Preset { JT115KE, JT11ELCF };
-enum class Mode   { Realtime, Physical };
+enum class Mode   { Realtime, Artistic };
 
 const char* presetTag(Preset p)  { return p == Preset::JT115KE ? "JT115KE" : "JT11ELCF"; }
-const char* modeTag(Mode m)      { return m == Mode::Realtime ? "Realtime" : "Physical"; }
+const char* modeTag(Mode m)      { return m == Mode::Realtime ? "Realtime" : "Artistic"; }
 
 float dBuToAmplitudeDigital(float dBu) {
     return std::pow(10.0f, dBu / 20.0f) * 0.1f;
@@ -84,9 +84,9 @@ TransformerConfig makeConfig(Preset p, Mode m) {
     TransformerConfig cfg = (p == Preset::JT115KE)
         ? TransformerConfig::Jensen_JT115KE()
         : TransformerConfig::Jensen_JT11ELCF();
-    cfg.calibrationMode = (m == Mode::Physical)
-        ? CalibrationMode::Physical
-        : CalibrationMode::Artistic;
+    cfg.calibrationMode = (m == Mode::Artistic)
+        ? CalibrationMode::Artistic
+        : CalibrationMode::LegacyColor;
     return cfg;
 }
 
@@ -115,7 +115,7 @@ CascadeResult runCascade(Preset p, Mode m, float freq, float dBu, const Variant&
     TransformerModel<CPWLLeaf> model;
     model.setConfig(cfg);
     model.setProcessingMode(m == Mode::Realtime ? ProcessingMode::Realtime
-                                                 : ProcessingMode::Physical);
+                                                 : ProcessingMode::Artistic);
     if (v.osFactor > 0) model.setOversamplingFactor(v.osFactor);
     model.setInputGain(0.0f);
     model.setOutputGain(0.0f);
@@ -123,7 +123,7 @@ CascadeResult runCascade(Preset p, Mode m, float freq, float dBu, const Variant&
     model.prepareToPlay(kSampleRate, kBlockSize);
     model.reset();
 
-    const int warmup   = (m == Mode::Realtime) ? kRealtimeWarmup : kPhysicalWarmup;
+    const int warmup   = (m == Mode::Realtime) ? kRealtimeWarmup : kArtisticWarmup;
     const int analysis = kAnalysis;
     const float amp = dBuToAmplitude(p, m, dBu);
     std::vector<float> in(kBlockSize), out(kBlockSize);
@@ -165,7 +165,7 @@ CascadeResult runCascade(Preset p, Mode m, float freq, float dBu, const Variant&
 // ── Compute hScale that the cascade would use for this (preset, mode) ─────
 // Mirrors TransformerModel::configureCircuit().
 struct CascadeCalibration {
-    double hScale;     // [A/m per V_peak] (after fluxInt if Physical)
+    double hScale;     // [A/m per V_peak] (after fluxInt if Artistic)
     double f_ref;
     bool   fluxIntegrate;
 };
@@ -173,9 +173,9 @@ struct CascadeCalibration {
 CascadeCalibration calibrationFor(const TransformerConfig& cfg, Mode m) {
     CascadeCalibration c{};
     c.f_ref = static_cast<double>(cfg.calibrationFreqHz);
-    c.fluxIntegrate = (m == Mode::Physical);
+    c.fluxIntegrate = (m == Mode::Artistic);
 
-    if (m == Mode::Physical) {
+    if (m == Mode::Artistic) {
         const float N_pri = (cfg.windings.N_primary > 0)
             ? static_cast<float>(cfg.windings.N_primary)
             : cfg.estimateNprimary();
@@ -246,20 +246,20 @@ const std::vector<TestPoint> kPoints = {
     { Preset::JT115KE, Mode::Realtime,    20.0f,  +1.2f },
     { Preset::JT115KE, Mode::Realtime,  1000.0f, -20.0f },
     { Preset::JT115KE, Mode::Realtime,  1000.0f,  +4.0f },
-    { Preset::JT115KE, Mode::Physical,    20.0f, -20.0f },
-    { Preset::JT115KE, Mode::Physical,    20.0f,  -2.5f },
-    { Preset::JT115KE, Mode::Physical,    20.0f,  +1.2f },
-    { Preset::JT115KE, Mode::Physical,  1000.0f, -20.0f },
-    { Preset::JT115KE, Mode::Physical,  1000.0f,  +4.0f },
+    { Preset::JT115KE, Mode::Artistic,    20.0f, -20.0f },
+    { Preset::JT115KE, Mode::Artistic,    20.0f,  -2.5f },
+    { Preset::JT115KE, Mode::Artistic,    20.0f,  +1.2f },
+    { Preset::JT115KE, Mode::Artistic,  1000.0f, -20.0f },
+    { Preset::JT115KE, Mode::Artistic,  1000.0f,  +4.0f },
     // JT-11ELCF
     { Preset::JT11ELCF, Mode::Realtime, 1000.0f,  +4.0f },
     { Preset::JT11ELCF, Mode::Realtime,   50.0f,  +4.0f },
     { Preset::JT11ELCF, Mode::Realtime,   20.0f,  +4.0f },
     { Preset::JT11ELCF, Mode::Realtime,   20.0f, +24.0f },
-    { Preset::JT11ELCF, Mode::Physical, 1000.0f,  +4.0f },
-    { Preset::JT11ELCF, Mode::Physical,   50.0f,  +4.0f },
-    { Preset::JT11ELCF, Mode::Physical,   20.0f,  +4.0f },
-    { Preset::JT11ELCF, Mode::Physical,   20.0f, +24.0f },
+    { Preset::JT11ELCF, Mode::Artistic, 1000.0f,  +4.0f },
+    { Preset::JT11ELCF, Mode::Artistic,   50.0f,  +4.0f },
+    { Preset::JT11ELCF, Mode::Artistic,   20.0f,  +4.0f },
+    { Preset::JT11ELCF, Mode::Artistic,   20.0f, +24.0f },
 };
 
 } // namespace
@@ -277,7 +277,7 @@ int main(int argc, char** argv) {
     Variant base       { "base",      false, false, false, false, 0 };
     Variant noBer      { "noBer",     true,  true,  false, false, 0 };
     Variant noDynLm    { "noDynLm",   false, false, true,  false, 0 };
-    Variant os1        { "os1",       false, false, false, false, 1 };  // No OS in Physical
+    Variant os1        { "os1",       false, false, false, false, 1 };  // No OS in Artistic
     Variant noAll      { "noAll",     true,  true,  true,  true,  1 };  // Everything off + no OS
 
     std::ofstream csv;

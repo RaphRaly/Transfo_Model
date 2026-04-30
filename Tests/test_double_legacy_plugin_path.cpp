@@ -6,7 +6,7 @@
 //
 // Mirrors the plugin branch closely:
 //   - fixed transformer pair
-//   - realtime (CPWL) and physical (J-A) modes
+//   - realtime (CPWL) and Artistic (J-A) modes
 //   - input/output gain
 //   - dry/wet mix
 //   - live T2 load switching
@@ -79,7 +79,7 @@ struct DoubleLegacyChain
         output.setOutputGain(0.0f);
         output.setMix(1.0f);
 
-        if (mode == ProcessingMode::Physical)
+        if (mode == ProcessingMode::Artistic)
         {
             input.setOversamplingFactor(4);
             output.setOversamplingFactor(4);
@@ -257,16 +257,16 @@ void testRealtimeStress()
     CHECK(stats.maxJump < kJumpLimit, "Realtime Double Legacy has no absurd sample jump");
 }
 
-void testPhysicalStress()
+void testArtisticStress()
 {
-    std::printf("\n=== Double Legacy: Physical Stress ===\n");
-    auto stats = runStressScenario<JilesAthertonLeaf<LangevinPade>>(ProcessingMode::Physical);
+    std::printf("\n=== Double Legacy: Artistic Stress ===\n");
+    auto stats = runStressScenario<JilesAthertonLeaf<LangevinPade>>(ProcessingMode::Artistic);
     std::printf("  Peak=%.4f  MaxJump=%.4f  Finite=%s\n",
                 stats.peak, stats.maxJump, stats.allFinite ? "yes" : "no");
 
-    CHECK(stats.allFinite, "Physical Double Legacy stays finite");
-    CHECK(stats.peak < kPeakLimit, "Physical Double Legacy peak stays bounded");
-    CHECK(stats.maxJump < kJumpLimit, "Physical Double Legacy has no absurd sample jump");
+    CHECK(stats.allFinite, "Artistic Double Legacy stays finite");
+    CHECK(stats.peak < kPeakLimit, "Artistic Double Legacy peak stays bounded");
+    CHECK(stats.maxJump < kJumpLimit, "Artistic Double Legacy has no absurd sample jump");
 }
 
 void testRealtimeLoadSensitivity()
@@ -275,10 +275,10 @@ void testRealtimeLoadSensitivity()
     testLoadSensitivity<CPWLLeaf>(ProcessingMode::Realtime, "Realtime");
 }
 
-void testPhysicalLoadSensitivity()
+void testArtisticLoadSensitivity()
 {
-    std::printf("\n=== Double Legacy: Physical T2 Load Wire-Up ===\n");
-    testLoadSensitivity<JilesAthertonLeaf<LangevinPade>>(ProcessingMode::Physical, "Physical");
+    std::printf("\n=== Double Legacy: Artistic T2 Load Wire-Up ===\n");
+    testLoadSensitivity<JilesAthertonLeaf<LangevinPade>>(ProcessingMode::Artistic, "Artistic");
 }
 
 } // namespace
@@ -291,9 +291,9 @@ int main()
     std::printf("=========================================================\n");
 
     testRealtimeStress();
-    testPhysicalStress();
+    testArtisticStress();
     testRealtimeLoadSensitivity();
-    testPhysicalLoadSensitivity();
+    testArtisticLoadSensitivity();
 
     return test::printSummary("Double Legacy Plugin Path");
 }

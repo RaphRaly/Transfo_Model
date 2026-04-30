@@ -279,7 +279,7 @@ PluginEditor::PluginEditor(PluginProcessor &p)
   modeLabel_.setFont(juce::Font(juce::FontOptions(10.0f).withStyle("Bold")));
   modeLabel_.setColour(juce::Label::textColourId, SSL::textSecondary);
   addAndMakeVisible(modeLabel_);
-  modeCombo_.addItemList({"Realtime (CPWL+ADAA)", "Physical (J-A+OS4x)", "Physical (J-A+OS2x)"}, 1);
+  modeCombo_.addItemList({"Realtime (CPWL+ADAA)", "Artistic (J-A+OS4x)", "Artistic (J-A+OS2x)"}, 1);
   addAndMakeVisible(modeCombo_);
   modeAttach_ =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(

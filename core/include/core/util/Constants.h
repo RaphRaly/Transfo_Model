@@ -1,7 +1,7 @@
 #pragma once
 
 // =============================================================================
-// Constants — Physical and numerical constants for the transformer model.
+// Constants — SI and numerical constants for the transformer model.
 //
 // All physical constants in SI units.
 // Numerical epsilons calibrated for single-precision WDF hot path
@@ -13,7 +13,7 @@
 
 namespace transfo {
 
-// ─── Physical Constants ─────────────────────────────────────────────────────
+// ─── SI Constants ───────────────────────────────────────────────────────────
 
 constexpr double kMu0          = 1.2566370614359173e-6;  // Permeability of free space (H/m)
 constexpr double kPi           = 3.14159265358979323846;
@@ -33,7 +33,9 @@ constexpr int    kDefaultAdaptationInterval = 16; // Z adaptation interval (samp
 // ─── Audio Constants ────────────────────────────────────────────────────────
 
 constexpr float  kDefaultSampleRate = 44100.0f;
-constexpr int    kOversamplingPhysical = 4;     // OS factor for Physical mode
+constexpr int    kOversamplingArtistic = 4;     // Default OS factor for Artistic mode
+[[deprecated("Use kOversamplingArtistic")]]
+constexpr int    kOversamplingPhysical = kOversamplingArtistic; // deprecated compatibility alias
 constexpr int    kMaxBlockSize  = 2048;
 
 // ─── dBu / dBv Conversion ───────────────────────────────────────────────────
