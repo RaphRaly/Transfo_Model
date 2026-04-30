@@ -220,10 +220,21 @@ public:
 
     // ─── Field-separated Bertotti correction (legacy post-hoc path) ────────
     //
-    // Alternative to the NR-coupled approach: run J-A with H_applied alone,
-    // then compute H_dyn from dB_static/dt and apply a B correction. Retained
-    // for tests / identification contexts that do not iterate M through the
-    // dynamic residual.
+    // ⚠️ DEPRECATED (Sprint A2 Voie C, 2026-04-30) — superseded by the
+    // pre-J-A H_eff path in TransformerModel::processSample which uses
+    // computeHfromDBdt + Baghel-Kulkarni implicit decoupling. Retained for:
+    //   1. Tests/test_bertotti_field_separation.cpp (validates the
+    //      computeFieldSeparated API in isolation).
+    //   2. JilesAthertonLeaf::scatter legacy magnetic-domain path (K_geo<=0
+    //      branch) — dead in cascade-only architecture but still compiles.
+    //   3. Future identification pipelines that may still want the post-hoc
+    //      correction shape.
+    //
+    // For new code, prefer:
+    //   const double dBdt_raw = dyn.computeDBdt(B_pred);  // backward-diff
+    //   const double G  = dyn.getK1() * fs * mu0 * chi;
+    //   const double dBdt = dBdt_raw * (1 + chi) / (1 + G);
+    //   const double Hdyn = dyn.computeHfromDBdt(dBdt);   // signed H field
     //
     // Reference: Baghel & Kulkarni IEEE Trans. Magn. 2014 (field separation);
     //            Mousavi & Engdahl IET CEM 2014 (local linearization).
@@ -233,6 +244,9 @@ public:
         double B_correction;    // Additive correction to B_static
     };
 
+    [[deprecated("A2 Voie C: prefer computeHfromDBdt + Baghel-Kulkarni "
+                 "decoupling; see TransformerModel::processSample for the "
+                 "pattern. Retained for test/identification compatibility.")]]
     FieldSepResult computeFieldSeparated(double B_static, double H_applied,
                                           double cascadeEddyFactor = 1.0) const
     {

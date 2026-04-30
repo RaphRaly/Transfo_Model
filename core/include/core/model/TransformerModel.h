@@ -113,9 +113,59 @@ public:
       } else {
         const float H_applied = x_flux * hScale_;
 
-        // 1. J-A solves with the FULL applied field
-        const double M = directHyst_.solveImplicitStep(
-            static_cast<double>(H_applied));
+        // Diagnostic: track peak |H_applied| (cleared by getPeakHApplied()).
+        if (std::abs(H_applied) > peakHApplied_) peakHApplied_ = std::abs(H_applied);
+
+        // ── A2 (Voie C) — Bertotti champ dynamique opposé pré-J-A ─────────
+        // Pre-compute H_dyn(dB/dt) with predictor + Baghel-Kulkarni implicit
+        // decoupling, then solve J-A with H_eff = H_applied - H_dyn. The
+        // static J-A "sees" the field-separated effective field, so M[n]
+        // already reflects dynamic losses by construction. The macroscopic
+        // flux density is then B = μ₀·(H_applied + M) — physically consistent,
+        // no post-hoc B correction.
+        //
+        // Decoupling factor (1+χ)/(1+G) with G = K1·fs·μ₀·χ linearises the
+        // M-feedback loop that fully-coupled Newton would otherwise iterate
+        // on. Without it, the predictor-laggé H_dyn ringeur en transients
+        // raides. Reference: Baghel & Kulkarni IEEE TMag 50(2) 2014.
+        //
+        // kCascadeEddyFactor (legacy 0.15) attenuates H_dyn — calibration
+        // shim inherited from cascade post-hoc; à re-fitter en Sprint A5
+        // contre datasheet THD/FR.
+        //
+        // ⚠️ La garde != Physical reste active en A2 v1 (compatibilité tests
+        //   channel_strip / thd_validation / freq_response_validation pré-
+        //   calibrés sur "Bertotti OFF en Physical"). Phase A2 v2 retirera
+        //   la garde et re-calibrera ces tests.
+        double H_eff = static_cast<double>(H_applied);
+        if (directDynLosses_.isEnabled()
+            && config_.calibrationMode != CalibrationMode::Physical) {
+          const double M_committed = directHyst_.getMagnetization();
+          const double chi_prev = std::max(0.0,
+              directHyst_.getInstantaneousSusceptibility());
+          const double B_pred = static_cast<double>(kMu0f)
+              * (static_cast<double>(H_applied) + M_committed);
+          const double dBdt_raw = directDynLosses_.computeDBdt(B_pred);
+          const double G = directDynLosses_.getK1()
+              * directDynLosses_.getSampleRate()
+              * static_cast<double>(kMu0f) * chi_prev;
+          const double dBdt_dec = dBdt_raw * (1.0 + chi_prev) / (1.0 + G);
+          double H_dyn = directDynLosses_.computeHfromDBdt(dBdt_dec)
+              * static_cast<double>(kCascadeEddyFactor);
+          // Safety clamp |H_dyn| ≤ 0.8·|H_applied| (no sign inversion)
+          constexpr double kSafetyFactor = 0.8;
+          const double H_abs = std::abs(static_cast<double>(H_applied));
+          if (H_abs > 1e-10) {
+            const double H_limit = kSafetyFactor * H_abs;
+            if (std::abs(H_dyn) > H_limit) {
+              H_dyn = std::copysign(H_limit, H_dyn);
+            }
+          }
+          H_eff = static_cast<double>(H_applied) - H_dyn;
+        }
+
+        // 1. J-A solves with the field-separated effective field
+        const double M = directHyst_.solveImplicitStep(H_eff);
         directHyst_.commitState();
 
         // P1.2: Track peak saturation
@@ -137,20 +187,10 @@ public:
           hpAlpha_ = computeHpAlphaFromLm(lmSmoothed_);
         }
 
-        // 2. B_static from J-A output
-        const float B_static = kMu0f * (H_applied + static_cast<float>(M));
+        // 2. Macroscopic flux density (B = μ₀·(H_applied + M))
+        const float B = kMu0f * (H_applied + static_cast<float>(M));
 
-        // 3. Field-separated Bertotti correction
-        float B = B_static;
-        if (directDynLosses_.isEnabled()
-            && config_.calibrationMode != CalibrationMode::Physical) {
-          const auto fsep = directDynLosses_.computeFieldSeparated(
-              static_cast<double>(B_static),
-              static_cast<double>(H_applied),
-              static_cast<double>(kCascadeEddyFactor));
-          B += static_cast<float>(fsep.B_correction);
-        }
-
+        // 3. Commit DynamicLosses Ḃ state with the new B
         directDynLosses_.commitState(static_cast<double>(B));
 
         // Problem #4: flux integrator de-emphasis
@@ -303,6 +343,14 @@ public:
   float getBNorm() const { return bNorm_; }
   float getHpAlpha() const { return hpAlpha_; }
 
+  // Peak |H_applied| seen since the last call (consume-and-reset). Used by
+  // tools/diag_thd_decompose to verify isolated-J-A drive matches cascade.
+  float getPeakHApplied() {
+    float v = peakHApplied_;
+    peakHApplied_ = 0.0f;
+    return v;
+  }
+
   void reset() {
     oversampler_.reset();
     bhQueue_.reset();
@@ -315,6 +363,7 @@ public:
     lcFilter_.reset();
     bertottiUpdateCounter_ = 0;  // V2.4
     peakSaturation_ = 0.0f;      // P1.2
+    peakHApplied_ = 0.0f;        // Sprint 2 diag
   }
 
 private:
@@ -361,6 +410,7 @@ private:
 
   // ─── P1.2: Peak saturation tracking ──────────────────────────────────
   float peakSaturation_ = 0.0f;
+  float peakHApplied_ = 0.0f;     // Sprint 2 diag: peak |H_applied| at J-A.
 
   // Legacy LP filter (kept for fallback when LC is disabled)
   float lpAlpha_ = 0.0f;   // LP coefficient (0.0 = bypass)

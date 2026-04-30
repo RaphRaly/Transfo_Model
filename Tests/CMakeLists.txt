@@ -154,7 +154,20 @@ add_executable(test_bertotti_field_separation
 )
 target_include_directories(test_bertotti_field_separation PRIVATE ${CORE_INCLUDE})
 
+# ── A2 Voie C : Bertotti champ dynamique opposé pré-J-A ──────────────────
+add_executable(test_bertotti_zero_regression
+    test_bertotti_zero_regression.cpp
+)
+target_include_directories(test_bertotti_zero_regression PRIVATE ${CORE_INCLUDE})
+
+add_executable(test_bertotti_excess_loss_scaling
+    test_bertotti_excess_loss_scaling.cpp
+)
+target_include_directories(test_bertotti_excess_loss_scaling PRIVATE ${CORE_INCLUDE})
+
 add_test(NAME bertotti_field_separation     COMMAND test_bertotti_field_separation)
+add_test(NAME bertotti_zero_regression      COMMAND test_bertotti_zero_regression)
+add_test(NAME bertotti_excess_loss_scaling  COMMAND test_bertotti_excess_loss_scaling)
 add_test(NAME jensen_passivity              COMMAND test_jensen_passivity)
 add_test(NAME jensen_convergence            COMMAND test_jensen_convergence)
 add_test(NAME jensen_harmonics              COMMAND test_jensen_harmonics)

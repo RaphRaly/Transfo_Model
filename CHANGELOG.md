@@ -7,8 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Sprint A2 (Voie C) — Bertotti as opposing dynamic field, pre-J-A.** The
+  cascade `processSample` now computes `H_dyn(dB/dt)` via predictor + Baghel-
+  Kulkarni implicit decoupling `dBdt = dBdt_raw·(1+χ)/(1+G)` (where
+  `G = K1·fs·μ₀·χ`), then solves J-A with `H_eff = H_applied − H_dyn`.
+  The macroscopic flux density is `B = μ₀·(H_applied + M)` — physically
+  consistent, no post-hoc B correction. Replaces the previous additive
+  `B += μ₀·H_dyn·kCascadeEddyFactor` in TransformerModel. Safety clamp
+  `|H_dyn| ≤ 0.8·|H_applied|` retained.
+- `kCascadeEddyFactor` (legacy `0.15`) now attenuates `H_dyn` in the new
+  pre-J-A path; calibration shim, à re-fitter en Sprint A5.
+- `DynamicLosses::computeFieldSeparated` marked `[[deprecated]]` — retained
+  for tests and identification pipelines, but new code should use
+  `computeHfromDBdt` with the Baghel-Kulkarni decoupling pattern.
+- A2 phase 1 keeps the `calibrationMode != Physical` guard on Bertotti
+  activation. Phase 2 will remove the guard and re-calibrate the four
+  Physical-mode tests (`channel_strip`, `thd_validation`,
+  `freq_response_validation`, `fluxint_physical`).
+
 ### Added
 
+- `Tests/test_bertotti_zero_regression.cpp` — verifies that with K1=K2=0
+  the post-A2 cascade output is finite, deterministic, and that the
+  Bertotti path is exercised when K1, K2 > 0.
+- `Tests/test_bertotti_excess_loss_scaling.cpp` — at constant B_peak, loop
+  area ∝ √f and dissipated power ∝ f^1.5 (split corrected per Sprint Plan
+  préface 2026-04-29 ; mesuré ≤ 6 % d'erreur sur ratio 50→1000 Hz).
 - **TWISTERION branding** -- renamed from "Transformer Model" with "Powered by HysteriCore" tagline.
 - **O.D.T Balanced Preamp** (Original Dual Topology) -- dual-transformer preamp engine with two amplifier paths.
 - **Heritage Mode** -- 3-transistor Class-A path (BC184C/BC214C/BD139) with 11-position gain switch (+10 to +50 dB).
